@@ -1,0 +1,56 @@
+<Styles
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Style Selector="Button.icon-button">
+        <Setter Property="Width" Value="28" />
+        <Setter Property="Height" Value="28" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="CornerRadius" Value="5" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Style Selector="^:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource ButtonBackgroundPointerOver}" />
+        </Style>
+    </Style>
+
+    <Style Selector="Button.word-button">
+        <Setter Property="Width" Value="NaN" />
+        <Setter Property="Height" Value="32" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="BorderBrush" Value="{DynamicResource SystemBaseMediumLowColor}" />
+        <Setter Property="Background" Value="{DynamicResource SystemChromeHighColor}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="5" />
+        <Setter Property="Padding" Value="12,0" />
+        <Style Selector="^:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="BorderBrush" Value="{DynamicResource SystemBaseMediumColor}" />
+            <Setter Property="BorderThickness" Value="1" />
+        </Style>
+        <Style Selector="^:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="BorderBrush" Value="{DynamicResource SystemBaseMediumColor}" />
+            <Setter Property="BorderThickness" Value="1" />
+        </Style>
+    </Style>
+
+    <Style Selector="GridSplitter.overlay-splitter">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition
+                    Easing="QuadraticEaseOut"
+                    Property="Background"
+                    Duration="0:0:0.25" />
+            </Transitions>
+        </Setter>
+    </Style>
+
+    <Style Selector="GridSplitter.overlay-splitter:pointerover">
+        <Setter Property="Background" Value="{DynamicResource SystemAccentColor}" />
+    </Style>
+
+    <Style Selector="GridSplitter.overlay-splitter:pointerover, GridSplitter.overlay-splitter.dragging">
+        <Setter Property="Background" Value="{DynamicResource SystemAccentColor}" />
+    </Style>
+
+</Styles>

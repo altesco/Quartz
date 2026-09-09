@@ -1,0 +1,399 @@
+<Window
+    x:Class="Quartz.UI.Views.MainWindow"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:ae="using:AvaloniaEdit"
+    xmlns:controls="using:Quartz.UI.Controls"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:enums="using:Quartz.UI.Enums"
+    xmlns:tools="using:Quartz.UI.Tools"
+    xmlns:vm="using:Quartz.UI.ViewModels"
+    Title="Quartz.UI"
+    d:DesignHeight="450"
+    d:DesignWidth="800"
+    x:DataType="vm:MainVM"
+    Icon="/Assets/avalonia-logo.ico"
+    mc:Ignorable="d">
+
+    <Window.Styles>
+        <StyleInclude Source="avares://Quartz.UI/Views/Resources/MainTemplates.axaml" />
+    </Window.Styles>
+
+    <Design.DataContext>
+        <vm:MainVM />
+    </Design.DataContext>
+
+    <Interaction.Behaviors>
+        <EventTriggerBehavior EventName="PointerMoved">
+            <InvokeCommandAction Command="{Binding MoveFileCommand}" PassEventArgsToCommand="True" />
+        </EventTriggerBehavior>
+        <EventTriggerBehavior EventName="PointerReleased">
+            <InvokeCommandAction Command="{Binding ResetDragStatusCommand}" />
+        </EventTriggerBehavior>
+        <EventTriggerBehavior EventName="PointerCaptureLost">
+            <InvokeCommandAction Command="{Binding ResetDragStatusCommand}" />
+        </EventTriggerBehavior>
+    </Interaction.Behaviors>
+
+    <Window.DataTemplates>
+        <TreeDataTemplate DataType="vm:SplitContainerVM" ItemsSource="{Binding Children}">
+            <tools:LayoutGrid Source="{Binding}" />
+        </TreeDataTemplate>
+
+        <DataTemplate DataType="vm:PanelVM">
+            <Border Width="{Binding PanelWidth, Mode=OneWayToSource}"
+                    Height="{Binding PanelHeight, Mode=OneWayToSource}">
+                <TabControl
+                    Padding="0"
+                    BorderBrush="Gray"
+                    BorderThickness="0,0,1,1"
+                    ItemsSource="{Binding Tabs}"
+                    SelectedItem="{Binding SelectedTab}">
+                    <TabControl.Styles>
+                        <FluentTheme /> 
+                        <Style Selector="TabItem">
+                            <Setter Property="MinHeight" Value="0" />
+                            <Setter Property="Height" Value="34" />
+                            <Setter Property="FontSize" Value="14" />
+                            <Setter Property="BorderBrush" Value="Gray" />
+                            <Setter Property="BorderThickness" Value="0,0,1,1" />
+                            <Setter Property="Padding" Value="4,0,4,0" />
+                            <Setter Property="VerticalAlignment" Value="Center" />
+                            <Setter Property="ClipToBounds" Value="False" />
+                            <Setter Property="ZIndex" Value="1" />
+                            <Setter Property="Template">
+                                <ControlTemplate>
+                                    <Border
+                                        Height="{TemplateBinding Height}"
+                                        HorizontalAlignment="Stretch"
+                                        Background="{TemplateBinding Background}"
+                                        BorderBrush="{TemplateBinding BorderBrush}"
+                                        BorderThickness="{TemplateBinding BorderThickness}">
+                                        <Interaction.Behaviors>
+                                            <EventTriggerBehavior EventName="PointerPressed">
+                                                <InvokeCommandAction
+                                                    Command="{Binding $parent[TabControl].((vm:PanelVM)DataContext).TabReplaceCommand}"
+                                                    PassEventArgsToCommand="True" />
+                                            </EventTriggerBehavior>
+                                            <EventTriggerBehavior EventName="PointerMoved">
+                                                <InvokeCommandAction
+                                                    Command="{Binding $parent[TabControl].((vm:PanelVM)DataContext).SelectSideCommand}"
+                                                    PassEventArgsToCommand="True" />
+                                            </EventTriggerBehavior>
+                                            <EventTriggerBehavior EventName="PointerReleased">
+                                                <InvokeCommandAction
+                                                    Command="{Binding $parent[TabControl].((vm:PanelVM)DataContext).TabReplacedCommand}"
+                                                    PassEventArgsToCommand="True" />
+                                            </EventTriggerBehavior>
+                                        </Interaction.Behaviors>
+                                        <Grid>
+                                            <ContentPresenter
+                                                Margin="{TemplateBinding Padding}"
+                                                HorizontalAlignment="Stretch"
+                                                VerticalAlignment="Center"
+                                                Content="{TemplateBinding Header}"
+                                                ContentTemplate="{TemplateBinding HeaderTemplate}" />
+                                            <Border
+                                                x:Name="PART_RightLine"
+                                                Width="3"
+                                                Margin="1,-1,-1,0"
+                                                HorizontalAlignment="Right"
+                                                Background="{DynamicResource SystemAccentColor}"
+                                                IsVisible="{Binding $parent[TabItem].((vm:FileVM)DataContext).InsertSide, Converter={x:Static ObjectConverters.Equal}, ConverterParameter={x:Static enums:Side.Right}}" />
+                                            <Border
+                                                x:Name="PART_LeftLine"
+                                                Width="3"
+                                                Margin="-3,-1,3,0"
+                                                HorizontalAlignment="Left"
+                                                Background="{DynamicResource SystemAccentColor}"
+                                                IsVisible="{Binding $parent[TabItem].((vm:FileVM)DataContext).InsertSide, Converter={x:Static ObjectConverters.Equal}, ConverterParameter={x:Static enums:Side.Left}}" />
+                                        </Grid>
+                                    </Border>
+                                </ControlTemplate>
+                            </Setter>
+                            <Setter Property="ContextMenu" x:DataType="vm:File2D">
+                                <ContextMenu>
+                                    <MenuItem Header="Открыть холст" Command="{Binding OpenCanvasCommand}">
+
+                                    </MenuItem>
+                                </ContextMenu>
+                            </Setter>
+                            <Style Selector="^:selected">
+                                <Setter Property="Background" Value="Yellow" />
+                            </Style>
+                            <Style Selector="^:pointerover">
+                                <Setter Property="ZIndex" Value="100" />
+                            </Style>
+                        </Style>
+
+                        <Style Selector="TabItem Button.icon-button">
+                            <Setter Property="Opacity" Value="0" />
+                            <Setter Property="IsHitTestVisible" Value="False" />
+                        </Style>
+
+                        <Style Selector="TabItem:selected Button.icon-button">
+                            <Setter Property="Opacity" Value="1" />
+                            <Setter Property="IsHitTestVisible" Value="True" />
+                        </Style>
+
+                        <Style Selector="TabItem:pointerover Button.icon-button">
+                            <Setter Property="Opacity" Value="1" />
+                            <Setter Property="IsHitTestVisible" Value="True" />
+                        </Style>
+
+                        <Style Selector="TabItem.last-child /template/ Border#PART_RightLine">
+                            <Setter Property="Margin" Value="1,-1,-1,0" />
+                        </Style>
+
+                        <Style Selector="TabItem.first-child /template/ Border#PART_LeftLine">
+                            <Setter Property="Margin" Value="0,-1,0,0" />
+                        </Style>
+
+                        <Style Selector="TabControl /template/ ContentPresenter#PART_SelectedContentHost">
+                            <Setter Property="BorderBrush" Value="Gray" />
+                            <Setter Property="BorderThickness" Value="0,1,0,0" />
+                        </Style>
+
+                        <Style
+                            Selector="TabControl[TabStripPlacement=Top] /template/ ItemsPresenter#PART_ItemsPresenter">
+                            <Setter Property="Margin" Value="0,0,-1,-1" />
+                            <Setter Property="MinHeight" Value="34" />
+                            <Setter Property="ZIndex" Value="100" />
+                            <Setter Property="Grid.RowSpan" Value="3" />
+                        </Style>
+                    </TabControl.Styles>
+
+                    <Interaction.Behaviors>
+                        <RoutedEventTriggerBehavior 
+                            RoutedEvent="{x:Static InputElement.PointerPressedEvent}"
+                            RoutingStrategies="Tunnel">
+                            <InvokeCommandAction Command="{Binding SelectPanelCommand}" />
+                        </RoutedEventTriggerBehavior>
+                    </Interaction.Behaviors>
+
+                    <TabControl.ItemTemplate>
+                        <DataTemplate>
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock
+                                    MinWidth="0"
+                                    Margin="0,0,4,0"
+                                    VerticalAlignment="Center"
+                                    Text="{Binding Header}"
+                                    TextTrimming="CharacterEllipsis" />
+                                <Button
+                                    Grid.Column="1"
+                                    Width="22"
+                                    Height="22"
+                                    VerticalAlignment="Center"
+                                    Classes="icon-button"
+                                    Command="{Binding RemoveTabCommand}"
+                                    Foreground="White">
+                                    <LucideIcon Kind="X" Size="16" />
+                                </Button>
+                            </Grid>
+                        </DataTemplate>
+                    </TabControl.ItemTemplate>
+
+                    <TabControl.ContentTemplate>
+                        <DataTemplate>
+                            <Grid>
+                                <Interaction.Behaviors>
+                                    <!-- <EventTriggerBehavior EventName="PointerMoved">
+                                        <InvokeCommandAction
+                                            Command="{Binding $parent[TabControl].((vm:PanelVM)DataContext).TabReplacingCommand}"
+                                            PassEventArgsToCommand="True" />
+                                    </EventTriggerBehavior> -->
+                                    <EventTriggerBehavior EventName="PointerReleased">
+                                        <InvokeCommandAction
+                                            Command="{Binding $parent[TabControl].((vm:PanelVM)DataContext).TabReplacedCommand}" />
+                                    </EventTriggerBehavior>
+                                    <EventTriggerBehavior EventName="PointerExited">
+                                        <InvokeCommandAction
+                                            Command="{Binding $parent[TabControl].((vm:PanelVM)DataContext).ResetSideCommand}" />
+                                    </EventTriggerBehavior>
+                                </Interaction.Behaviors>
+                                <ContentControl Content="{Binding}" />
+
+                                <Border
+                                    Width="80"
+                                    HorizontalAlignment="Right"
+                                    Background="Blue"
+                                    IsVisible="{Binding $parent[TabControl].((vm:PanelVM)DataContext).NewNodeSide, Converter={x:Static ObjectConverters.Equal}, ConverterParameter={x:Static enums:Side.Right}}" />
+                                <Border
+                                    Width="80"
+                                    HorizontalAlignment="Left"
+                                    Background="Blue"
+                                    IsVisible="{Binding $parent[TabControl].((vm:PanelVM)DataContext).NewNodeSide, Converter={x:Static ObjectConverters.Equal}, ConverterParameter={x:Static enums:Side.Left}}" />
+                                <Border
+                                    Height="80"
+                                    VerticalAlignment="Top"
+                                    Background="Blue"
+                                    IsVisible="{Binding $parent[TabControl].((vm:PanelVM)DataContext).NewNodeSide, Converter={x:Static ObjectConverters.Equal}, ConverterParameter={x:Static enums:Side.Top}}" />
+                                <Border
+                                    Height="80"
+                                    VerticalAlignment="Bottom"
+                                    Background="Blue"
+                                    IsVisible="{Binding $parent[TabControl].((vm:PanelVM)DataContext).NewNodeSide, Converter={x:Static ObjectConverters.Equal}, ConverterParameter={x:Static enums:Side.Bottom}}" />
+                            </Grid>
+                        </DataTemplate>
+                    </TabControl.ContentTemplate>
+
+                    <TabControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <controls:FillLastInRowPanel />
+                        </ItemsPanelTemplate>
+                    </TabControl.ItemsPanel>
+                </TabControl>
+            </Border>
+        </DataTemplate>
+
+        <DataTemplate DataType="vm:EditorVM">
+            <Grid>
+                <ae:TextEditor
+                    x:Name="Editor"
+                    tools:Marker.Errors="{Binding Errors}"
+                    tools:ScrollProps.HorizontalOffset="{Binding ScrollX}"
+                    tools:ScrollProps.VerticalOffset="{Binding ScrollY}"
+                    Document="{Binding Document, Mode=TwoWay}"
+                    FontFamily="Cascadia Code, Consolas, Courier New, Monospace"
+                    FontSize="14"
+                    HorizontalScrollBarVisibility="Auto"
+                    ShowLineNumbers="True"
+                    VerticalScrollBarVisibility="Visible"
+                    WordWrap="False"/>
+            </Grid>
+        </DataTemplate>
+
+        <DataTemplate DataType="vm:CanvasVM">
+            <Grid>
+                <controls:CircuitBoardCanvas
+                    DrawingData="{Binding RenderData}"
+                    Zoom="{Binding Zoom, Mode=TwoWay}"
+                    OffsetX="{Binding OffsetX, Mode=TwoWay}"
+                    OffsetY="{Binding OffsetY, Mode=TwoWay}" />
+            </Grid>
+        </DataTemplate>
+    </Window.DataTemplates>
+
+    <Grid ColumnDefinitions="Auto,*" RowDefinitions="*,Auto">
+        <TreeView ItemsSource="{Binding FileTree}" Grid.RowSpan="2">
+            <TreeView.Styles>
+                <Style Selector="TreeViewItem">
+                    <Setter Property="Interaction.Behaviors">
+                        <BehaviorCollectionTemplate>
+                            <BehaviorCollection>
+                                <RoutedEventTriggerBehavior RoutedEvent="{x:Static InputElement.PointerPressedEvent}"
+                                                            RoutingStrategies="Tunnel">
+                                    <InvokeCommandAction Command="{Binding FileReplaceCommand}"
+                                                         PassEventArgsToCommand="True" />
+                                </RoutedEventTriggerBehavior>
+                                <RoutedEventTriggerBehavior RoutedEvent="{x:Static InputElement.PointerReleasedEvent}"
+                                                            RoutingStrategies="Tunnel">
+                                    <InvokeCommandAction Command="{Binding FileReplacedCommand}"
+                                                         PassEventArgsToCommand="True" />
+                                </RoutedEventTriggerBehavior>
+                            </BehaviorCollection>
+                        </BehaviorCollectionTemplate>
+                    </Setter>
+                </Style>
+            </TreeView.Styles>
+            <TreeView.DataTemplates>
+                <TreeDataTemplate DataType="{x:Type vm:DirectoryVM}" ItemsSource="{Binding Children}">
+                    <Grid>
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock VerticalAlignment="Center" Text="📁" />
+                            <TextBlock VerticalAlignment="Center" Text="{Binding Header}" />
+                        </StackPanel>
+                    </Grid>
+                </TreeDataTemplate>
+
+                <DataTemplate DataType="{x:Type vm:LayerVM}">
+                    <Grid>
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock VerticalAlignment="Center" Text="📝" />
+                            <TextBlock
+                                VerticalAlignment="Center"
+                                Foreground="LightBlue"
+                                Text="{Binding Header}" />
+                        </StackPanel>
+                    </Grid>
+                </DataTemplate>
+            </TreeView.DataTemplates>
+        </TreeView>
+
+        <ContentControl
+            Grid.Column="1"
+            Grid.Row="0"
+            Margin="0,0,0,-1"
+            Content="{Binding RootNode}" />
+
+        <ListBox
+            Grid.Column="1"
+            Grid.Row="1"
+            ItemsSource="{Binding ActivePanel.((vm:LayerVM)SelectedTab).Errors}">
+            <ListBox.ItemTemplate>
+                <DataTemplate>
+                    <Grid ColumnDefinitions="Auto,*,Auto" HorizontalAlignment="Left">
+                        <TextBlock 
+                            Grid.Column="1" 
+                            Text="{Binding Message}" 
+                            Margin="4,0,4,0"
+                            TextTrimming="CharacterEllipsis"/>
+                        <TextBlock Grid.Column="2">
+                            <TextBlock.Text>
+                                <MultiBinding StringFormat="[Строка {0}, столбец {1}]">
+                                    <Binding Path="Line" />
+                                    <Binding Path="Column" />
+                                </MultiBinding>
+                            </TextBlock.Text>
+                        </TextBlock>
+                    </Grid>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+
+        <GridSplitter
+            x:Name="VerticalSplitter"
+            Grid.Column="0"
+            Grid.Row="0"
+            Grid.RowSpan="2"
+            HorizontalAlignment="Right"
+            Width="4"
+            MinWidth="4"
+            Classes="overlay-splitter"/>
+        
+        <GridSplitter
+            x:Name="HorizontalSplitter"
+            Grid.Column="1"
+            Grid.Row="0"
+            VerticalAlignment="Bottom"
+            Height="4"
+            MinHeight="4"
+            Classes="overlay-splitter" />
+
+        <Canvas Grid.Column="0" Grid.Row="0" Grid.ColumnSpan="2" Grid.RowSpan="2">
+            <Border
+                Canvas.Left="{Binding FakeFileX}"
+                Canvas.Top="{Binding FakeFileY}"
+                IsHitTestVisible="False">
+                <Border.IsVisible>
+                    <MultiBinding Converter="{x:Static BoolConverters.Or}">
+                        <Binding Path="IsFileReplacing" />
+                        <Binding Path="IsTabReplacing" />
+                    </MultiBinding>
+                </Border.IsVisible>
+                <Grid>
+                    <TextBlock
+                        Background="Yellow"
+                        IsVisible="{Binding DraggedFile, Converter={x:Static ObjectConverters.IsNotNull}}"
+                        Text="{Binding DraggedFile?.Header}" />
+                    <TextBlock
+                        Background="Yellow"
+                        IsVisible="{Binding DraggedTab, Converter={x:Static ObjectConverters.IsNotNull}}"
+                        Text="{Binding DraggedTab?.Header}" />
+                </Grid>
+            </Border>
+        </Canvas>
+    </Grid>
+</Window>

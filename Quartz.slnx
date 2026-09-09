@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="Quartz.Application/Quartz.Application.csproj" />
+  <Project Path="Quartz.Core/Quartz.Core.csproj" />
+  <Project Path="Quartz.Infrastructure/Quartz.Infrastructure.csproj" />
+  <Project Path="Quartz.UI/Quartz.UI.csproj" />
+</Solution>
