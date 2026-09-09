@@ -4,7 +4,7 @@ namespace Quartz.Infrastructure.Dtos;
 
 public record LayerModelDto
 {
-    [YamlMember(Alias = "outline")] 
+    [YamlMember(Alias = "shape")] 
     public ShapeDto? Shape { get; set; }
 
     [YamlMember(Alias = "components")] 

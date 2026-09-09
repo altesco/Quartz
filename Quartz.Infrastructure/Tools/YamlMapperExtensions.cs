@@ -426,7 +426,11 @@ public static class YamlMapperExtensions
             }
         }
 
-        Shape shape = new PathShape();
+        Shape shape = new RectShape
+        {
+            Width = 600,
+            Height = 800
+        };
         // 3. форма слоя
         if (dto.Shape != null)
         {

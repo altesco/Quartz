@@ -1,5 +1,6 @@
 using Quartz.Core.Interfaces;
 using Quartz.Core.Models;
+using Quartz.Core.Models.BoardEntities;
 using Quartz.Infrastructure.Dtos;
 using Quartz.Infrastructure.Tools;
 using YamlDotNet.Core;
@@ -47,8 +48,14 @@ public class YamlDomainParser : IYamlDomainParser
 
         if (string.IsNullOrWhiteSpace(yamlText))
         {
-            errors.Add(new EditorError { Message = "Пустой файл" });
-            return null;
+            return new LayerModel
+            {
+                Shape = new RectShape
+                {
+                    Width = 600,
+                    Height = 800
+                }
+            };
         }
 
         try

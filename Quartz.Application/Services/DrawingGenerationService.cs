@@ -13,6 +13,45 @@ public class DrawingGenerationService : IDrawingGenerationService
     {
         List<IDrawingPrimitive> primitives = [];
 
+        // отрисовка слоя
+        IDrawingPrimitive layerPrimitive;
+
+        switch (model.Shape)
+        {
+            case RectShape rect:
+                layerPrimitive = new RectanglePrimitive
+                {
+                    Type = PrimitiveType.ComponentOutline,
+                    Width = (float)rect.Width,
+                    Height = (float)rect.Height,
+                    CornerRadius = (float)rect.CornerRadius,
+                    IsFilled = false
+                };
+                break;
+
+            case PathShape path:
+            {
+                layerPrimitive = new PathPrimitive
+                {
+                    Type = PrimitiveType.BoardOutline,
+                    StartPoint = new Vector2(
+                        (float)(path.StartPoint.X),
+                        (float)(path.StartPoint.Y)
+                    ),
+                    Segments = path.Segments ?? [],
+                    IsFilled = false
+                };
+
+                break;
+            }
+
+            default:
+                layerPrimitive = new RectanglePrimitive();
+                break;
+        }
+
+        primitives.Add(layerPrimitive);
+
         // Отрисовка компонентов и падов
         foreach (var comp in model.Components)
         {
@@ -120,7 +159,7 @@ public class DrawingGenerationService : IDrawingGenerationService
 
                         break;
                     }
-                    
+
                     default:
                         primitive = new RectanglePrimitive();
                         break;
@@ -133,21 +172,18 @@ public class DrawingGenerationService : IDrawingGenerationService
         // Отрисовка трасс
         foreach (var trace in model.Traces)
         {
-            if (trace is null) 
-                continue;
-
             var primitive = new PolylinePrimitive { Type = PrimitiveType.Trace };
 
-            var start = new Vector2 
-            { 
-                X = (float)trace.From.Pin.Point.X + (float)trace.From.Comp.Point.X, 
+            var start = new Vector2
+            {
+                X = (float)trace.From.Pin.Point.X + (float)trace.From.Comp.Point.X,
                 Y = (float)trace.From.Pin.Point.Y + (float)trace.From.Comp.Point.Y
             };
 
-            var end = new Vector2 
-            { 
-                X = (float)trace.To.Pin.Point.X + (float)trace.To.Comp.Point.X, 
-                Y = (float)trace.To.Pin.Point.Y + (float)trace.To.Comp.Point.Y 
+            var end = new Vector2
+            {
+                X = (float)trace.To.Pin.Point.X + (float)trace.To.Comp.Point.X,
+                Y = (float)trace.To.Pin.Point.Y + (float)trace.To.Comp.Point.Y
             };
 
             // Старт трассы из центра начального пина
@@ -176,47 +212,47 @@ public class DrawingGenerationService : IDrawingGenerationService
     }
 
     private static List<Segment> TranslateSegments(
-    IEnumerable<Segment> segments,
-    double offsetX,
-    double offsetY)
-{
-    var result = new List<Segment>();
-
-    foreach (var segment in segments)
+        IEnumerable<Segment> segments,
+        double offsetX,
+        double offsetY)
     {
-        switch (segment)
+        var result = new List<Segment>();
+
+        foreach (var segment in segments)
         {
-            case LineSegment line:
-                result.Add(new LineSegment
-                {
-                    Point = new Point2D
+            switch (segment)
+            {
+                case LineSegment line:
+                    result.Add(new LineSegment
                     {
-                        X = line.Point.X + offsetX,
-                        Y = line.Point.Y + offsetY
-                    }
-                });
-                break;
+                        Point = new Point2D
+                        {
+                            X = line.Point.X + offsetX,
+                            Y = line.Point.Y + offsetY
+                        }
+                    });
+                    break;
 
-            case ArcSegment arc:
-                result.Add(new ArcSegment
-                {
-                    Point = new Point2D
+                case ArcSegment arc:
+                    result.Add(new ArcSegment
                     {
-                        X = arc.Point.X + offsetX,
-                        Y = arc.Point.Y + offsetY
-                    },
-                    Radius = arc.Radius,
-                    IsClockwise = arc.IsClockwise,
-                    IsLargeArc = arc.IsLargeArc
-                });
-                break;
+                        Point = new Point2D
+                        {
+                            X = arc.Point.X + offsetX,
+                            Y = arc.Point.Y + offsetY
+                        },
+                        Radius = arc.Radius,
+                        IsClockwise = arc.IsClockwise,
+                        IsLargeArc = arc.IsLargeArc
+                    });
+                    break;
 
-            default:
-                throw new NotSupportedException(
-                    $"Unknown segment type: {segment.GetType().Name}");
+                default:
+                    throw new NotSupportedException(
+                        $"Unknown segment type: {segment.GetType().Name}");
+            }
         }
-    }
 
-    return result;
-}
+        return result;
+    }
 }
