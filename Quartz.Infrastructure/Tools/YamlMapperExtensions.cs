@@ -16,7 +16,6 @@ public static class YamlMapperExtensions
         OffsetX = dto.OffsetX,
         OffsetY = dto.OffsetY,
         FontSize = dto.FontSize,
-        FontWeight = dto.FontWeight,
         Color = dto.Color,
         IsVisible = dto.IsVisible
     };
@@ -90,7 +89,7 @@ public static class YamlMapperExtensions
 
         comp.Angle = dto.Angle;
         comp.Footprint = dto.Footprint;
-        comp.NameSettings = dto.NameSettings?.ToDomain() ?? new();
+        comp.NameSettings = dto.NameSettings.ToDomain();
 
         var pinsMap = new Dictionary<string, Pin>();
 
@@ -179,6 +178,8 @@ public static class YamlMapperExtensions
                 };
 
             case PathShapeDto p:
+            {
+                var start = p.StartPoint.ToDomain();
 
                 List<Segment> segments = [];
 
@@ -196,7 +197,7 @@ public static class YamlMapperExtensions
                         continue;
                     }
 
-                    var segDomain = seg.ToDomain(out var segErrors);
+                    var segDomain = seg.ToDomain(start, out var segErrors);
 
                     if (segDomain == null)
                     {
@@ -207,12 +208,37 @@ public static class YamlMapperExtensions
                     segments.Add(segDomain);
                 }
 
-                return new PathShape
+                const double tolerance = 0.0001;
+                var lastDto = p.Segments?.Last();
+                var lastDomain = segments.Last();
+
+                if (lastDto == null)
                 {
-                    StartPoint = p.StartPoint.ToDomain(),
-                    Segments = segments
-                };
-                
+                    errors.Add(new EditorError
+                    {
+                        Message = "Последний сегмент не найден"
+                    });
+                }
+                else if (Math.Abs(lastDomain.Point.X - start.X) > tolerance ||
+                         Math.Abs(lastDomain.Point.Y - start.Y) > tolerance)
+                {
+                    errors.Add(new EditorError
+                    {
+                        Message = "Координаты последнего сегмента должны совпадать с координатами start-point",
+                        Line = lastDto.Line,
+                        Column = lastDto.Column,
+                        Length = lastDto.Length
+                    });
+                }
+
+                return errors.Count > 0
+                    ? null
+                    : new PathShape
+                    {
+                        StartPoint = start,
+                        Segments = segments
+                    };
+            }
 
             default:
                 errors.Add(new EditorError
@@ -227,19 +253,19 @@ public static class YamlMapperExtensions
     }
 
     // Полиморфный маппинг сегментов контура
-    public static Segment? ToDomain(this SegmentDto dto, out List<EditorError> errors)
+    public static Segment? ToDomain(this SegmentDto dto, Point2D start, out List<EditorError> errors)
     {
         errors = [];
 
         switch (dto)
         {
             case LineSegmentDto:
-                return new LineSegment { Point = dto.Point.ToDomain() };
+                return new LineSegment { Point = dto.Point?.ToDomain() ?? start };
 
             case ArcSegmentDto a:
                 return new ArcSegment
                 {
-                    Point = dto.Point.ToDomain(),
+                    Point = dto.Point?.ToDomain() ?? start,
                     Radius = a.Radius,
                     IsClockwise = a.IsClockwise,
                     IsLargeArc = a.IsLargeArc

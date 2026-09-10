@@ -5,5 +5,5 @@ namespace Quartz.Application.Interfaces;
 
 public interface IDrawingGenerationService
 {
-    List<IDrawingPrimitive> Generate(LayerModel model);
+    List<DrawingPrimitive> Generate(LayerModel model);
 }

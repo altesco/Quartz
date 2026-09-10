@@ -2,7 +2,7 @@ using YamlDotNet.Serialization;
 
 namespace Quartz.Infrastructure.Dtos;
 
-public readonly record struct Point2DDto
+public record Point2DDto
 {
     [YamlMember(Alias = "x")] 
     public double X { get; init; }

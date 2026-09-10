@@ -9,12 +9,13 @@ namespace Quartz.Application.Services;
 
 public class DrawingGenerationService : IDrawingGenerationService
 {
-    public List<IDrawingPrimitive> Generate(LayerModel model)
+    public List<DrawingPrimitive> Generate(LayerModel model)
     {
-        List<IDrawingPrimitive> primitives = [];
+        List<DrawingPrimitive> geometryLayer = [];
+        List<DrawingPrimitive> textLayer = [];
 
         // отрисовка слоя
-        IDrawingPrimitive layerPrimitive;
+        DrawingPrimitive layerPrimitive;
 
         switch (model.Shape)
         {
@@ -24,8 +25,7 @@ public class DrawingGenerationService : IDrawingGenerationService
                     Type = PrimitiveType.ComponentOutline,
                     Width = (float)rect.Width,
                     Height = (float)rect.Height,
-                    CornerRadius = (float)rect.CornerRadius,
-                    IsFilled = false
+                    CornerRadius = (float)rect.CornerRadius
                 };
                 break;
 
@@ -38,8 +38,7 @@ public class DrawingGenerationService : IDrawingGenerationService
                         (float)(path.StartPoint.X),
                         (float)(path.StartPoint.Y)
                     ),
-                    Segments = path.Segments ?? [],
-                    IsFilled = false
+                    Segments = path.Segments ?? []
                 };
 
                 break;
@@ -50,12 +49,12 @@ public class DrawingGenerationService : IDrawingGenerationService
                 break;
         }
 
-        primitives.Add(layerPrimitive);
+        geometryLayer.Add(layerPrimitive);
 
         // Отрисовка компонентов и падов
         foreach (var comp in model.Components)
         {
-            IDrawingPrimitive primitive;
+            DrawingPrimitive primitive;
 
             switch (comp.Shape)
             {
@@ -67,8 +66,7 @@ public class DrawingGenerationService : IDrawingGenerationService
                         Height = (float)rect.Height,
                         CornerRadius = (float)rect.CornerRadius,
                         X = (float)comp.Point.X,
-                        Y = (float)comp.Point.Y,
-                        IsFilled = false
+                        Y = (float)comp.Point.Y
                     };
                     break;
 
@@ -89,9 +87,7 @@ public class DrawingGenerationService : IDrawingGenerationService
                         Segments = TranslateSegments(
                             path.Segments,
                             offsetX,
-                            offsetY),
-
-                        IsFilled = false
+                            offsetY)
                     };
 
                     break;
@@ -102,7 +98,19 @@ public class DrawingGenerationService : IDrawingGenerationService
                     break;
             }
 
-            primitives.Add(primitive);
+            geometryLayer.Add(primitive);
+
+            if (comp.NameSettings.IsVisible)
+            {
+                textLayer.Add(new TextPrimitive
+                {
+                    Type = PrimitiveType.Text,
+                    Text = comp.Name,
+                    X = (float)(comp.Point.X + comp.NameSettings.OffsetX),
+                    Y = (float)(comp.Point.Y + comp.NameSettings.OffsetY),
+                    FontSize = (float)comp.NameSettings.FontSize
+                });
+            }
 
             foreach (var pin in comp.Pins)
             {
@@ -120,8 +128,7 @@ public class DrawingGenerationService : IDrawingGenerationService
                                 : (float)pin.Point.X,
                             Y = pin.CoordMode == CoordinateMode.Relative
                                 ? (float)(pin.Point.Y + comp.Point.Y)
-                                : (float)pin.Point.Y,
-                            IsFilled = true
+                                : (float)pin.Point.Y
                         };
                         break;
 
@@ -152,9 +159,7 @@ public class DrawingGenerationService : IDrawingGenerationService
                             Segments = TranslateSegments(
                                 path.Segments,
                                 pinPoint.X,
-                                pinPoint.Y),
-
-                            IsFilled = true
+                                pinPoint.Y)
                         };
 
                         break;
@@ -165,7 +170,7 @@ public class DrawingGenerationService : IDrawingGenerationService
                         break;
                 }
 
-                primitives.Add(primitive);
+                geometryLayer.Add(primitive);
             }
         }
 
@@ -205,10 +210,10 @@ public class DrawingGenerationService : IDrawingGenerationService
             // Финиш трассы в центре конечного пина
             primitive.Points.Add(end);
 
-            primitives.Add(primitive);
+            geometryLayer.Add(primitive);
         }
 
-        return primitives;
+        return [.. geometryLayer, .. textLayer];
     }
 
     private static List<Segment> TranslateSegments(
@@ -255,4 +260,6 @@ public class DrawingGenerationService : IDrawingGenerationService
 
         return result;
     }
+
+    
 }

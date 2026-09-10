@@ -5,7 +5,7 @@ namespace Quartz.Infrastructure.Dtos;
 public record SegmentDto : BoardEntityDto
 {
     [YamlMember(Alias = "point")] 
-    public Point2DDto Point { get; init; }
+    public Point2DDto? Point { get; init; }
 }
 
 public record LineSegmentDto : SegmentDto;

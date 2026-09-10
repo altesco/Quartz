@@ -14,10 +14,10 @@ namespace Quartz.UI.Controls;
 public class CircuitBoardCanvas : SKCanvasView, IDisposable
 {
     // Данные для отрисовки
-    public static readonly StyledProperty<IReadOnlyList<IDrawingPrimitive>?> DrawingDataProperty =
-        AvaloniaProperty.Register<CircuitBoardCanvas, IReadOnlyList<IDrawingPrimitive>?>(nameof(DrawingData));
+    public static readonly StyledProperty<IReadOnlyList<DrawingPrimitive>?> DrawingDataProperty =
+        AvaloniaProperty.Register<CircuitBoardCanvas, IReadOnlyList<DrawingPrimitive>?>(nameof(DrawingData));
 
-    public IReadOnlyList<IDrawingPrimitive>? DrawingData
+    public IReadOnlyList<DrawingPrimitive>? DrawingData
     {
         get => GetValue(DrawingDataProperty);
         set => SetValue(DrawingDataProperty, value);
@@ -28,10 +28,10 @@ public class CircuitBoardCanvas : SKCanvasView, IDisposable
         AvaloniaProperty.Register<CircuitBoardCanvas, float>(nameof(Zoom), 1.0f);
 
     public static readonly StyledProperty<float> OffsetXProperty =
-        AvaloniaProperty.Register<CircuitBoardCanvas, float>(nameof(OffsetX), 0f);
+        AvaloniaProperty.Register<CircuitBoardCanvas, float>(nameof(OffsetX));
 
     public static readonly StyledProperty<float> OffsetYProperty =
-        AvaloniaProperty.Register<CircuitBoardCanvas, float>(nameof(OffsetY), 0f);
+        AvaloniaProperty.Register<CircuitBoardCanvas, float>(nameof(OffsetY));
 
     public float Zoom
     {
@@ -99,6 +99,13 @@ public class CircuitBoardCanvas : SKCanvasView, IDisposable
         _paintCache[PrimitiveType.Text] = new SKPaint
         {
             Color = SKColors.White, 
+            IsAntialias = true
+        };
+        _paintCache[PrimitiveType.BoardOutline] = new SKPaint
+        {
+            Color = SKColors.LightGray,
+            Style = SKPaintStyle.Stroke,
+            StrokeWidth = 2,
             IsAntialias = true
         };
     }
@@ -219,14 +226,13 @@ public class CircuitBoardCanvas : SKCanvasView, IDisposable
 
             OffsetX = (float)(mousePos.X - (mousePos.X - OffsetX) * (Zoom / oldZoom));
             OffsetY = (float)(mousePos.Y - (mousePos.Y - OffsetY) * (Zoom / oldZoom));
-            e.Handled = true;
         }
         else
         {
             OffsetX += (float)e.Delta.X * WheelPanSensitivity;
             OffsetY += (float)e.Delta.Y * WheelPanSensitivity;
-            e.Handled = true;
         }
+        e.Handled = true;
     }
 
     private static float GetDistance(Point p1, Point p2) =>
@@ -283,12 +289,10 @@ public class CircuitBoardCanvas : SKCanvasView, IDisposable
                 }
 
                 case CirclePrimitive circle:
-                    paint.Style = circle.IsFilled ? SKPaintStyle.Fill : SKPaintStyle.Stroke;
                     canvas.DrawCircle(circle.X, circle.Y, circle.Radius, paint);
                     break;
 
                 case RectanglePrimitive rect:
-                    paint.Style = rect.IsFilled ? SKPaintStyle.Fill : SKPaintStyle.Stroke;
                     var skRect = new SKRect(rect.X - rect.Width / 2f, rect.Y - rect.Height / 2f,
                         rect.X + rect.Width / 2f, rect.Y + rect.Height / 2f);
 
@@ -300,7 +304,8 @@ public class CircuitBoardCanvas : SKCanvasView, IDisposable
                 
                 case PathPrimitive pathPrimitive:
                 {
-                    if (pathPrimitive.Segments.Count == 0) break;
+                    if (pathPrimitive.Segments.Count == 0) 
+                        break;
 
                     using var skPath = new SKPath();
                     skPath.MoveTo(pathPrimitive.StartPoint.X, pathPrimitive.StartPoint.Y);
@@ -330,13 +335,7 @@ public class CircuitBoardCanvas : SKCanvasView, IDisposable
                     var originalStyle = paint.Style;
                     var originalWidth = paint.StrokeWidth;
 
-                    paint.Style = pathPrimitive.IsFilled ? SKPaintStyle.Fill : SKPaintStyle.Stroke;
-                    if (!pathPrimitive.IsFilled)
-                    {
-                        paint.StrokeJoin = SKStrokeJoin.Round;
-                        paint.StrokeCap = SKStrokeCap.Round;
-                    }
-
+                    skPath.Close();
                     canvas.DrawPath(skPath, paint);
 
                     paint.Style = originalStyle;
@@ -345,12 +344,18 @@ public class CircuitBoardCanvas : SKCanvasView, IDisposable
                 }
 
                 case TextPrimitive text:
-                    using (var font = new SKFont(SKTypeface.Default, text.FontSize))
-                    {
-                        canvas.DrawText(text.Text, text.X, text.Y, font, paint);
-                    }
+                {
+                    using var font = new SKFont(SKTypeface.Default, text.FontSize);
+
+                    font.MeasureText(text.Text, out var textBounds);
+
+                    var x = text.X - textBounds.MidX;
+                    var y = text.Y - textBounds.MidY;
+
+                    canvas.DrawText(text.Text, x, y, font, paint);
 
                     break;
+                }
             }
         }
 

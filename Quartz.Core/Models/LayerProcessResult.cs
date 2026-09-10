@@ -5,6 +5,6 @@ namespace Quartz.Core.Models;
 public record LayerProcessResult
 (
     List<EditorError> Errors,
-    List<IDrawingPrimitive> Primitives,
+    List<DrawingPrimitive> Primitives,
     LayerModel? Model
 ); 

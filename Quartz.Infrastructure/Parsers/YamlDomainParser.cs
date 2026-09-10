@@ -60,7 +60,7 @@ public class YamlDomainParser : IYamlDomainParser
 
         try
         {
-            var dto = _deserializer.Deserialize<LayerModelDto>(yamlText);
+            var dto = _deserializer.Deserialize<LayerModelDto?>(yamlText);
             if (dto == null)
             {
                 errors.Add(new EditorError { Message = "Файл пуст или имеет неверный формат" });

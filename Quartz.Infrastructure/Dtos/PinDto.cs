@@ -10,7 +10,7 @@ public record PinDto : BoardEntityDto
 
     // Координата пина
     [YamlMember(Alias = "point")] 
-    public Point2DDto Point { get; init; }
+    public Point2DDto Point { get; init; } = new();
 
     // Режим задания координат (Относительно центра компонента или Абсолютные координаты платы)
     [YamlMember(Alias = "coord-mode")] 

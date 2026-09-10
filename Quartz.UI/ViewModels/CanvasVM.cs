@@ -16,7 +16,7 @@ public partial class CanvasVM : FileVM
 
     public override Extension Extension => Owner.Extension;
 
-    [ObservableProperty] private IReadOnlyList<IDrawingPrimitive>? _renderData;
+    [ObservableProperty] private IReadOnlyList<DrawingPrimitive>? _renderData;
 
     [ObservableProperty] private float _zoom = 1.0f;
     [ObservableProperty] private float _offsetX;

@@ -14,9 +14,6 @@ public record ComponentTextSettingsDto
     [YamlMember(Alias = "font-size")] 
     public double FontSize { get; init; } = 12;
 
-    [YamlMember(Alias = "font-weight")] 
-    public string FontWeight { get; init; } = "Normal";
-
     [YamlMember(Alias = "color")] 
     public string Color { get; init; } = "#FFFFFF";
 
