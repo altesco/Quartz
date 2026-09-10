@@ -3,7 +3,7 @@ using YamlDotNet.Serialization;
 
 namespace Quartz.Infrastructure.Dtos;
 
-public abstract record ComponentDto : BoardEntityDto
+public abstract record ComponentDto : BoardDimensionalObjectDto
 {
     [YamlMember(Alias = "id")] 
     public int Id { get; init; }

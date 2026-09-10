@@ -1,4 +1,4 @@
-using Quartz.Core.Interfaces;
+using Quartz.Core.Models.BoardEntities;
 
 namespace Quartz.Core.Models;
 

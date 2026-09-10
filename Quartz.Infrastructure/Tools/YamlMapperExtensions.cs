@@ -1,5 +1,5 @@
-
-
+using Quartz.Core.Tools;
+using Quartz.Core.Enums;
 using Quartz.Core.Models;
 using Quartz.Core.Models.BoardEntities;
 using Quartz.Infrastructure.Dtos;
@@ -8,8 +8,8 @@ namespace Quartz.Infrastructure.Tools;
 
 public static class YamlMapperExtensions
 {
-    public static Point2D ToDomain(this Point2DDto dto)
-        => new(dto.X, dto.Y);
+    public static Point2D ToDomain(this Point2DDto dto, LengthUnit unit)
+        => new Point2D(dto.X, dto.Y).ToMillimeters(unit);
 
     public static ComponentTextSettings ToDomain(this ComponentTextSettingsDto dto) => new()
     {
@@ -20,7 +20,7 @@ public static class YamlMapperExtensions
         IsVisible = dto.IsVisible
     };
 
-    public static Component? ToDomain(this ComponentDto dto, out List<EditorError> errors)
+    public static Component? ToDomain(this ComponentDto dto, LengthUnit layerUnit, out List<EditorError> errors)
     {
         errors = [];
 
@@ -33,7 +33,7 @@ public static class YamlMapperExtensions
             },
             CapacitorDto c => new Capacitor
             {
-                VoltageMax = c.VoltageMax, 
+                VoltageMax = c.VoltageMax,
                 IsPolar = c.IsPolar
             },
             TransistorDto t => new Transistor
@@ -59,6 +59,7 @@ public static class YamlMapperExtensions
         // 2. В одном месте заполняем ВСЕ общие свойства базового класса Component
         comp.Id = dto.Id;
         comp.Type = dto.Type;
+        comp.Unit = dto.Unit ?? layerUnit;
 
         if (string.IsNullOrWhiteSpace(dto.Name))
         {
@@ -70,17 +71,23 @@ public static class YamlMapperExtensions
                 Length = comp.Length
             });
         }
-        else
-        {
-            comp.Name = dto.Name;            
-        }
+        else comp.Name = dto.Name;
 
         comp.Value = dto.Value;
-        comp.Point = dto.Point.ToDomain();
+        comp.Point = dto.Point.ToDomain(comp.Unit);
 
-        if (dto.Shape != null)
+        if (dto.Shape == null)
         {
-            var shapeDomain = dto.Shape.ToDomain(out var shapeErrors);
+            errors.Add(new EditorError
+            {
+                Message = "Отсутствует обязательное свойство shape",
+                Line = comp.Line,
+                Column = comp.Column,
+                Length = comp.Length
+            });
+        }
+        else {
+            var shapeDomain = dto.Shape.ToDomain(comp.Unit, out var shapeErrors);
             if (shapeDomain == null)
                 errors.AddRange(shapeErrors);
             else
@@ -95,7 +102,7 @@ public static class YamlMapperExtensions
 
         foreach (var p in dto.Pins ?? [])
         {
-            var pinDomain = p.ToDomain(out var pinErrors);
+            var pinDomain = p.ToDomain(comp.Unit, out var pinErrors);
 
             if (pinDomain == null)
             {
@@ -115,7 +122,7 @@ public static class YamlMapperExtensions
             }
         }
 
-        comp.Pins = pinsMap.Values.ToList();
+        comp.Pins = [.. pinsMap.Values];
 
         comp.Line = dto.Line;
         comp.Column = dto.Column;
@@ -124,10 +131,20 @@ public static class YamlMapperExtensions
         return errors.Count > 0 ? null : comp;
     }
 
-    public static Pin? ToDomain(this PinDto dto, out List<EditorError> errors)
+    public static Pin? ToDomain(this PinDto dto, LengthUnit compUnit, out List<EditorError> errors)
     {
         errors = [];
-        var pin = new Pin();
+
+        var pin = new Pin
+        {
+            Unit = dto.Unit ?? compUnit,
+            CoordMode = dto.CoordMode,
+            IsPlated = dto.IsPlated,
+            ElectricalType = dto.ElectricalType
+        };
+
+        pin.DrillDiameter = dto.DrillDiameter.ToMillimeters(pin.Unit);
+        pin.Point = dto.Point.ToDomain(pin.Unit);
 
         if (string.IsNullOrWhiteSpace(dto.Name))
         {
@@ -139,47 +156,83 @@ public static class YamlMapperExtensions
                 Length = dto.Length
             });
         }
-        else
+        else pin.Name = dto.Name;
+
+        if (dto.Shape == null)
         {
-            pin.Name = dto.Name;            
+            errors.Add(new EditorError
+            {
+                Message = "Отсутствует обязательное свойство shape",
+                Line = pin.Line,
+                Column = pin.Column,
+                Length = pin.Length
+            });
         }
-
-        pin.Point = dto.Point.ToDomain();
-        pin.CoordMode = dto.CoordMode;
-
-        if (dto.Shape != null)
-        {
-            var shapeDomain = dto.Shape.ToDomain(out var shapeErrors);
+        else {
+            var shapeDomain = dto.Shape.ToDomain(pin.Unit, out var shapeErrors);
             if (shapeDomain == null)
                 errors.AddRange(shapeErrors);
             else
                 pin.Shape = shapeDomain;
         }
-        
-        pin.DrillDiameter = dto.DrillDiameter;
-        pin.IsPlated = dto.IsPlated;
-        pin.ElectricalType = dto.ElectricalType;
 
         return errors.Count > 0 ? null : pin;
     }
 
-    public static Shape? ToDomain(this ShapeDto dto, out List<EditorError> errors)
+    public static Shape? ToDomain(this ShapeDto dto, LengthUnit unit, out List<EditorError> errors)
     {
         errors = [];
-        
+
         switch (dto)
         {
             case RectShapeDto r:
-                return new RectShape
+            {
+                if (r.Width <= 0)
                 {
-                    Width = r.Width,
-                    Height = r.Height,
-                    CornerRadius = r.CornerRadius
-                };
+                    errors.Add(new EditorError
+                    {
+                        Message = "Свойство width должно иметь значение больше 0",
+                        Line = r.Line,
+                        Column = r.Column,
+                        Length = r.Length
+                    });
+                }
+
+                if (r.Height <= 0)
+                {
+                    errors.Add(new EditorError
+                    {
+                        Message = "Свойство height должно иметь значение больше 0",
+                        Line = r.Line,
+                        Column = r.Column,
+                        Length = r.Length
+                    });
+                }
+
+                if (r.CornerRadius < 0)
+                {
+                    errors.Add(new EditorError
+                    {
+                        Message = "Свойство corner-radius должно иметь значение не меньше 0",
+                        Line = r.Line,
+                        Column = r.Column,
+                        Length = r.Length
+                    });
+                }
+
+                return errors.Count > 0
+                    ? null
+                    : new RectShape
+                    {
+                        Width = r.Width.ToMillimeters(unit),
+                        Height = r.Height.ToMillimeters(unit),
+                        CornerRadius = r.CornerRadius.ToMillimeters(unit)
+                    };
+            }
 
             case PathShapeDto p:
             {
-                var start = p.StartPoint.ToDomain();
+                var start = p.StartPoint.ToDomain(unit);
 
                 List<Segment> segments = [];
 
@@ -197,7 +250,7 @@ public static class YamlMapperExtensions
                         continue;
                     }
 
-                    var segDomain = seg.ToDomain(start, out var segErrors);
+                    var segDomain = seg.ToDomain(start, unit, out var segErrors);
 
                     if (segDomain == null)
                     {
@@ -209,25 +262,101 @@ public static class YamlMapperExtensions
                 }
 
                 const double tolerance = 0.0001;
-                var lastDto = p.Segments?.Last();
-                var lastDomain = segments.Last();
 
-                if (lastDto == null)
+                if (segments.Count > 0 && p.Segments?.Count > 0)
+                {
+                    var lastDto = p.Segments.Last();
+                    var lastDomain = segments.Last();
+
+                    if (Math.Abs(lastDomain.Point.X - start.X) > tolerance ||
+                        Math.Abs(lastDomain.Point.Y - start.Y) > tolerance)
+                    {
+                        errors.Add(new EditorError
+                        {
+                            Message = "Координаты последнего сегмента должны совпадать с координатами start-point",
+                            Line = lastDto!.Line,
+                            Column = lastDto.Column,
+                            Length = lastDto.Length
+                        });
+                    }
+                }
+
+                /* --- Унесено в будущий геометрический валидатор / DRC ---
+                // 1. Проверка на полное схлопывание (все точки равны startPoint)
+                bool isCollapsedToStart = segments.Count > 0 && segments.All(s =>
+                    Math.Abs(s.Point.X - start.X) < tolerance &&
+                    Math.Abs(s.Point.Y - start.Y) < tolerance);
+
+                // 2. Проверка на вырожденные сегменты (нулевая длина между соседними точками)
+                bool hasDegenerateSegments = false;
+                var currentPt = start;
+                foreach (var seg in segments)
+                {
+                    if (Math.Abs(seg.Point.X - currentPt.X) < tolerance &&
+                        Math.Abs(seg.Point.Y - currentPt.Y) < tolerance)
+                    {
+                        hasDegenerateSegments = true;
+                        break;
+                    }
+
+                    currentPt = seg.Point;
+                }
+                --------------------------------------------------------- */
+
+                if (segments.Count <= 0)
                 {
                     errors.Add(new EditorError
                     {
-                        Message = "Последний сегмент не найден"
+                        Message = "В свойстве Shape не указан ни один сегмент",
+                        Line = dto.Line,
+                        Column = dto.Column,
+                        Length = dto.Length
                     });
                 }
-                else if (Math.Abs(lastDomain.Point.X - start.X) > tolerance ||
-                         Math.Abs(lastDomain.Point.Y - start.Y) > tolerance)
+                /*
+                else if (isCollapsedToStart)
                 {
                     errors.Add(new EditorError
                     {
-                        Message = "Координаты последнего сегмента должны совпадать с координатами start-point",
-                        Line = lastDto.Line,
-                        Column = lastDto.Column,
-                        Length = lastDto.Length
+                        Message = "Все сегменты контура ведут в стартовую точку. Фигура не имеет площади.",
+                        Line = dto.Line,
+                        Column = dto.Column,
+                        Length = dto.Length
+                    });
+                }
+                else if (hasDegenerateSegments)
+                {
+                    errors.Add(new EditorError
+                    {
+                        Message =
+                            "Контур содержит вырожденные сегменты (координаты совпадают с предыдущей точкой). Удалите дублирующиеся точки.",
+                        Line = dto.Line,
+                        Column = dto.Column,
+                        Length = dto.Length
+                    });
+                }
+                */
+                else if (segments.Count < 3 && !segments.Any(s => s is ArcSegment))
+                {
+                    errors.Add(new EditorError
+                    {
+                        Message =
+                            "Shape типа !path должна иметь хотя бы 3 сегмента типа !line или содержать хотя бы 1 сегмент типа !arc",
+                        Line = dto.Line,
+                        Column = dto.Column,
+                        Length = dto.Length
+                    });
+                }
+                else if (segments is [ArcSegment { IsLargeArc: false }])
+                {
+                    var seg = p.Segments![0]!;
+                    errors.Add(new EditorError
+                    {
+                        Message =
+                            "В сегменте типа !arc свойство large-arc должно быть true, если он является единственным сегментом",
+                        Line = seg.Line,
+                        Column = seg.Column,
+                        Length = seg.Length
                     });
                 }
 
@@ -253,25 +382,37 @@ public static class YamlMapperExtensions
     }
 
     // Полиморфный маппинг сегментов контура
-    public static Segment? ToDomain(this SegmentDto dto, Point2D start, out List<EditorError> errors)
+    public static Segment? ToDomain(this SegmentDto dto, Point2D start, LengthUnit unit, out List<EditorError> errors)
     {
         errors = [];
 
         switch (dto)
         {
             case LineSegmentDto:
-                return new LineSegment { Point = dto.Point?.ToDomain() ?? start };
+                return new LineSegment { Point = dto.Point?.ToDomain(unit) ?? start };
 
             case ArcSegmentDto a:
+                if (a.Radius < 0)
+                {
+                    errors.Add(new EditorError
+                    {
+                        Message = "Свойство radius должно иметь значение больше 0",
+                        Line = dto.Line,
+                        Column = dto.Column,
+                        Length = dto.Length
+                    });
+                    return null;
+                }
+
                 return new ArcSegment
                 {
-                    Point = dto.Point?.ToDomain() ?? start,
-                    Radius = a.Radius,
+                    Point = dto.Point?.ToDomain(unit) ?? start,
+                    Radius = a.Radius.ToMillimeters(unit),
                     IsClockwise = a.IsClockwise,
                     IsLargeArc = a.IsLargeArc
                 };
 
-            default: 
+            default:
                 errors.Add(new EditorError
                 {
                     Message = $"Cannot resolve symbol '{dto.GetType().Name}'",
@@ -281,13 +422,13 @@ public static class YamlMapperExtensions
                 });
                 return null;
         }
-
     }
 
     // Маппинг трассы
     public static Trace? ToDomain(
-        this TraceDto dto, 
-        Dictionary<string, Component> componentsMap, 
+        this TraceDto dto,
+        Dictionary<string, Component> componentsMap,
+        LengthUnit layerUnit,
         out List<EditorError> errors)
     {
         errors = [];
@@ -297,26 +438,51 @@ public static class YamlMapperExtensions
             dto,
             componentsMap,
             out var fromErrors);
-        
+
         var to = dto.To.ToDomain(
             $"Трасса ID {dto.Id} (To)",
             dto,
             componentsMap,
             out var toErrors);
 
+        var traceUnit = dto.Unit ?? layerUnit;
+
         errors.AddRange(fromErrors);
         errors.AddRange(toErrors);
 
-        return from == null || to == null
+        if (string.IsNullOrWhiteSpace(dto.NetName))
+        {
+            errors.Add(new EditorError
+            {
+                Message = "Не указано значение свойства name",
+                Line = dto.Line,
+                Column = dto.Column,
+                Length = dto.Length
+            });
+        }
+        if (dto.Width <= 0)
+        {
+            errors.Add(new EditorError
+            {
+                Message = "Свойство width должно иметь значение больше 0",
+                Line = dto.Line,
+                Column = dto.Column,
+                Length = dto.Length
+            });
+        }
+
+        return errors.Count > 0
             ? null
-            : new Trace {
+            : new Trace
+            {
                 Id = dto.Id,
                 NetName = dto.NetName,
-                From = from,
-                To = to,
+                From = from!,
+                To = to!,
                 CoordMode = dto.CoordMode,
-                Width = dto.Width,
-                MiddlePoints = dto.MiddlePoints?.Select(p => p.ToDomain()).ToList() ?? [],
+                Width = dto.Width.ToMillimeters(traceUnit),
+                MiddlePoints = dto.MiddlePoints?.Select(p => p.ToDomain(traceUnit)).ToList() ?? [],
+                Unit = traceUnit,
 
                 Line = dto.Line,
                 Column = dto.Column,
@@ -355,8 +521,8 @@ public static class YamlMapperExtensions
                 Length = dto.Length
             });
             return null;
-        }      
-        
+        }
+
         if (!componentsMap.TryGetValue(dto.Comp, out var comp))
         {
             errors.Add(new EditorError
@@ -412,7 +578,7 @@ public static class YamlMapperExtensions
         {
             foreach (var comp in dto.Components)
             {
-                var compDomain = comp.ToDomain(out var compErrors);
+                var compDomain = comp.ToDomain(dto.Unit, out var compErrors);
 
                 if (compDomain == null)
                 {
@@ -424,7 +590,7 @@ public static class YamlMapperExtensions
                 {
                     errors.Add(new EditorError
                     {
-                        Message = $"Дубликат Name: {comp.Name}",
+                        Message = $"Дубликат name: {comp.Name}",
                         Line = comp.Line,
                         Column = comp.Column,
                         Length = comp.Length
@@ -440,7 +606,7 @@ public static class YamlMapperExtensions
         {
             foreach (var trace in dto.Traces)
             {
-                var traceDomain = trace.ToDomain(componentsMap, out var traceErrors);
+                var traceDomain = trace.ToDomain(componentsMap, dto.Unit, out var traceErrors);
 
                 if (traceDomain == null)
                 {
@@ -454,13 +620,13 @@ public static class YamlMapperExtensions
 
         Shape shape = new RectShape
         {
-            Width = 600,
-            Height = 800
+            Width = 600d.ToMillimeters(dto.Unit),
+            Height = 800d.ToMillimeters(dto.Unit)
         };
         // 3. форма слоя
         if (dto.Shape != null)
         {
-            var shapeDomain = dto.Shape.ToDomain(out var shapeErrors);
+            var shapeDomain = dto.Shape.ToDomain(dto.Unit, out var shapeErrors);
             if (shapeDomain == null)
                 errors.AddRange(shapeErrors);
             else
@@ -470,7 +636,8 @@ public static class YamlMapperExtensions
         return new LayerModel
         {
             Shape = shape,
-            Components = componentsMap.Values.ToList(),
+            Unit = dto.Unit,
+            Components = [.. componentsMap.Values],
             Traces = traces
         };
     }

@@ -2,7 +2,7 @@ using Quartz.Core.Enums;
 
 namespace Quartz.Core.Models.BoardEntities;
 
-public class Pin : BoardEntity
+public class Pin : BoardDimensionalObject
 {
     public string Name { get; set; } = ""; // Например: "GND", "VCC", "1", "A"
 

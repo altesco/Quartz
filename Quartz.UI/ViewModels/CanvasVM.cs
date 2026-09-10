@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Quartz.Core.Enums;
-using Quartz.Core.Interfaces;
+using Quartz.Core.Models.BoardEntities;
 
 namespace Quartz.UI.ViewModels;
 

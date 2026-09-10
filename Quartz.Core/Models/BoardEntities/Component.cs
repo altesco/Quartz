@@ -2,7 +2,7 @@ using Quartz.Core.Enums;
 
 namespace Quartz.Core.Models.BoardEntities;
 
-public abstract class Component : BoardEntity
+public abstract class Component : BoardDimensionalObject
 {
     public int Id { get; set; }
     public string? Type { get; set; } // Аналог CSS-класса/стиля

@@ -1,5 +1,5 @@
-using Quartz.Core.Interfaces;
 using Quartz.Core.Models;
+using Quartz.Core.Models.BoardEntities;
 
 namespace Quartz.Application.Interfaces;
 

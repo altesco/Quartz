@@ -1,4 +1,3 @@
-using Quartz.Core.Interfaces;
 using Quartz.Core.Models;
 using Quartz.Core.Models.BoardEntities;
 using System.Numerics;
@@ -260,6 +259,4 @@ public class DrawingGenerationService : IDrawingGenerationService
 
         return result;
     }
-
-    
 }

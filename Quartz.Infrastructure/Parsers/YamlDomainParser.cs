@@ -36,6 +36,7 @@ public class YamlDomainParser : IYamlDomainParser
             .WithTagMapping("!ic", typeof(IntegratedCircuitDto))
             .WithTagMapping("!connector", typeof(ConnectorDto))
             .WithTagMapping("!trace", typeof(TraceDto))
+
             .WithTagMapping("!line", typeof(LineSegmentDto))
             .WithTagMapping("!arc", typeof(ArcSegmentDto))
             .Build();

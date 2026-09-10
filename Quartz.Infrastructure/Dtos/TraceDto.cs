@@ -3,7 +3,7 @@ using YamlDotNet.Serialization;
 
 namespace Quartz.Infrastructure.Dtos;
 
-public record TraceDto : BoardEntityDto
+public record TraceDto : BoardDimensionalObjectDto
 {
     [YamlMember(Alias = "id")] 
     public int Id { get; init; }

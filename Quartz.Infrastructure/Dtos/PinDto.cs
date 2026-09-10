@@ -3,7 +3,7 @@ using YamlDotNet.Serialization;
 
 namespace Quartz.Infrastructure.Dtos;
 
-public record PinDto : BoardEntityDto
+public record PinDto : BoardDimensionalObjectDto
 {
     [YamlMember(Alias = "name")] 
     public string? Name { get; init; } = string.Empty; // Например: "GND", "VCC", "1", "A"
