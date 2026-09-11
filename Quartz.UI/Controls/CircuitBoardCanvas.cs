@@ -4,8 +4,8 @@ using System.Linq;
 using Avalonia;
 using Avalonia.Input;
 using Avalonia.Labs.Controls;
+using Avalonia.Threading;
 using Quartz.Core.Enums;
-using Quartz.Core.Interfaces;
 using Quartz.Core.Models.BoardEntities;
 using SkiaSharp;
 
@@ -13,7 +13,6 @@ namespace Quartz.UI.Controls;
 
 public class CircuitBoardCanvas : SKCanvasView, IDisposable
 {
-    // Данные для отрисовки
     public static readonly StyledProperty<IReadOnlyList<DrawingPrimitive>?> DrawingDataProperty =
         AvaloniaProperty.Register<CircuitBoardCanvas, IReadOnlyList<DrawingPrimitive>?>(nameof(DrawingData));
 
@@ -23,7 +22,6 @@ public class CircuitBoardCanvas : SKCanvasView, IDisposable
         set => SetValue(DrawingDataProperty, value);
     }
 
-    // РЕШЕНИЕ: Переносим состояние трансформации в StyledProperty, чтобы их можно было забиндить к VM
     public static readonly StyledProperty<float> ZoomProperty =
         AvaloniaProperty.Register<CircuitBoardCanvas, float>(nameof(Zoom), 1.0f);
 
@@ -51,20 +49,24 @@ public class CircuitBoardCanvas : SKCanvasView, IDisposable
         set => SetValue(OffsetYProperty, value);
     }
 
-    // Константы ограничений
     private const float MinZoom = 0.05f;
     private const float MaxZoom = 50.0f;
     private const float WheelPanSensitivity = 15f;
+    private const float BasePixelsPerMm = 96f / 25.4f;
 
-    // Состояние для перетаскивания мыши
     private bool _isDragging;
     private Point _lastPointerPosition;
 
-    // Состояние для ручного щипка
     private readonly Dictionary<int, Point> _trackedPointers = [];
     private float _lastPinchDistance;
     private Point _lastPinchMidpoint;
     private bool _isPinchingManual;
+
+    // Переменные для анимации плавной подгонки
+    private float _targetZoom = 1.0f;
+    private float _targetOffsetX;
+    private float _targetOffsetY;
+    private readonly DispatcherTimer _animationTimer;
 
     private readonly Dictionary<PrimitiveType, SKPaint> _paintCache = [];
 
@@ -72,33 +74,39 @@ public class CircuitBoardCanvas : SKCanvasView, IDisposable
     {
         InitializePaintCache();
         Focusable = true;
+
+        _animationTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(16) // ~60 FPS
+        };
+        _animationTimer.Tick += OnAnimationTick;
     }
 
     private void InitializePaintCache()
     {
         _paintCache[PrimitiveType.Trace] = new SKPaint
         {
-            Color = SKColors.DarkCyan, 
-            Style = SKPaintStyle.Stroke, 
-            IsAntialias = true, 
+            Color = SKColors.DarkCyan,
+            Style = SKPaintStyle.Stroke,
+            IsAntialias = true,
             StrokeWidth = 1.5f
         };
         _paintCache[PrimitiveType.Pad] = new SKPaint
         {
-            Color = SKColors.Goldenrod, 
-            Style = SKPaintStyle.Fill, 
+            Color = SKColors.Goldenrod,
+            Style = SKPaintStyle.Fill,
             IsAntialias = true
         };
         _paintCache[PrimitiveType.ComponentOutline] = new SKPaint
         {
-            Color = SKColors.LightGray, 
-            Style = SKPaintStyle.Stroke, 
-            StrokeWidth = 1.5f, 
+            Color = SKColors.LightGray,
+            Style = SKPaintStyle.Stroke,
+            StrokeWidth = 1.5f,
             IsAntialias = true
         };
         _paintCache[PrimitiveType.Text] = new SKPaint
         {
-            Color = SKColors.White, 
+            Color = SKColors.White,
             IsAntialias = true
         };
         _paintCache[PrimitiveType.BoardOutline] = new SKPaint
@@ -114,7 +122,13 @@ public class CircuitBoardCanvas : SKCanvasView, IDisposable
     {
         base.OnPropertyChanged(change);
 
-        // Если снаружи (из VM) прилетели новые координаты или данные — перерисовываем
+        if (change.Property == ZoomProperty && !_animationTimer.IsEnabled)
+            _targetZoom = Zoom;
+        if (change.Property == OffsetXProperty && !_animationTimer.IsEnabled)
+            _targetOffsetX = OffsetX;
+        if (change.Property == OffsetYProperty && !_animationTimer.IsEnabled)
+            _targetOffsetY = OffsetY;
+
         if (change.Property == DrawingDataProperty ||
             change.Property == ZoomProperty ||
             change.Property == OffsetXProperty ||
@@ -130,6 +144,9 @@ public class CircuitBoardCanvas : SKCanvasView, IDisposable
     {
         base.OnPointerPressed(e);
         _trackedPointers[e.Pointer.Id] = e.GetPosition(this);
+
+        // При ручном нажатии останавливаем анимацию зума
+        StopAnimation();
 
         if (_trackedPointers.Count == 2)
         {
@@ -161,7 +178,6 @@ public class CircuitBoardCanvas : SKCanvasView, IDisposable
             _trackedPointers[e.Pointer.Id] = e.GetPosition(this);
         }
 
-        // Щипок двумя пальцами
         if (_isPinchingManual && _trackedPointers.Count == 2)
         {
             var points = new List<Point>(_trackedPointers.Values);
@@ -172,6 +188,7 @@ public class CircuitBoardCanvas : SKCanvasView, IDisposable
             {
                 float oldZoom = Zoom;
                 float scaleFactor = currentDistance / _lastPinchDistance;
+
                 Zoom = Math.Clamp(Zoom * scaleFactor, MinZoom, MaxZoom);
 
                 float panX = (float)(currentMidpoint.X - _lastPinchMidpoint.X);
@@ -179,6 +196,8 @@ public class CircuitBoardCanvas : SKCanvasView, IDisposable
 
                 OffsetX = (float)(currentMidpoint.X - (currentMidpoint.X - OffsetX) * (Zoom / oldZoom)) + panX;
                 OffsetY = (float)(currentMidpoint.Y - (currentMidpoint.Y - OffsetY) * (Zoom / oldZoom)) + panY;
+
+                SyncTargetsWithCurrent();
             }
 
             _lastPinchDistance = currentDistance;
@@ -187,13 +206,13 @@ public class CircuitBoardCanvas : SKCanvasView, IDisposable
             return;
         }
 
-        // Обычный драг мыши
         if (_isDragging && !_isPinchingManual)
         {
             var currentPos = e.GetPosition(this);
             OffsetX += (float)(currentPos.X - _lastPointerPosition.X);
             OffsetY += (float)(currentPos.Y - _lastPointerPosition.Y);
             _lastPointerPosition = currentPos;
+            SyncTargetsWithCurrent();
             e.Handled = true;
         }
     }
@@ -220,19 +239,69 @@ public class CircuitBoardCanvas : SKCanvasView, IDisposable
 
         if (e.KeyModifiers.HasFlag(KeyModifiers.Control))
         {
-            float oldZoom = Zoom;
-            float zoomFactor = e.Delta.Y > 0 ? 1.1f : 1.0f / 1.1f;
-            Zoom = Math.Clamp(Zoom * zoomFactor, MinZoom, MaxZoom);
+            // Возвращаем честные 10% за каждый щелчок колесика!
+            float zoomFactor = e.Delta.Y > 0 ? 1.2f : 1.0f / 1.2f;
 
-            OffsetX = (float)(mousePos.X - (mousePos.X - OffsetX) * (Zoom / oldZoom));
-            OffsetY = (float)(mousePos.Y - (mousePos.Y - OffsetY) * (Zoom / oldZoom));
+            // Считаем целевые значения от текущих таргетов, чтобы быстрый скролл накопился
+            float newTargetZoom = Math.Clamp(_targetZoom * zoomFactor, MinZoom, MaxZoom);
+
+            _targetOffsetX = (float)(mousePos.X - (mousePos.X - _targetOffsetX) * (newTargetZoom / _targetZoom));
+            _targetOffsetY = (float)(mousePos.Y - (mousePos.Y - _targetOffsetY) * (newTargetZoom / _targetZoom));
+            _targetZoom = newTargetZoom;
+
+            if (!_animationTimer.IsEnabled)
+            {
+                _animationTimer.Start();
+            }
         }
         else
         {
+            StopAnimation();
             OffsetX += (float)e.Delta.X * WheelPanSensitivity;
             OffsetY += (float)e.Delta.Y * WheelPanSensitivity;
+            SyncTargetsWithCurrent();
         }
+
         e.Handled = true;
+    }
+
+    private void OnAnimationTick(object? sender, EventArgs e)
+    {
+        const float smoothing = 0.25f; // Скорость доводки (чем выше, тем быстрее догоняет)
+
+        float zoomDiff = Math.Abs(_targetZoom - Zoom);
+        float offsetXDiff = Math.Abs(_targetOffsetX - OffsetX);
+        float offsetYDiff = Math.Abs(_targetOffsetY - OffsetY);
+
+        if (zoomDiff < 0.0001f && offsetXDiff < 0.01f && offsetYDiff < 0.01f)
+        {
+            Zoom = _targetZoom;
+            OffsetX = _targetOffsetX;
+            OffsetY = _targetOffsetY;
+            _animationTimer.Stop();
+            return;
+        }
+
+        Zoom += (_targetZoom - Zoom) * smoothing;
+        OffsetX += (_targetOffsetX - OffsetX) * smoothing;
+        OffsetY += (_targetOffsetY - OffsetY) * smoothing;
+    }
+
+    private void SyncTargetsWithCurrent()
+    {
+        _targetZoom = Zoom;
+        _targetOffsetX = OffsetX;
+        _targetOffsetY = OffsetY;
+    }
+
+    private void StopAnimation()
+    {
+        if (_animationTimer.IsEnabled)
+        {
+            _animationTimer.Stop();
+        }
+
+        SyncTargetsWithCurrent();
     }
 
     private static float GetDistance(Point p1, Point p2) =>
@@ -250,12 +319,16 @@ public class CircuitBoardCanvas : SKCanvasView, IDisposable
         var canvas = e.Surface.Canvas;
         canvas.Clear(SKColors.Black);
 
+        DrawAdaptiveGrid(canvas);
+
         var primitives = DrawingData;
-        if (primitives == null || primitives.Count == 0) return;
+        if (primitives == null || primitives.Count == 0)
+            return;
 
         canvas.Save();
         canvas.Translate(OffsetX, OffsetY);
-        canvas.Scale(Zoom);
+        float totalScale = BasePixelsPerMm * Zoom;
+        canvas.Scale(totalScale);
 
         foreach (var primitive in primitives)
         {
@@ -267,24 +340,25 @@ public class CircuitBoardCanvas : SKCanvasView, IDisposable
                     paint.StrokeWidth = line.Thickness;
                     canvas.DrawLine(line.X1, line.Y1, line.X2, line.Y2, paint);
                     break;
-                
+
                 case PolylinePrimitive polyline:
                 {
                     using var path = new SKPath();
                     var points = polyline.Points
-                        .Select(item => new SKPoint
-                        {
-                            X = item.X,
-                            Y = item.Y
-                        })
+                        .Select(item => new SKPoint { X = item.X, Y = item.Y })
                         .ToArray();
-                    path.MoveTo(points[0]);
-                    for (int i = 1; i < points.Length; i++)
+                    if (points.Length > 0)
                     {
-                        path.LineTo(points[i]);
+                        path.MoveTo(points[0]);
+                        for (int i = 1; i < points.Length; i++)
+                        {
+                            path.LineTo(points[i]);
+                        }
+
+                        paint.StrokeJoin = SKStrokeJoin.Round;
+                        canvas.DrawPath(path, paint);
                     }
-                    paint.StrokeJoin = SKStrokeJoin.Round;
-                    canvas.DrawPath(path, paint);
+
                     break;
                 }
 
@@ -301,10 +375,10 @@ public class CircuitBoardCanvas : SKCanvasView, IDisposable
                     else
                         canvas.DrawRect(skRect, paint);
                     break;
-                
+
                 case PathPrimitive pathPrimitive:
                 {
-                    if (pathPrimitive.Segments.Count == 0) 
+                    if (pathPrimitive.Segments.Count == 0)
                         break;
 
                     using var skPath = new SKPath();
@@ -320,7 +394,9 @@ public class CircuitBoardCanvas : SKCanvasView, IDisposable
                                     ry: (float)arc.Radius,
                                     xAxisRotate: 0f,
                                     largeArc: arc.IsLargeArc ? SKPathArcSize.Large : SKPathArcSize.Small,
-                                    sweep: arc.IsClockwise ? SKPathDirection.Clockwise : SKPathDirection.CounterClockwise,
+                                    sweep: arc.IsClockwise
+                                        ? SKPathDirection.Clockwise
+                                        : SKPathDirection.CounterClockwise,
                                     x: (float)arc.Point.X,
                                     y: (float)arc.Point.Y
                                 );
@@ -346,14 +422,10 @@ public class CircuitBoardCanvas : SKCanvasView, IDisposable
                 case TextPrimitive text:
                 {
                     using var font = new SKFont(SKTypeface.Default, text.FontSize);
-
                     font.MeasureText(text.Text, out var textBounds);
-
                     var x = text.X - textBounds.MidX;
                     var y = text.Y - textBounds.MidY;
-
                     canvas.DrawText(text.Text, x, y, font, paint);
-
                     break;
                 }
             }
@@ -362,9 +434,67 @@ public class CircuitBoardCanvas : SKCanvasView, IDisposable
         canvas.Restore();
     }
 
+    private static float CalculateGridStep(float scale, float targetVisualPixels = 40f)
+    {
+        float rawD = targetVisualPixels / scale;
+        float exponent = MathF.Floor(MathF.Log10(rawD));
+        float magnitude = MathF.Pow(10f, exponent);
+        float fraction = rawD / magnitude;
+
+        float niceFraction = fraction switch
+        {
+            < 1.5f => 1f,
+            < 3.5f => 2f,
+            < 7.5f => 5f,
+            _ => 10f
+        };
+
+        return niceFraction * magnitude;
+    }
+
+    private void DrawAdaptiveGrid(SKCanvas canvas)
+    {
+        float scale = BasePixelsPerMm * Zoom;
+        float d = CalculateGridStep(scale, targetVisualPixels: 40f);
+
+        float width = (float)Bounds.Width;
+        float height = (float)Bounds.Height;
+        if (width <= 0 || height <= 0) return;
+
+        float minXMm = -OffsetX / scale;
+        float minYMm = -OffsetY / scale;
+        float maxXMm = (width - OffsetX) / scale;
+        float maxYMm = (height - OffsetY) / scale;
+
+        long startX = (long)Math.Floor(minXMm / d);
+        long endX = (long)Math.Ceiling(maxXMm / d);
+        long startY = (long)Math.Floor(minYMm / d);
+        long endY = (long)Math.Ceiling(maxYMm / d);
+
+        using var dotPaint = new SKPaint();
+        dotPaint.Color = new SKColor(120, 120, 120, 180);
+        dotPaint.IsAntialias = true;
+        dotPaint.Style = SKPaintStyle.Fill;
+
+        float dotRadius = 1.2f;
+
+        for (long x = startX; x <= endX; x++)
+        {
+            float xPx = (x * d) * scale + OffsetX;
+            for (long y = startY; y <= endY; y++)
+            {
+                float yPx = (y * d) * scale + OffsetY;
+                canvas.DrawCircle(xPx, yPx, dotRadius, dotPaint);
+            }
+        }
+    }
+
     public void Dispose()
     {
-        foreach (var paint in _paintCache.Values) 
+        _animationTimer.Stop();
+        _animationTimer.Tick -= OnAnimationTick;
+
+        foreach (var paint in _paintCache.Values)
             paint.Dispose();
         _paintCache.Clear();
     }

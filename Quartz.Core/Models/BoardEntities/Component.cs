@@ -19,6 +19,6 @@ public abstract class Component : BoardDimensionalObject
 
     public MountingType MountingType { get; set; } = MountingType.SMD;
 
-    public ComponentTextSettings NameSettings { get; set; } = new();
+    public NameSettings NameSettings { get; set; } = new();
     public List<Pin> Pins { get; set; } = [];
 }

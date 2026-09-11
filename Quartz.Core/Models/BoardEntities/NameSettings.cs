@@ -1,6 +1,6 @@
 namespace Quartz.Core.Models.BoardEntities;
 
-public class ComponentTextSettings
+public class NameSettings : BoardEntity
 {
     // Смещение относительно центра компонента (0,0)
     public double OffsetX { get; set; } = 0;

@@ -33,8 +33,8 @@ public abstract record ComponentDto : BoardDimensionalObjectDto
     public MountingType MountingType { get; init; } = MountingType.SMD;
 
     [YamlMember(Alias = "name-settings")] 
-    public ComponentTextSettingsDto NameSettings { get; init; } = new();
+    public NameSettingsDto NameSettings { get; init; } = new();
 
     [YamlMember(Alias = "pins")] 
-    public List<PinDto>? Pins { get; init; } = [];
+    public List<PinDto?>? Pins { get; init; } = [];
 }

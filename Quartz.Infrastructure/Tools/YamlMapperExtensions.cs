@@ -11,7 +11,7 @@ public static class YamlMapperExtensions
     public static Point2D ToDomain(this Point2DDto dto, LengthUnit unit)
         => new Point2D(dto.X, dto.Y).ToMillimeters(unit);
 
-    public static ComponentTextSettings ToDomain(this ComponentTextSettingsDto dto) => new()
+    public static NameSettings ToDomain(this NameSettingsDto dto) => new()
     {
         OffsetX = dto.OffsetX,
         OffsetY = dto.OffsetY,
@@ -25,7 +25,7 @@ public static class YamlMapperExtensions
         errors = [];
 
         // 1. Создаем нужный экземпляр и маппим ТОЛЬКО специфичные для типа поля
-        Component comp = dto switch
+        Component? comp = dto switch
         {
             ResistorDto r => new Resistor
             {
@@ -53,8 +53,15 @@ public static class YamlMapperExtensions
                 GateCount = ic.GateCount
             },
             ConnectorDto => new Connector(),
-            _ => throw new ArgumentOutOfRangeException(nameof(dto), $"Неподдерживаемый DTO: {dto.GetType().Name}")
+            _ => null
         };
+
+        if (comp == null)
+            return null;
+
+        comp.Line = dto.Line;
+        comp.Column = dto.Column;
+        comp.Length = dto.Length;
 
         // 2. В одном месте заполняем ВСЕ общие свойства базового класса Component
         comp.Id = dto.Id;
@@ -100,8 +107,22 @@ public static class YamlMapperExtensions
 
         var pinsMap = new Dictionary<string, Pin>();
 
-        foreach (var p in dto.Pins ?? [])
+        for (int i = 0; i < dto.Pins?.Count; i++)
         {
+            var p = dto.Pins[i];
+
+            if (p is null)
+            {
+                errors.Add(new EditorError
+                {
+                    Message = $"Не указан контакт с индексом {i} у компонента '{comp.Name}'",
+                    Line = comp.Line,
+                    Column = comp.Column,
+                    Length = comp.Length
+                });
+                continue;
+            }
+
             var pinDomain = p.ToDomain(comp.Unit, out var pinErrors);
 
             if (pinDomain == null)
@@ -124,10 +145,6 @@ public static class YamlMapperExtensions
 
         comp.Pins = [.. pinsMap.Values];
 
-        comp.Line = dto.Line;
-        comp.Column = dto.Column;
-        comp.Length = dto.Length;
-
         return errors.Count > 0 ? null : comp;
     }
 
@@ -140,7 +157,10 @@ public static class YamlMapperExtensions
             Unit = dto.Unit ?? compUnit,
             CoordMode = dto.CoordMode,
             IsPlated = dto.IsPlated,
-            ElectricalType = dto.ElectricalType
+            ElectricalType = dto.ElectricalType,
+            Line = dto.Line,
+            Column = dto.Column,
+            Length = dto.Length
         };
 
         pin.DrillDiameter = dto.DrillDiameter.ToMillimeters(pin.Unit);
@@ -576,8 +596,22 @@ public static class YamlMapperExtensions
         // 1. Проход по компонентам: проверка имён и заполнение словаря
         if (dto.Components != null)
         {
-            foreach (var comp in dto.Components)
+            for (int i = 0; i < dto.Components.Count; i++)
             {
+                var comp = dto.Components[i];
+
+                if (comp is null)
+                {
+                    errors.Add(new EditorError
+                    {
+                        Message = $"Не указан компонент с индексом {i}",
+                        // Line = comp.Line,
+                        // Column = comp.Column,
+                        // Length = comp.Length
+                    });
+                    continue;
+                }
+
                 var compDomain = comp.ToDomain(dto.Unit, out var compErrors);
 
                 if (compDomain == null)
@@ -604,8 +638,22 @@ public static class YamlMapperExtensions
         // 2. Валидация трасс
         if (dto.Traces != null)
         {
-            foreach (var trace in dto.Traces)
+            for (int i = 0; i < dto.Traces.Count; i++)
             {
+                var trace = dto.Traces[i];
+
+                if (trace is null)
+                {
+                    errors.Add(new EditorError
+                    {
+                        Message = $"Не указана трасса с индексом {i}",
+                        // Line = comp.Line,
+                        // Column = comp.Column,
+                        // Length = comp.Length
+                    });
+                    continue;
+                }
+
                 var traceDomain = trace.ToDomain(componentsMap, dto.Unit, out var traceErrors);
 
                 if (traceDomain == null)
