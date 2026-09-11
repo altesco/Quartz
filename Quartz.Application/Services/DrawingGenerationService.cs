@@ -176,7 +176,11 @@ public class DrawingGenerationService : IDrawingGenerationService
         // Отрисовка трасс
         foreach (var trace in model.Traces)
         {
-            var primitive = new PolylinePrimitive { Type = PrimitiveType.Trace };
+            var primitive = new PolylinePrimitive
+            {
+                Type = PrimitiveType.Trace,
+                Thickness = (float)trace.Width
+            };
 
             var start = new Vector2
             {
@@ -194,9 +198,9 @@ public class DrawingGenerationService : IDrawingGenerationService
             primitive.Points.Add(start);
 
             // Промежуточные точки
-            if (trace.MiddlePoints != null)
+            if (trace.Points != null)
             {
-                foreach (var p in trace.MiddlePoints)
+                foreach (var p in trace.Points)
                 {
                     var pt = trace.CoordMode == CoordinateMode.Relative
                         ? new Vector2((float)p.X + start.X, (float)p.Y + start.Y)

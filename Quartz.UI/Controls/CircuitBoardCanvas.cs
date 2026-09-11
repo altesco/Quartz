@@ -334,10 +334,28 @@ public class CircuitBoardCanvas : SKCanvasView, IDisposable
         {
             if (!_paintCache.TryGetValue(primitive.Type, out var paint)) continue;
 
+            // Если это контур компонента или границы платы — держим толщину постоянной на экране
+            if (primitive.Type is PrimitiveType.ComponentOutline or PrimitiveType.BoardOutline)
+            {
+                float basePixelWidth = primitive switch
+                {
+                    LinePrimitive line when line.Thickness > 0 => line.Thickness,
+                    _ => primitive.Type == PrimitiveType.BoardOutline ? 2.0f : 1.5f
+                };
+
+                // Компенсируем масштаб канваса: экранные пиксели / totalScale
+                paint.StrokeWidth = basePixelWidth / totalScale;
+            }
+            else if (primitive is LinePrimitive line)
+            {
+                // Для остальных линий (например, реальных дорожек Trace) сохраняем их физический размер
+                paint.StrokeWidth = line.Thickness;
+            }
+            
+
             switch (primitive)
             {
                 case LinePrimitive line:
-                    paint.StrokeWidth = line.Thickness;
                     canvas.DrawLine(line.X1, line.Y1, line.X2, line.Y2, paint);
                     break;
 
@@ -347,6 +365,7 @@ public class CircuitBoardCanvas : SKCanvasView, IDisposable
                     var points = polyline.Points
                         .Select(item => new SKPoint { X = item.X, Y = item.Y })
                         .ToArray();
+
                     if (points.Length > 0)
                     {
                         path.MoveTo(points[0]);
@@ -355,8 +374,22 @@ public class CircuitBoardCanvas : SKCanvasView, IDisposable
                             path.LineTo(points[i]);
                         }
 
+                        // 1. Устанавливаем радиус скругления оси трассы (в мм)
+                        // Радиус должен быть БОЛЬШЕ половины ширины трассы (например, 1.0 мм при ширине 0.5 мм)
+                        float traceWidth = polyline.Thickness > 0 ? polyline.Thickness : 0.25f;
+                        float cornerRadius = traceWidth * 1.5f; // или задавай через свойство polyline.CornerRadius
+
+                        // 2. Применяем эффект скругления углов геометрии
+                        using var cornerEffect = SKPathEffect.CreateCorner(cornerRadius);
+
+                        paint.StrokeWidth = traceWidth;
                         paint.StrokeJoin = SKStrokeJoin.Round;
+                        paint.PathEffect = cornerEffect;
+
                         canvas.DrawPath(path, paint);
+
+                        // Сбрасываем эффект, чтобы он не повлиял на следующие элементы
+                        paint.PathEffect = null;
                     }
 
                     break;
@@ -408,14 +441,8 @@ public class CircuitBoardCanvas : SKCanvasView, IDisposable
                         }
                     }
 
-                    var originalStyle = paint.Style;
-                    var originalWidth = paint.StrokeWidth;
-
                     skPath.Close();
                     canvas.DrawPath(skPath, paint);
-
-                    paint.Style = originalStyle;
-                    paint.StrokeWidth = originalWidth;
                     break;
                 }
 

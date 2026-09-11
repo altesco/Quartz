@@ -8,8 +8,10 @@ namespace Quartz.Infrastructure.Tools;
 
 public static class YamlMapperExtensions
 {
-    public static Point2D ToDomain(this Point2DDto dto, LengthUnit unit)
-        => new Point2D(dto.X, dto.Y).ToMillimeters(unit);
+    public static Point2D ToDomain(this Point2DDto? dto, LengthUnit unit)
+        => dto is null 
+        ? new Point2D(0, 0)
+        : new Point2D(dto.X, dto.Y).ToMillimeters(unit); 
 
     public static NameSettings ToDomain(this NameSettingsDto dto) => new()
     {
@@ -496,12 +498,12 @@ public static class YamlMapperExtensions
             : new Trace
             {
                 Id = dto.Id,
-                NetName = dto.NetName,
+                Name = dto.NetName,
                 From = from!,
                 To = to!,
                 CoordMode = dto.CoordMode,
                 Width = dto.Width.ToMillimeters(traceUnit),
-                MiddlePoints = dto.MiddlePoints?.Select(p => p.ToDomain(traceUnit)).ToList() ?? [],
+                Points = dto.MiddlePoints?.Select(p => p.ToDomain(traceUnit)).ToList() ?? [],
                 Unit = traceUnit,
 
                 Line = dto.Line,

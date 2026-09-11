@@ -26,7 +26,7 @@ public class YamlSchemaValidator : IYamlSchemaValidator
         { "!inductor", typeof(InductorDto) },
         { "!ic", typeof(IntegratedCircuitDto) },
         { "!connector", typeof(ConnectorDto) },
-        { "!trace", typeof(TraceDto) },
+        //{ "!trace", typeof(TraceDto) },
         { "!line", typeof(LineSegmentDto) },
         { "!arc", typeof(ArcSegmentDto) }
     };

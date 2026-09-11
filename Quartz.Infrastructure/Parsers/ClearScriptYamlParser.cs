@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
 using Microsoft.ClearScript.V8;
 using Quartz.Core.Interfaces;
 using Quartz.Core.Models;
@@ -15,15 +12,11 @@ public class ClearScriptYamlParser : IYamlParser, IDisposable
     {
         _engine = new V8ScriptEngine();
 
-        var libPath = Path.Combine(
-            AppContext.BaseDirectory,
-            "Resources",
-            "yaml.js");
+        var libPath = Path.Combine(AppContext.BaseDirectory, "Resources", "yaml.js");
 
         if (!File.Exists(libPath))
         {
-            throw new FileNotFoundException(
-                $"Не найден файл бандла yaml.js по пути: {libPath}");
+            throw new FileNotFoundException($"Не найден файл бандла yaml.js по пути: {libPath}");
         }
 
         _engine.Execute(@"
@@ -32,8 +25,7 @@ public class ClearScriptYamlParser : IYamlParser, IDisposable
             }
         ");
 
-        _engine.Execute(
-            File.ReadAllText(libPath));
+        _engine.Execute(File.ReadAllText(libPath));
 
         _engine.Execute(@"
             const supportedTags = new Set([
@@ -46,7 +38,7 @@ public class ClearScriptYamlParser : IYamlParser, IDisposable
                 '!inductor',
                 '!ic',
                 '!connector',
-                '!trace',
+                //'!trace',
                 '!line',
                 '!arc'
             ]);
@@ -61,7 +53,7 @@ public class ClearScriptYamlParser : IYamlParser, IDisposable
                 '!inductor',
                 '!ic',
                 '!connector',
-                '!trace',
+                //'!trace',
                 '!line',
                 '!arc'
             ]);
@@ -746,41 +738,26 @@ public class ClearScriptYamlParser : IYamlParser, IDisposable
         ");
     }
 
-    public IReadOnlyList<EditorError> ValidateSyntax(
-        string yamlContent)
+    public IReadOnlyList<EditorError> ValidateSyntax(string? yamlContent)
     {
-        var result =
-            new List<EditorError>();
+        var result = new List<EditorError>();
 
-        dynamic jsErrors =
-            _engine.Script.validateYaml(
-                yamlContent ?? string.Empty);
+        dynamic jsErrors = _engine.Script.validateYaml(yamlContent ?? string.Empty);
 
-        int length =
-            jsErrors.length;
+        int length = jsErrors.length;
 
         for (int i = 0; i < length; i++)
         {
-            dynamic err =
-                jsErrors[i];
+            dynamic err = jsErrors[i];
 
             result.Add(new EditorError
             {
-                Message =
-                    (string)err.message,
-
-                Line =
-                    (int)err.line,
-
-                Column =
-                    (int)err.column,
-
-                Length =
-                    err.length != null
-                        ? Math.Max(
-                            1,
-                            (int)err.length)
-                        : 1
+                Message = (string)err.message,
+                Line = (int)err.line,
+                Column = (int)err.column,
+                Length = err.length != null
+                    ? Math.Max(1, (int)err.length)
+                    : 1
             });
         }
 

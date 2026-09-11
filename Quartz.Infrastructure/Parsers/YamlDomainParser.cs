@@ -33,7 +33,7 @@ public class YamlDomainParser : IYamlDomainParser
             "!ic",
             "!connector",
 
-            "!trace",
+            //"!trace",
 
             "!line",
             "!arc"
@@ -110,9 +110,9 @@ public class YamlDomainParser : IYamlDomainParser
                 // ------------------------------------------------
                 // TRACE
                 // ------------------------------------------------
-                .WithTagMapping(
-                    "!trace",
-                    typeof(TraceDto))
+                // .WithTagMapping(
+                //     "!trace",
+                //     typeof(TraceDto))
                 .Build();
     }
 
@@ -467,7 +467,7 @@ public class YamlDomainParser : IYamlDomainParser
             "!connector",
 
             // Trace
-            "!trace"
+            //"!trace"
         ];
 
 
