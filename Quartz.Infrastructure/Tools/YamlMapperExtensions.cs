@@ -1,8 +1,10 @@
+using System.Collections.Frozen;
 using Quartz.Core.Tools;
 using Quartz.Core.Enums;
 using Quartz.Core.Models;
 using Quartz.Core.Models.BoardEntities;
 using Quartz.Infrastructure.Dtos;
+using Quartz.Infrastructure.Dtos.Styles;
 
 namespace Quartz.Infrastructure.Tools;
 
@@ -22,37 +24,90 @@ public static class YamlMapperExtensions
         IsVisible = dto.IsVisible
     };
 
-    public static Component? ToDomain(this ComponentDto dto, LengthUnit layerUnit, out List<EditorError> errors)
+    private static Style? TryGetStyle(
+        Type styleType,
+        BoardStylableObjectDto dto,
+        IReadOnlyDictionary<string, Style> stylesMap,
+        out List<EditorError> errors)
     {
         errors = [];
+
+        if (string.IsNullOrWhiteSpace(dto.Style))
+        {
+            errors.Add(new EditorError
+            {
+                Message = "Отсутствует обязательное свойство name",
+                Line = dto.Line,
+                Column = dto.Column,
+                Length = dto.Length
+            });
+            return null;
+        }
+
+        if (!stylesMap.TryGetValue(dto.Style, out var baseStyle))
+        {
+            errors.Add(new EditorError
+            {
+                Message = $"Стиль '{dto.Style}' не найден в секции styles",
+                Line = dto.Line,
+                Column = dto.Column,
+                Length = dto.Length
+            });
+        }
+        else if (baseStyle.GetType() != styleType)
+        {
+            errors.Add(new EditorError
+            {
+                Message = $"Стиль '{dto.Style}' не предназначен для типа '{dto.GetType()}' (ожидался '{styleType}')",
+                Line = dto.Line,
+                Column = dto.Column,
+                Length = dto.Length
+            });
+        }
+
+        return errors.Count > 0
+            ? null
+            : baseStyle;
+    }
+
+    public static Component? ToDomain(
+        this ComponentDto dto,
+        IReadOnlyDictionary<string, Style> stylesMap,
+        LengthUnit layerUnit,
+        out List<EditorError> errors)
+    {
+        errors = [];
+
+        var style = TryGetStyle(typeof(ComponentStyle), dto, stylesMap, out var styleErrors) as ComponentStyle;
+        errors.AddRange(styleErrors);
 
         // 1. Создаем нужный экземпляр и маппим ТОЛЬКО специфичные для типа поля
         Component? comp = dto switch
         {
             ResistorDto r => new Resistor
             {
-                PowerRating = r.PowerRating
+                PowerRating = r.PowerRating ?? (style as ResistorStyle)?.PowerRating ?? "0"
             },
             CapacitorDto c => new Capacitor
             {
-                VoltageMax = c.VoltageMax,
-                IsPolar = c.IsPolar
+                VoltageMax = c.VoltageMax ?? (style as CapacitorStyle)?.VoltageMax ?? 0,
+                IsPolar = c.IsPolar ?? (style as CapacitorStyle)?.IsPolar ?? false
             },
             TransistorDto t => new Transistor
             {
-                TransistorType = t.TransistorType
+                TransistorType = t.TransistorType ?? (style as TransistorStyle)?.TransistorType ?? ""
             },
             DiodeDto d => new Diode
             {
-                ForwardVoltage = d.ForwardVoltage
+                ForwardVoltage = d.ForwardVoltage ?? (style as DiodeStyle)?.ForwardVoltage ?? 0
             },
             InductorDto i => new Inductor
             {
-                MaxCurrent = i.MaxCurrent
+                MaxCurrent = i.MaxCurrent ?? (style as InductorStyle)?.MaxCurrent ?? 0
             },
             IntegratedCircuitDto ic => new IntegratedCircuit
             {
-                GateCount = ic.GateCount
+                GateCount = ic.GateCount ?? (style as IntegratedCircuitStyle)?.GateCount ?? 0
             },
             ConnectorDto => new Connector(),
             _ => null
@@ -65,16 +120,47 @@ public static class YamlMapperExtensions
         comp.Column = dto.Column;
         comp.Length = dto.Length;
 
-        // 2. В одном месте заполняем ВСЕ общие свойства базового класса Component
-        comp.Id = dto.Id;
-        comp.Type = dto.Type;
-        comp.Unit = dto.Unit ?? layerUnit;
+        // 2. необязательные свойства
+        comp.Unit = dto.Unit ?? style?.Unit ?? layerUnit;
+        comp.Value = dto.Value ?? style?.Value ?? 0;
+        comp.Point = dto.Point.ToDomain(comp.Unit);
+        comp.Angle = dto.Angle ?? style?.Angle ?? 0;
+        comp.Footprint = dto.Footprint ?? style?.Footprint ?? "";
+        comp.NameSettings = dto.NameSettings?.ToDomain() ?? style?.NameSettings?.ToDomain() ?? new NameSettings();
+
+        // if (dto.Shape == null)
+        // {
+        //     errors.Add(new EditorError
+        //     {
+        //         Message = "Отсутствует обязательное свойство shape",
+        //         Line = comp.Line,
+        //         Column = comp.Column,
+        //         Length = comp.Length
+        //     });
+        // }
+        // else
+        // {
+        //     var shapeDomain = dto.Shape.ToDomain(comp.Unit, out var shapeErrors);
+        //     if (shapeDomain == null)
+        //         errors.AddRange(shapeErrors);
+        //     else
+        //         comp.Shape = shapeDomain;
+        // }
+        List<EditorError> shapeErrors = [];
+        var shapeDomain = dto.Shape?.ToDomain(comp.Unit, out shapeErrors) ??
+                          style?.Shape?.ToDomain(comp.Unit, out shapeErrors);
+        if (shapeDomain == null)
+            errors.AddRange(shapeErrors);
+        else
+            comp.Shape = shapeDomain;
+
+        // 3. обязательные свойства
 
         if (string.IsNullOrWhiteSpace(dto.Name))
         {
             errors.Add(new EditorError
             {
-                Message = $"Компонент с ID {comp.Id} не имеет Name!",
+                Message = "Отсутствует обязательное свойство name",
                 Line = comp.Line,
                 Column = comp.Column,
                 Length = comp.Length
@@ -82,36 +168,13 @@ public static class YamlMapperExtensions
         }
         else comp.Name = dto.Name;
 
-        comp.Value = dto.Value;
-        comp.Point = dto.Point.ToDomain(comp.Unit);
-
-        if (dto.Shape == null)
-        {
-            errors.Add(new EditorError
-            {
-                Message = "Отсутствует обязательное свойство shape",
-                Line = comp.Line,
-                Column = comp.Column,
-                Length = comp.Length
-            });
-        }
-        else {
-            var shapeDomain = dto.Shape.ToDomain(comp.Unit, out var shapeErrors);
-            if (shapeDomain == null)
-                errors.AddRange(shapeErrors);
-            else
-                comp.Shape = shapeDomain;
-        }
-
-        comp.Angle = dto.Angle;
-        comp.Footprint = dto.Footprint;
-        comp.NameSettings = dto.NameSettings.ToDomain();
-
+        // 4. пины
         var pinsMap = new Dictionary<string, Pin>();
+        List<PinDto?> pinList = dto.Pins ?? style?.Pins ?? [];
 
-        for (int i = 0; i < dto.Pins?.Count; i++)
+        for (int i = 0; i < pinList.Count; i++)
         {
-            var p = dto.Pins[i];
+            var p = pinList[i];
 
             if (p is null)
             {
@@ -593,7 +656,53 @@ public static class YamlMapperExtensions
     public static LayerModel ToDomain(this LayerModelDto dto, out List<EditorError> errors)
     {
         errors = [];
+
+        var stylesMap = new Dictionary<string, Style>(StringComparer.OrdinalIgnoreCase);
         var componentsMap = new Dictionary<string, Component>(StringComparer.OrdinalIgnoreCase);
+
+        // 0. сбор стилей
+        if (dto.Styles != null)
+        {
+            for (int i = 0; i < dto.Styles.Count; i++)
+            {
+                var style = dto.Styles[i];
+
+                if (style is null)
+                {
+                    errors.Add(new EditorError
+                    {
+                        Message = $"Не указан стиль с индексом {i}",
+                        // Line = comp.Line,
+                        // Column = comp.Column,
+                        // Length = comp.Length
+                    });
+                    continue;
+                }
+
+                if (string.IsNullOrWhiteSpace(style.Name))
+                {
+                    errors.Add(new EditorError
+                    {
+                        Message = "Отсутствует обязательное свойство name",
+                        Line = style.Line,
+                        Column = style.Column,
+                        Length = style.Length
+                    });
+                    continue;
+                }
+
+                if (!stylesMap.TryAdd(style.Name, style))
+                {
+                    errors.Add(new EditorError
+                    {
+                        Message = $"Дубликат name: {style.Name}",
+                        Line = style.Line,
+                        Column = style.Column,
+                        Length = style.Length
+                    });
+                }
+            }
+        }
 
         // 1. Проход по компонентам: проверка имён и заполнение словаря
         if (dto.Components != null)
@@ -614,7 +723,7 @@ public static class YamlMapperExtensions
                     continue;
                 }
 
-                var compDomain = comp.ToDomain(dto.Unit, out var compErrors);
+                var compDomain = comp.ToDomain(stylesMap, dto.Unit, out var compErrors);
 
                 if (compDomain == null)
                 {

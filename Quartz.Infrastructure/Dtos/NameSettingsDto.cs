@@ -2,7 +2,7 @@ using YamlDotNet.Serialization;
 
 namespace Quartz.Infrastructure.Dtos;
 
-public record NameSettingsDto : BoardEntityDto
+public record NameSettingsDto : BoardStylableObjectDto
 {
     // Смещение относительно центра компонента (0,0)
     [YamlMember(Alias = "offset-x")] 

@@ -4,8 +4,6 @@ namespace Quartz.Core.Models.BoardEntities;
 
 public abstract class Component : BoardDimensionalObject
 {
-    public int Id { get; set; }
-    public string? Type { get; set; } // Аналог CSS-класса/стиля
     public string Name { get; set; } = ""; // Уникальное имя (R1, C10, U2)
     public double Value { get; set; } // Номинал (10k, 100nF, 5V)
 

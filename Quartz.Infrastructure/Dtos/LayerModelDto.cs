@@ -1,4 +1,5 @@
 using Quartz.Core.Enums;
+using Quartz.Infrastructure.Dtos.Styles;
 using YamlDotNet.Serialization;
 
 namespace Quartz.Infrastructure.Dtos;
@@ -16,4 +17,7 @@ public record LayerModelDto
 
     [YamlMember(Alias = "traces")] 
     public List<TraceDto?>? Traces { get; set; }
+
+    [YamlMember(Alias = "styles")]
+    public List<Style?>? Styles { get; set; } = [];
 }

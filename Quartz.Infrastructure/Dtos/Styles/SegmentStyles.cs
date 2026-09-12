@@ -1,16 +1,16 @@
 using YamlDotNet.Serialization;
 
-namespace Quartz.Infrastructure.Dtos;
+namespace Quartz.Infrastructure.Dtos.Styles;
 
-public record SegmentDto : BoardStylableObjectDto
+public record SegmentStyle : Style
 {
     [YamlMember(Alias = "point")] 
     public Point2DDto? Point { get; init; }
 }
 
-public record LineSegmentDto : SegmentDto;
+public record LineSegmentStyle : SegmentStyle;
 
-public record ArcSegmentDto : SegmentDto
+public record ArcSegmentStyle : SegmentStyle
 {
     [YamlMember(Alias = "radius")] 
     public double Radius { get; init; }

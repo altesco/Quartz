@@ -1,20 +1,14 @@
 using Quartz.Core.Enums;
 using YamlDotNet.Serialization;
 
-namespace Quartz.Infrastructure.Dtos;
+namespace Quartz.Infrastructure.Dtos.Styles;
 
-public abstract record ComponentDto : BoardDimensionalObjectDto
+public abstract record ComponentStyle : Style
 {
-    [YamlMember(Alias = "name")] 
-    public string? Name { get; init; } 
-
     [YamlMember(Alias = "value")] 
     public double? Value { get; init; }
 
-    [YamlMember(Alias = "point")] 
-    public Point2DDto? Point { get; init; }
-
-    [YamlMember(Alias = "shape")]
+    [YamlMember(Alias = "shape")] 
     public ShapeDto? Shape { get; init; }
 
     [YamlMember(Alias = "angle")] 
@@ -28,6 +22,9 @@ public abstract record ComponentDto : BoardDimensionalObjectDto
 
     [YamlMember(Alias = "name-settings")] 
     public NameSettingsDto? NameSettings { get; init; }
+
+    [YamlMember(Alias = "unit")] 
+    public LengthUnit? Unit { get; init; }
 
     [YamlMember(Alias = "pins")] 
     public List<PinDto?>? Pins { get; init; }
