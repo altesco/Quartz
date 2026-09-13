@@ -1,8 +1,8 @@
-using Quartz.Core.Enums;
+// using Quartz.Core.Enums;
 
-namespace Quartz.Core.Models.BoardEntities;
+// namespace Quartz.Core.Models.BoardEntities;
 
-public abstract class BoardDimensionalObject : BoardEntity
-{
-    public LengthUnit Unit { get; set; }
-}
+// public abstract class BoardDimensionalObject : BoardEntity
+// {
+//     public LengthUnit Unit { get; set; }
+// }

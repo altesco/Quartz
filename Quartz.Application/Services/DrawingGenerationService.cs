@@ -184,14 +184,14 @@ public class DrawingGenerationService : IDrawingGenerationService
 
             var start = new Vector2
             {
-                X = (float)trace.From.Pin.Point.X + (float)trace.From.Comp.Point.X,
-                Y = (float)trace.From.Pin.Point.Y + (float)trace.From.Comp.Point.Y
+                X = (float)trace.From.Pad.Point.X + (float)trace.From.Comp.Point.X,
+                Y = (float)trace.From.Pad.Point.Y + (float)trace.From.Comp.Point.Y
             };
 
             var end = new Vector2
             {
-                X = (float)trace.To.Pin.Point.X + (float)trace.To.Comp.Point.X,
-                Y = (float)trace.To.Pin.Point.Y + (float)trace.To.Comp.Point.Y
+                X = (float)trace.To.Pad.Point.X + (float)trace.To.Comp.Point.X,
+                Y = (float)trace.To.Pad.Point.Y + (float)trace.To.Comp.Point.Y
             };
 
             // Старт трассы из центра начального пина

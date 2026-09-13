@@ -79,7 +79,11 @@ public static class YamlMapperExtensions
         errors = [];
 
         var style = TryGetStyle(typeof(ComponentStyle), dto, stylesMap, out var styleErrors) as ComponentStyle;
-        errors.AddRange(styleErrors);
+        if (styleErrors.Count > 0)
+        {
+            errors.AddRange(styleErrors);
+            return null;
+        }
 
         // 1. Создаем нужный экземпляр и маппим ТОЛЬКО специфичные для типа поля
         Component? comp = dto switch
@@ -121,11 +125,11 @@ public static class YamlMapperExtensions
         comp.Length = dto.Length;
 
         // 2. необязательные свойства
-        comp.Unit = dto.Unit ?? style?.Unit ?? layerUnit;
+        var compUnit = dto.Unit ?? style?.Unit ?? layerUnit;
         comp.Value = dto.Value ?? style?.Value ?? 0;
-        comp.Point = dto.Point.ToDomain(comp.Unit);
+        comp.Point = dto.Point.ToDomain(compUnit);
         comp.Angle = dto.Angle ?? style?.Angle ?? 0;
-        comp.Footprint = dto.Footprint ?? style?.Footprint ?? "";
+
         comp.NameSettings = dto.NameSettings?.ToDomain() ?? style?.NameSettings?.ToDomain() ?? new NameSettings();
 
         // if (dto.Shape == null)
@@ -147,15 +151,19 @@ public static class YamlMapperExtensions
         //         comp.Shape = shapeDomain;
         // }
         List<EditorError> shapeErrors = [];
-        var shapeDomain = dto.Shape?.ToDomain(comp.Unit, out shapeErrors) ??
-                          style?.Shape?.ToDomain(comp.Unit, out shapeErrors);
+        var shapeDomain = dto.Shape?.ToDomain(stylesMap, compUnit, out shapeErrors) ??
+                          style?.Shape?.ToDomain(stylesMap, compUnit, out shapeErrors);
         if (shapeDomain == null)
-            errors.AddRange(shapeErrors);
+        {
+            if (shapeErrors.Count > 0)
+                errors.AddRange(shapeErrors);
+            else
+                comp.Shape = new RectShape { Height = 20, Width = 35 };
+        }
         else
             comp.Shape = shapeDomain;
 
         // 3. обязательные свойства
-
         if (string.IsNullOrWhiteSpace(dto.Name))
         {
             errors.Add(new EditorError
@@ -167,6 +175,25 @@ public static class YamlMapperExtensions
             });
         }
         else comp.Name = dto.Name;
+
+        List<EditorError> footprintErrors = [];
+        var footprintDomain = dto.Footprint?.ToDomain(stylesMap, compUnit, layerUnit, out footprintErrors) ??
+                              style?.Footprint?.ToDomain(stylesMap, compUnit, layerUnit, out footprintErrors);
+        if (footprintErrors.Count > 0)
+        {
+            errors.AddRange(footprintErrors);
+        }
+        else if (footprintDomain == null)
+        {
+            errors.Add(new EditorError
+            {
+                Message = "Отсутствует обязательное свойство name",
+                Line = comp.Line,
+                Column = comp.Column,
+                Length = comp.Length
+            });
+        }
+        else comp.Footprint = footprintDomain;
 
         // 4. пины
         var pinsMap = new Dictionary<string, Pin>();
@@ -188,7 +215,7 @@ public static class YamlMapperExtensions
                 continue;
             }
 
-            var pinDomain = p.ToDomain(comp.Unit, out var pinErrors);
+            var pinDomain = p.ToDomain(stylesMap, compUnit, out var pinErrors) as Pin;
 
             if (pinDomain == null)
             {
@@ -213,23 +240,122 @@ public static class YamlMapperExtensions
         return errors.Count > 0 ? null : comp;
     }
 
-    public static Pin? ToDomain(this PinDto dto, LengthUnit compUnit, out List<EditorError> errors)
+    public static Footprint? ToDomain(
+        this FootprintDto dto,
+        IReadOnlyDictionary<string, Style> stylesMap,
+        LengthUnit compUnit,
+        LengthUnit layerUnit,
+        out List<EditorError> errors)
     {
         errors = [];
 
-        var pin = new Pin
+        var style = TryGetStyle(typeof(FootprintStyle), dto, stylesMap, out var styleErrors) as FootprintStyle;
+        if (styleErrors.Count > 0)
         {
-            Unit = dto.Unit ?? compUnit,
-            CoordMode = dto.CoordMode,
-            IsPlated = dto.IsPlated,
-            ElectricalType = dto.ElectricalType,
-            Line = dto.Line,
-            Column = dto.Column,
-            Length = dto.Length
+            errors.AddRange(styleErrors);
+            return null;
+        }
+
+        var footprintUnit = dto.Unit ?? style?.Unit ?? layerUnit;
+
+        var footprintDomain = new Footprint();
+
+        List<EditorError> shapeErrors = [];
+        var shapeDomain = dto.Shape?.ToDomain(stylesMap, footprintUnit, out shapeErrors) ??
+                                style?.Shape?.ToDomain(stylesMap, footprintUnit, out shapeErrors);
+        if (shapeDomain == null)
+        {
+            if (shapeErrors.Count > 0)
+                errors.AddRange(shapeErrors);
+            else
+                footprintDomain.Shape = new RectShape { Height = 20, Width = 35 };
+        }
+        else
+            footprintDomain.Shape = shapeDomain;
+
+        // пады
+        var padsMap = new Dictionary<string, Pad>();
+        List<PadDto?> padList = dto.Pads ?? style?.Pads ?? [];
+
+        for (int i = 0; i < padList.Count; i++)
+        {
+            var p = padList[i];
+
+            if (p is null)
+            {
+                errors.Add(new EditorError
+                {
+                    Message = $"Не указана контактная площадка с индексом {i} у посадочного места",
+                    Line = dto.Line,
+                    Column = dto.Column,
+                    Length = dto.Length
+                });
+                continue;
+            }
+
+            var padDomain = p.ToDomain(stylesMap, compUnit, out var padErrors) as Pad;
+
+            if (padDomain == null)
+            {
+                errors.AddRange(padErrors);
+                continue;
+            }
+
+            if (!padsMap.TryAdd(padDomain.Name, padDomain))
+            {
+                errors.Add(new EditorError
+                {
+                    Message = $"Дубликат Name: {padDomain.Name}",
+                    Line = padDomain.Line,
+                    Column = padDomain.Column,
+                    Length = padDomain.Length
+                });
+            }
+        }
+
+        footprintDomain.Pads = [.. padsMap.Values];
+
+        return errors.Count > 0 ? null : footprintDomain;
+    }
+
+    public static Connection? ToDomain(
+        this ConnectionDto dto, 
+        IReadOnlyDictionary<string, Style> stylesMap,
+        LengthUnit compUnit, 
+        out List<EditorError> errors)
+    {
+        errors = [];
+
+        var style = TryGetStyle(typeof(ConnectionStyle), dto, stylesMap, out var styleErrors) as ConnectionStyle;
+        if (styleErrors.Count > 0)
+        {
+            errors.AddRange(styleErrors);
+            return null;
+        }
+
+        Connection? connection = dto switch
+        {
+            PadDto padDto => new Pad
+            {
+                IsPlated = padDto.IsPlated ?? (style as PadStyle)?.IsPlated ?? false,
+                ElectricalType = padDto.ElectricalType ?? (style as PadStyle)?.ElectricalType ?? 0
+            },
+            PinDto => new Pin(),
+            _ => null            
         };
 
-        pin.DrillDiameter = dto.DrillDiameter.ToMillimeters(pin.Unit);
-        pin.Point = dto.Point.ToDomain(pin.Unit);
+        if (connection is null)
+            return null;
+
+        var connectionUnit = dto.Unit ??  compUnit;
+        connection.Line = dto.Line;
+        connection.Column = dto.Column;
+        connection.Length = dto.Length;
+
+        if (connection is Pad pad)
+            pad.DrillDiameter = (dto as PadDto)?.DrillDiameter?.ToMillimeters(connectionUnit) ?? 
+                                (style as PadStyle)?.DrillDiameter?.ToMillimeters(connectionUnit) ?? 0;
+        connection.Point = dto.Point.ToDomain(connectionUnit);
 
         if (string.IsNullOrWhiteSpace(dto.Name))
         {
@@ -241,38 +367,53 @@ public static class YamlMapperExtensions
                 Length = dto.Length
             });
         }
-        else pin.Name = dto.Name;
+        else connection.Name = dto.Name;
 
         if (dto.Shape == null)
         {
             errors.Add(new EditorError
             {
                 Message = "Отсутствует обязательное свойство shape",
-                Line = pin.Line,
-                Column = pin.Column,
-                Length = pin.Length
+                Line = connection.Line,
+                Column = connection.Column,
+                Length = connection.Length
             });
         }
         else {
-            var shapeDomain = dto.Shape.ToDomain(pin.Unit, out var shapeErrors);
+            var shapeDomain = dto.Shape.ToDomain(stylesMap, connectionUnit, out var shapeErrors);
             if (shapeDomain == null)
                 errors.AddRange(shapeErrors);
             else
-                pin.Shape = shapeDomain;
+                connection.Shape = shapeDomain;
         }
 
-        return errors.Count > 0 ? null : pin;
+        return errors.Count > 0 ? null : connection;
     }
 
-    public static Shape? ToDomain(this ShapeDto dto, LengthUnit unit, out List<EditorError> errors)
+    public static Shape? ToDomain(
+        this ShapeDto dto, 
+        IReadOnlyDictionary<string, Style> stylesMap, 
+        LengthUnit unit, 
+        out List<EditorError> errors)
     {
         errors = [];
+
+        var style = TryGetStyle(typeof(ShapeStyle), dto, stylesMap, out var styleErrors) as ShapeStyle;
+        if (styleErrors.Count > 0)
+        {
+            errors.AddRange(styleErrors);
+            return null;
+        }
 
         switch (dto)
         {
             case RectShapeDto r:
             {
-                if (r.Width <= 0)
+                var width = r.Width ?? (style as RectShapeStyle)?.Width ?? 0;
+                var height = r.Height ?? (style as RectShapeStyle)?.Height ?? 0;
+                var cornerRadius = r.CornerRadius ?? (style as RectShapeStyle)?.CornerRadius ?? 0;
+
+                if (width <= 0)
                 {
                     errors.Add(new EditorError
                     {
@@ -283,7 +424,7 @@ public static class YamlMapperExtensions
                     });
                 }
 
-                if (r.Height <= 0)
+                if (height <= 0)
                 {
                     errors.Add(new EditorError
                     {
@@ -294,7 +435,7 @@ public static class YamlMapperExtensions
                     });
                 }
 
-                if (r.CornerRadius < 0)
+                if (cornerRadius < 0)
                 {
                     errors.Add(new EditorError
                     {
@@ -309,19 +450,19 @@ public static class YamlMapperExtensions
                     ? null
                     : new RectShape
                     {
-                        Width = r.Width.ToMillimeters(unit),
-                        Height = r.Height.ToMillimeters(unit),
-                        CornerRadius = r.CornerRadius.ToMillimeters(unit)
+                        Width = width.ToMillimeters(unit),
+                        Height = height.ToMillimeters(unit),
+                        CornerRadius = cornerRadius.ToMillimeters(unit)
                     };
             }
 
             case PathShapeDto p:
             {
-                var start = p.StartPoint.ToDomain(unit);
+                var start = p.StartPoint?.ToDomain(unit) ?? (style as PathShapeStyle)?.StartPoint?.ToDomain(unit) ?? new();
 
                 List<Segment> segments = [];
 
-                foreach (var seg in p.Segments ?? [])
+                foreach (var seg in p.Segments ?? (style as PathShapeStyle)?.Segments ?? [])
                 {
                     if (seg == null)
                     {
@@ -467,7 +608,11 @@ public static class YamlMapperExtensions
     }
 
     // Полиморфный маппинг сегментов контура
-    public static Segment? ToDomain(this SegmentDto dto, Point2D start, LengthUnit unit, out List<EditorError> errors)
+    public static Segment? ToDomain(
+        this SegmentDto dto, 
+        Point2D start, 
+        LengthUnit unit, 
+        out List<EditorError> errors)
     {
         errors = [];
 
@@ -513,24 +658,32 @@ public static class YamlMapperExtensions
     public static Trace? ToDomain(
         this TraceDto dto,
         Dictionary<string, Component> componentsMap,
+        IReadOnlyDictionary<string, Style> stylesMap,
         LengthUnit layerUnit,
         out List<EditorError> errors)
     {
         errors = [];
 
+        var style = TryGetStyle(typeof(TraceStyle), dto, stylesMap, out var styleErrors) as TraceStyle;
+        if (styleErrors.Count > 0)
+        {
+            errors.AddRange(styleErrors);
+            return null;
+        }
+
         var from = dto.From.ToDomain(
-            $"Трасса ID {dto.Id} (From)",
+            $"Трасса (From)",
             dto,
             componentsMap,
             out var fromErrors);
 
         var to = dto.To.ToDomain(
-            $"Трасса ID {dto.Id} (To)",
+            $"Трасса (To)",
             dto,
             componentsMap,
             out var toErrors);
 
-        var traceUnit = dto.Unit ?? layerUnit;
+        var traceUnit = dto.Unit ?? style?.Unit ?? layerUnit;
 
         errors.AddRange(fromErrors);
         errors.AddRange(toErrors);
@@ -560,14 +713,12 @@ public static class YamlMapperExtensions
             ? null
             : new Trace
             {
-                Id = dto.Id,
                 Name = dto.NetName,
                 From = from!,
                 To = to!,
                 CoordMode = dto.CoordMode,
-                Width = dto.Width.ToMillimeters(traceUnit),
+                Width = dto.Width?.ToMillimeters(traceUnit) ?? style?.Width.ToMillimeters(traceUnit) ?? 0.25,
                 Points = dto.MiddlePoints?.Select(p => p.ToDomain(traceUnit)).ToList() ?? [],
-                Unit = traceUnit,
 
                 Line = dto.Line,
                 Column = dto.Column,
@@ -621,7 +772,7 @@ public static class YamlMapperExtensions
         }
 
         // Проверяем существование пина у найденного компонента
-        if (string.IsNullOrWhiteSpace(dto.Pin))
+        if (string.IsNullOrWhiteSpace(dto.Pad))
         {
             errors.Add(new EditorError
             {
@@ -633,12 +784,12 @@ public static class YamlMapperExtensions
             return null;
         }
 
-        var pin = comp.Pins.FirstOrDefault(p => p.Name == dto.Pin);
-        if (pin == null)
+        var pad = comp.Footprint.Pads.FirstOrDefault(p => p.Name == dto.Pad);
+        if (pad == null)
         {
             errors.Add(new EditorError
             {
-                Message = $"{targetLabel}: контакт '{dto.Pin}' не найден на плате",
+                Message = $"{targetLabel}: контакт '{dto.Pad}' не найден на плате",
                 Line = dto.Line,
                 Column = dto.Column,
                 Length = dto.Length
@@ -649,7 +800,7 @@ public static class YamlMapperExtensions
         return new Endpoint
         {
             Comp = comp,
-            Pin = pin
+            Pad = pad
         };
     }
 
@@ -765,7 +916,7 @@ public static class YamlMapperExtensions
                     continue;
                 }
 
-                var traceDomain = trace.ToDomain(componentsMap, dto.Unit, out var traceErrors);
+                var traceDomain = trace.ToDomain(componentsMap, stylesMap, dto.Unit, out var traceErrors);
 
                 if (traceDomain == null)
                 {
@@ -785,7 +936,7 @@ public static class YamlMapperExtensions
         // 3. форма слоя
         if (dto.Shape != null)
         {
-            var shapeDomain = dto.Shape.ToDomain(dto.Unit, out var shapeErrors);
+            var shapeDomain = dto.Shape.ToDomain(stylesMap, dto.Unit, out var shapeErrors);
             if (shapeDomain == null)
                 errors.AddRange(shapeErrors);
             else

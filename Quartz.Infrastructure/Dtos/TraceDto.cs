@@ -5,10 +5,7 @@ namespace Quartz.Infrastructure.Dtos;
 
 public record TraceDto : BoardDimensionalObjectDto
 {
-    [YamlMember(Alias = "id")] 
-    public int Id { get; init; }
-
-    [YamlMember(Alias = "name")] 
+    [YamlMember(Alias = "net")] 
     public string NetName { get; init; } = string.Empty; // Имя цепи (GND, VCC)
 
     [YamlMember(Alias = "from")] 
@@ -18,7 +15,7 @@ public record TraceDto : BoardDimensionalObjectDto
     public EndpointDto? To { get; init; } // "(U1).12"
 
     [YamlMember(Alias = "width")] 
-    public double Width { get; init; } = 0.25; // Ширина дорожки
+    public double? Width { get; init; } = 0.25; // Ширина дорожки
 
     [YamlMember(Alias = "coord-mode")] 
     public CoordinateMode CoordMode { get; init; } = CoordinateMode.Relative;

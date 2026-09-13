@@ -1,5 +1,4 @@
 using System.Numerics;
-using Quartz.Core.Interfaces;
 
 namespace Quartz.Core.Models.BoardEntities;
 

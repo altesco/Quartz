@@ -2,7 +2,7 @@ using Quartz.Core.Enums;
 
 namespace Quartz.Core.Models.BoardEntities;
 
-public class Trace : BoardDimensionalObject
+public class Trace : BoardEntity //BoardDimensionalObject
 {
     public int Id { get; set; }
     public string Name { get; set; } = string.Empty; // Имя цепи (GND, VCC)

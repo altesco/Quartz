@@ -15,7 +15,7 @@ public abstract record ComponentStyle : Style
     public double? Angle { get; init; }
 
     [YamlMember(Alias = "footprint")] 
-    public string? Footprint { get; init; }
+    public FootprintDto? Footprint { get; init; }
 
     [YamlMember(Alias = "mounting-type")] 
     public MountingType? MountingType { get; init; }
