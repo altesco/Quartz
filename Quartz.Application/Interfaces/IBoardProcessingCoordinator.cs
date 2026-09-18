@@ -4,5 +4,8 @@ namespace Quartz.Application.Interfaces;
 
 public interface IBoardProcessingCoordinator
 {
-    LayerProcessResult Process(string text);
+    ProcessResult<LayerModel> Process(string text, BoardModel? boardModel);
+
+    (ProcessResult<BoardModel> BoardResult, Dictionary<string, ProcessResult<LayerModel>> LayerResults) ProcessProject(
+        string boardText, IReadOnlyDictionary<string, string> layerTexts);
 }

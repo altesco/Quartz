@@ -319,6 +319,18 @@
                         </StackPanel>
                     </Grid>
                 </DataTemplate>
+
+                <DataTemplate DataType="{x:Type vm:BoardVM}">
+                    <Grid>
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock VerticalAlignment="Center" Text="📝" />
+                            <TextBlock
+                                VerticalAlignment="Center"
+                                Foreground="LightBlue"
+                                Text="{Binding Header}" />
+                        </StackPanel>
+                    </Grid>
+                </DataTemplate>
             </TreeView.DataTemplates>
         </TreeView>
 
@@ -331,7 +343,7 @@
         <ListBox
             Grid.Column="1"
             Grid.Row="1"
-            ItemsSource="{Binding ActivePanel.((vm:LayerVM)SelectedTab).Errors}">
+            ItemsSource="{Binding ActivePanel.((vm:EditorVM)SelectedTab).Errors}">
             <ListBox.ItemTemplate>
                 <DataTemplate>
                     <Grid ColumnDefinitions="Auto,*,Auto" HorizontalAlignment="Left">

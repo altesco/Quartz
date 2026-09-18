@@ -45,14 +45,15 @@ public class App : Avalonia.Application
         // 1. Infrastructure Services
         services.AddSingleton<IYamlParser, ClearScriptYamlParser>();
         services.AddSingleton<IYamlSchemaValidator, YamlSchemaValidator>();
-        services.AddSingleton<IYamlDomainParser, YamlDomainParser>();
+        services.AddSingleton<ILayerDomainParser, LayerDomainParser>();
+        services.AddSingleton<IBoardDomainParser, BoardDomainParser>();
 
         // 2. Application Services
-        services.AddTransient<ILogicValidationService, BoardValidationService>();
-        services.AddTransient<IDrawingGenerationService, DrawingGenerationService>();
-        services.AddTransient<IBoardProcessingCoordinator, BoardProcessingCoordinator>();
+        services.AddSingleton<ILogicValidationService, BoardValidationService>();
+        services.AddSingleton<IDrawingGenerationService, DrawingGenerationService>();
+        services.AddSingleton<IBoardProcessingCoordinator, BoardProcessingCoordinator>();
 
         // 3. ViewModels
-        services.AddTransient<MainVM>();
+        services.AddSingleton<MainVM>();
     }
 }

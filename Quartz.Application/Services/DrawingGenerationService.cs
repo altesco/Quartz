@@ -1,182 +1,60 @@
-using Quartz.Core.Models;
-using Quartz.Core.Models.BoardEntities;
 using System.Numerics;
 using Quartz.Application.Interfaces;
 using Quartz.Core.Enums;
+using Quartz.Core.Models;
+using Quartz.Core.Models.BoardEntities;
 
 namespace Quartz.Application.Services;
 
 public class DrawingGenerationService : IDrawingGenerationService
 {
-    public List<DrawingPrimitive> Generate(LayerModel model)
+    public List<DrawingPrimitive> GenerateLayerPrimitives(LayerModel model)
     {
-        List<DrawingPrimitive> geometryLayer = [];
-        List<DrawingPrimitive> textLayer = [];
+        List<DrawingPrimitive> primitives = [];
 
-        // отрисовка слоя
-        DrawingPrimitive layerPrimitive;
-
-        switch (model.Shape)
+        if (model.Shape != null)
         {
-            case RectShape rect:
-                layerPrimitive = new RectanglePrimitive
-                {
-                    Type = PrimitiveType.ComponentOutline,
-                    Width = (float)rect.Width,
-                    Height = (float)rect.Height,
-                    CornerRadius = (float)rect.CornerRadius
-                };
-                break;
-
-            case PathShape path:
-            {
-                layerPrimitive = new PathPrimitive
-                {
-                    Type = PrimitiveType.BoardOutline,
-                    StartPoint = new Vector2(
-                        (float)(path.StartPoint.X),
-                        (float)(path.StartPoint.Y)
-                    ),
-                    Segments = path.Segments ?? []
-                };
-
-                break;
-            }
-
-            default:
-                layerPrimitive = new RectanglePrimitive();
-                break;
+            primitives.Add(GetShapePrimitive(model.Shape, new Point2D(0, 0), PrimitiveType.BoardOutline));
         }
 
-        geometryLayer.Add(layerPrimitive);
-
-        // Отрисовка компонентов и падов
-        foreach (var comp in model.Components)
+        foreach (var comp in model.Components.Values)
         {
-            DrawingPrimitive primitive;
-
-            switch (comp.Shape)
+            if (comp.Shape != null)
             {
-                case RectShape rect:
-                    primitive = new RectanglePrimitive
-                    {
-                        Type = PrimitiveType.ComponentOutline,
-                        Width = (float)rect.Width,
-                        Height = (float)rect.Height,
-                        CornerRadius = (float)rect.CornerRadius,
-                        X = (float)comp.Point.X,
-                        Y = (float)comp.Point.Y
-                    };
-                    break;
+                primitives.Add(GetShapePrimitive(comp.Shape, comp.Point, PrimitiveType.ComponentOutline));
+            }
 
-                case PathShape path:
+            foreach (var pin in comp.Pins.Values)
+            {
+                if (pin.Shape != null)
                 {
-                    var offsetX = comp.Point.X;
-                    var offsetY = comp.Point.Y;
-
-                    primitive = new PathPrimitive
-                    {
-                        Type = PrimitiveType.ComponentOutline,
-
-                        StartPoint = new Vector2(
-                            (float)(path.StartPoint.X + offsetX),
-                            (float)(path.StartPoint.Y + offsetY)
-                        ),
-
-                        Segments = TranslateSegments(
-                            path.Segments,
-                            offsetX,
-                            offsetY)
-                    };
-
-                    break;
+                    primitives.Add(GetShapePrimitive(
+                        pin.Shape,
+                        new Point2D(pin.Point.X + comp.Point.X, pin.Point.Y + comp.Point.Y),
+                        PrimitiveType.Pin));
                 }
-
-                default:
-                    primitive = new RectanglePrimitive();
-                    break;
             }
 
-            geometryLayer.Add(primitive);
-
-            if (comp.NameSettings.IsVisible)
+            if (comp.Footprint?.Shape != null)
             {
-                textLayer.Add(new TextPrimitive
-                {
-                    Type = PrimitiveType.Text,
-                    Text = comp.Name,
-                    X = (float)(comp.Point.X + comp.NameSettings.OffsetX),
-                    Y = (float)(comp.Point.Y + comp.NameSettings.OffsetY),
-                    FontSize = (float)comp.NameSettings.FontSize
-                });
-            }
+                primitives.Add(GetShapePrimitive(comp.Footprint.Shape, comp.Point, PrimitiveType.Footprint));
 
-            foreach (var pin in comp.Pins)
-            {
-                switch (pin.Shape)
+                foreach (var pad in comp.Footprint.Pads.Values)
                 {
-                    case RectShape rect:
-                        primitive = new RectanglePrimitive
-                        {
-                            Type = PrimitiveType.Pad,
-                            Width = (float)rect.Width,
-                            Height = (float)rect.Height,
-                            CornerRadius = (float)rect.CornerRadius,
-                            X = pin.CoordMode == CoordinateMode.Relative
-                                ? (float)(pin.Point.X + comp.Point.X)
-                                : (float)pin.Point.X,
-                            Y = pin.CoordMode == CoordinateMode.Relative
-                                ? (float)(pin.Point.Y + comp.Point.Y)
-                                : (float)pin.Point.Y
-                        };
-                        break;
-
-                    case PathShape path:
+                    if (pad.Shape != null)
                     {
-                        var pinPoint = new Vector2
-                        {
-                            X = pin.CoordMode == CoordinateMode.Relative
-                                ? (float)(pin.Point.X + comp.Point.X)
-                                : (float)pin.Point.X,
-
-                            Y = pin.CoordMode == CoordinateMode.Relative
-                                ? (float)(pin.Point.Y + comp.Point.Y)
-                                : (float)pin.Point.Y
-                        };
-
-                        var start = new Vector2(
-                            (float)path.StartPoint.X,
-                            (float)path.StartPoint.Y
-                        );
-
-                        primitive = new PathPrimitive
-                        {
-                            Type = PrimitiveType.Pad,
-
-                            StartPoint = pinPoint + start,
-
-                            Segments = TranslateSegments(
-                                path.Segments,
-                                pinPoint.X,
-                                pinPoint.Y)
-                        };
-
-                        break;
+                        primitives.Add(GetShapePrimitive(
+                            pad.Shape,
+                            new Point2D(pad.Point.X + comp.Point.X, pad.Point.Y + comp.Point.Y),
+                            PrimitiveType.Pad));
                     }
-
-                    default:
-                        primitive = new RectanglePrimitive();
-                        break;
                 }
-
-                geometryLayer.Add(primitive);
             }
         }
 
-        // Отрисовка трасс
         foreach (var trace in model.Traces)
         {
-            var primitive = new PolylinePrimitive
+            var polylinePrimitive = new PolylinePrimitive
             {
                 Type = PrimitiveType.Trace,
                 Thickness = (float)trace.Width
@@ -184,20 +62,18 @@ public class DrawingGenerationService : IDrawingGenerationService
 
             var start = new Vector2
             {
-                X = (float)trace.From.Pad.Point.X + (float)trace.From.Comp.Point.X,
-                Y = (float)trace.From.Pad.Point.Y + (float)trace.From.Comp.Point.Y
+                X = (float)(trace.From.Pad.Point.X + trace.From.Comp.Point.X),
+                Y = (float)(trace.From.Pad.Point.Y + trace.From.Comp.Point.Y)
             };
 
             var end = new Vector2
             {
-                X = (float)trace.To.Pad.Point.X + (float)trace.To.Comp.Point.X,
-                Y = (float)trace.To.Pad.Point.Y + (float)trace.To.Comp.Point.Y
+                X = (float)(trace.To.Pad.Point.X + trace.To.Comp.Point.X),
+                Y = (float)(trace.To.Pad.Point.Y + trace.To.Comp.Point.Y)
             };
 
-            // Старт трассы из центра начального пина
-            primitive.Points.Add(start);
+            polylinePrimitive.Points.Add(start);
 
-            // Промежуточные точки
             if (trace.Points != null)
             {
                 foreach (var p in trace.Points)
@@ -206,17 +82,107 @@ public class DrawingGenerationService : IDrawingGenerationService
                         ? new Vector2((float)p.X + start.X, (float)p.Y + start.Y)
                         : new Vector2((float)p.X, (float)p.Y);
 
-                    primitive.Points.Add(pt);
+                    polylinePrimitive.Points.Add(pt);
                 }
             }
 
-            // Финиш трассы в центре конечного пина
-            primitive.Points.Add(end);
-
-            geometryLayer.Add(primitive);
+            polylinePrimitive.Points.Add(end);
+            primitives.Add(polylinePrimitive);
         }
 
-        return [.. geometryLayer, .. textLayer];
+        foreach (var comp in model.Components.Values)
+        {
+            if (comp.NameSettings is { IsVisible: true })
+            {
+                primitives.Add(new TextPrimitive
+                {
+                    Type = PrimitiveType.Text,
+                    Text = comp.Name,
+                    X = (float)(comp.Point.X + comp.NameSettings.OffsetX),
+                    Y = (float)(comp.Point.Y + comp.NameSettings.OffsetY),
+                    FontSize = (float)comp.NameSettings.FontSize
+                });
+            }
+        }
+
+        return primitives;
+    }
+
+    /// <summary>
+    /// Безопасно генерирует примитивы для Vias и Nets с проверками на null.
+    /// </summary>
+    public List<DrawingPrimitive> GenerateBoardOverlayPrimitives(BoardModel board)
+    {
+        List<DrawingPrimitive> primitives = [];
+
+        // 1. Межслойные переходные отверстия (Vias)
+        foreach (var via in board.Vias.Values)
+        {
+            if (via.Shape != null)
+            {
+                primitives.Add(GetShapePrimitive(via.Shape, via.Point, PrimitiveType.Via));
+            }
+        }
+
+        // 2. Связи / Airwires (Nets)
+        foreach (var net in board.Nets.Values)
+        {
+            var netPrimitive = new PolylinePrimitive { Type = PrimitiveType.Net };
+
+            foreach (var node in net.Nodes)
+            {
+                // Защита от NullReference, если узлы сети не до конца связались с компонентами/пэдами
+                if (node.Comp == null || node.Pad == null) continue;
+
+                netPrimitive.Points.Add(new Vector2
+                {
+                    X = (float)(node.Pad.Point.X + node.Comp.Point.X),
+                    Y = (float)(node.Pad.Point.Y + node.Comp.Point.Y)
+                });
+            }
+
+            // Добавляем примитив только если есть минимум 2 валидные точки для отрисовки линии
+            if (netPrimitive.Points.Count >= 2)
+            {
+                primitives.Add(netPrimitive);
+            }
+        }
+
+        return primitives;
+    }
+
+    private static DrawingPrimitive GetShapePrimitive(Shape shape, Point2D startPoint, PrimitiveType type)
+    {
+        switch (shape)
+        {
+            case RectShape rect:
+                return new RectanglePrimitive
+                {
+                    Type = type,
+                    Width = (float)rect.Width,
+                    Height = (float)rect.Height,
+                    CornerRadius = (float)rect.CornerRadius,
+                    X = (float)startPoint.X,
+                    Y = (float)startPoint.Y
+                };
+
+            case PathShape path:
+                return new PathPrimitive
+                {
+                    Type = type,
+                    StartPoint = new Vector2(
+                        (float)(path.StartPoint.X + startPoint.X),
+                        (float)(path.StartPoint.Y + startPoint.Y)
+                    ),
+                    Segments = TranslateSegments(
+                        path.Segments ?? [],
+                        startPoint.X,
+                        startPoint.Y)
+                };
+
+            default:
+                return new RectanglePrimitive();
+        }
     }
 
     private static List<Segment> TranslateSegments(

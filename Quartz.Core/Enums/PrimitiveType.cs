@@ -2,9 +2,16 @@ namespace Quartz.Core.Enums;
 
 public enum PrimitiveType
 {
-    Trace,
-    Pad,
     ComponentOutline,
     BoardOutline,
+    Footprint,
+
+    Net,
+    Trace,
+
+    Via,
+    Pin,
+    Pad,
+
     Text
 }

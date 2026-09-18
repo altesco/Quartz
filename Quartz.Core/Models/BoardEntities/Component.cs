@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using Quartz.Core.Enums;
 
 namespace Quartz.Core.Models.BoardEntities;
@@ -18,5 +19,5 @@ public abstract class Component : BoardEntity//BoardDimensionalObject
     public MountingType MountingType { get; set; } = MountingType.SMD;
 
     public NameSettings NameSettings { get; set; } = new();
-    public List<Pin> Pins { get; set; } = [];
+    public IReadOnlyDictionary<string, Pin> Pins { get; set; } = FrozenDictionary<string, Pin>.Empty;
 }

@@ -5,5 +5,5 @@ namespace Quartz.Core.Interfaces
 
 public interface IYamlSchemaValidator
 {
-    public List<EditorError> ValidateSchemaAndTags(string yamlText);
+    public List<EditorError> ValidateSchemaAndTags(string yamlText, Type? targetType = null);
 }

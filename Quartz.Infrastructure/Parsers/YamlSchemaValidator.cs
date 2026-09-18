@@ -1,11 +1,6 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
 using System.Reflection;
 using Quartz.Core.Interfaces;
 using Quartz.Core.Models;
-using Quartz.Core.Models.BoardEntities;
 using Quartz.Infrastructure.Dtos;
 using YamlDotNet.RepresentationModel;
 using YamlDotNet.Serialization;
@@ -34,8 +29,9 @@ public class YamlSchemaValidator : IYamlSchemaValidator
     // Кеш свойств C#-типов, чтобы не дёргать рефлексию на каждый символ
     private static readonly Dictionary<Type, HashSet<string>> PropertyCache = new();
 
-    public List<EditorError> ValidateSchemaAndTags(string yamlText)
+    public List<EditorError> ValidateSchemaAndTags(string yamlText, Type? targetType = null)
     {
+        targetType ??= typeof(LayerModel); // Если тип не передан, считаем слоем
         var errors = new List<EditorError>();
         var yaml = new YamlStream();
 
@@ -53,8 +49,7 @@ public class YamlSchemaValidator : IYamlSchemaValidator
 
         if (yaml.Documents[0].RootNode is YamlMappingNode rootMapping)
         {
-            // Валидируем корень относительно модели LayerModel
-            ValidateNodeAgainstType(rootMapping, typeof(LayerModel), errors);
+            ValidateNodeAgainstType(rootMapping, targetType, errors);
         }
 
         return errors;
@@ -70,7 +65,6 @@ public class YamlSchemaValidator : IYamlSchemaValidator
 
             var keyName = keyNode.Value ?? string.Empty;
 
-            // 1. Проверяем, существует ли такое свойство в C#-модели
             if (!allowedProperties.Contains(keyName))
             {
                 errors.Add(new EditorError
@@ -83,7 +77,6 @@ public class YamlSchemaValidator : IYamlSchemaValidator
                 continue;
             }
 
-            // 2. Определяем C#-тип вложенного объекта для дальнейшей рекурсивной проверки
             var propertyType = GetPropertyType(targetType, keyName);
             if (propertyType != null)
             {
@@ -92,18 +85,31 @@ public class YamlSchemaValidator : IYamlSchemaValidator
         }
     }
 
-    private static void InspectChildNode(
-    YamlNode node,
-    Type expectedType,
-    List<EditorError> errors)
+    private static void InspectChildNode(YamlNode node, Type expectedType, List<EditorError> errors)
     {
+        // 1. Проверка на Dictionary<string, T> (для components, nets, layers, vias)
+        if (IsDictionaryType(expectedType, out var valueType))
+        {
+            if (node is YamlMappingNode dictMapping)
+            {
+                foreach (var entry in dictMapping.Children)
+                {
+                    // В словаре ключи — это ID объектов (например, "R1"), а значения — сами объекты
+                    if (valueType != null)
+                    {
+                        InspectChildNode(entry.Value, valueType, errors);
+                    }
+                }
+            }
+
+            return;
+        }
+
+        // 2. Проверка одиночного маппинга
         if (node is YamlMappingNode childMapping)
         {
             var targetType = expectedType;
 
-            // Полиморфный YAML-тег:
-            // shape: !rect
-            //   width: 20
             if (!node.Tag.IsEmpty)
             {
                 var tag = node.Tag.Value;
@@ -121,13 +127,13 @@ public class YamlSchemaValidator : IYamlSchemaValidator
                         Column = node.Start.Column,
                         Length = tag.Length
                     });
-
                     return;
                 }
             }
 
             ValidateNodeAgainstType(childMapping, targetType, errors);
         }
+        // 3. Проверка списков (Sequence)
         else if (node is YamlSequenceNode sequence)
         {
             var elementType = GetSequenceElementType(expectedType);
@@ -136,9 +142,6 @@ public class YamlSchemaValidator : IYamlSchemaValidator
             {
                 var targetType = elementType;
 
-                // Полиморфные элементы коллекции:
-                // - !resistor
-                // - !capacitor
                 if (!item.Tag.IsEmpty)
                 {
                     var tag = item.Tag.Value;
@@ -156,7 +159,6 @@ public class YamlSchemaValidator : IYamlSchemaValidator
                             Column = item.Start.Column,
                             Length = tag.Length
                         });
-
                         continue;
                     }
                 }
@@ -167,6 +169,24 @@ public class YamlSchemaValidator : IYamlSchemaValidator
                 }
             }
         }
+    }
+
+    private static bool IsDictionaryType(Type type, out Type? valueType)
+    {
+        valueType = null;
+        if (type.IsGenericType)
+        {
+            var genDef = type.GetGenericTypeDefinition();
+            if (genDef == typeof(Dictionary<,>) ||
+                genDef == typeof(IReadOnlyDictionary<,>) ||
+                genDef == typeof(IDictionary<,>))
+            {
+                valueType = type.GetGenericArguments()[1];
+                return true;
+            }
+        }
+
+        return false;
     }
 
     // Извлекаем имена всех публичных свойств C#-класса (учитывая [YamlMember(Alias="...")])

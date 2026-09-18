@@ -12,4 +12,7 @@ public record ViaDto : ConnectionDto
 
     [YamlMember(Alias = "to")] 
     public string To { get; init; } = string.Empty;
+
+    [YamlMember(Alias = "drill-diameter")] 
+    public double? DrillDiameter { get; init; }
 }

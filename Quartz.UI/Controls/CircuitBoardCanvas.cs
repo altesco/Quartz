@@ -84,6 +84,51 @@ public class CircuitBoardCanvas : SKCanvasView, IDisposable
 
     private void InitializePaintCache()
     {
+        // 1. Границы платы
+        _paintCache[PrimitiveType.BoardOutline] = new SKPaint
+        {
+            Color = SKColors.Yellow,
+            Style = SKPaintStyle.Stroke,
+            StrokeWidth = 2.0f,
+            IsAntialias = true
+        };
+
+        // 2. Контур компонента
+        _paintCache[PrimitiveType.ComponentOutline] = new SKPaint
+        {
+            Color = SKColors.LightGray,
+            Style = SKPaintStyle.Stroke,
+            StrokeWidth = 1.2f,
+            IsAntialias = true
+        };
+
+        // 3. Посадочное место (Footprint / Шелкография)
+        _paintCache[PrimitiveType.Footprint] = new SKPaint
+        {
+            Color = SKColors.Silver,
+            Style = SKPaintStyle.Stroke,
+            StrokeWidth = 1.0f,
+            IsAntialias = true
+        };
+
+        // 4. Контактные площадки (Pads) — сплошная заливка
+        _paintCache[PrimitiveType.Pad] = new SKPaint
+        {
+            Color = SKColors.Goldenrod,
+            Style = SKPaintStyle.Fill,
+            IsAntialias = true
+        };
+
+        // 5. Выводы (Pins) — тонкий контур
+        _paintCache[PrimitiveType.Pin] = new SKPaint
+        {
+            Color = SKColors.SpringGreen,
+            Style = SKPaintStyle.Stroke,
+            StrokeWidth = 1.0f,
+            IsAntialias = true
+        };
+
+        // 6. Трассы (Traces)
         _paintCache[PrimitiveType.Trace] = new SKPaint
         {
             Color = SKColors.DarkCyan,
@@ -91,29 +136,29 @@ public class CircuitBoardCanvas : SKCanvasView, IDisposable
             IsAntialias = true,
             StrokeWidth = 1.5f
         };
-        _paintCache[PrimitiveType.Pad] = new SKPaint
+
+        // 7. Переходные отверстия (Vias)
+        _paintCache[PrimitiveType.Via] = new SKPaint
         {
-            Color = SKColors.Goldenrod,
+            Color = SKColors.DarkOrange,
             Style = SKPaintStyle.Fill,
             IsAntialias = true
         };
-        _paintCache[PrimitiveType.ComponentOutline] = new SKPaint
+
+        // 8. Электрические связи (Nets / Airwires) — пунктирная линия
+        _paintCache[PrimitiveType.Net] = new SKPaint
         {
-            Color = SKColors.LightGray,
+            Color = SKColors.DeepPink,
             Style = SKPaintStyle.Stroke,
-            StrokeWidth = 1.5f,
-            IsAntialias = true
+            StrokeWidth = 1.0f,
+            IsAntialias = true,
+            PathEffect = SKPathEffect.CreateDash([3.0f, 3.0f], 0) // Пунктир для связей
         };
+
+        // 9. Текст
         _paintCache[PrimitiveType.Text] = new SKPaint
         {
             Color = SKColors.White,
-            IsAntialias = true
-        };
-        _paintCache[PrimitiveType.BoardOutline] = new SKPaint
-        {
-            Color = SKColors.LightGray,
-            Style = SKPaintStyle.Stroke,
-            StrokeWidth = 2,
             IsAntialias = true
         };
     }
@@ -334,24 +379,33 @@ public class CircuitBoardCanvas : SKCanvasView, IDisposable
         {
             if (!_paintCache.TryGetValue(primitive.Type, out var paint)) continue;
 
-            // Если это контур компонента или границы платы — держим толщину постоянной на экране
-            if (primitive.Type is PrimitiveType.ComponentOutline or PrimitiveType.BoardOutline)
+            // Корректируем толщину линий контуров интерфейса, чтобы они не раздувались при зуме
+            bool isFixedPixelOutline = primitive.Type is PrimitiveType.ComponentOutline
+                or PrimitiveType.BoardOutline
+                or PrimitiveType.Footprint
+                or PrimitiveType.Net
+                or PrimitiveType.Pin;
+
+            if (isFixedPixelOutline)
             {
                 float basePixelWidth = primitive switch
                 {
                     LinePrimitive line when line.Thickness > 0 => line.Thickness,
-                    _ => primitive.Type == PrimitiveType.BoardOutline ? 2.0f : 1.5f
+                    _ => primitive.Type switch
+                    {
+                        PrimitiveType.BoardOutline => 2.0f,
+                        PrimitiveType.Net => 1.0f,
+                        PrimitiveType.Pin => 1.0f,
+                        _ => 1.2f
+                    }
                 };
 
-                // Компенсируем масштаб канваса: экранные пиксели / totalScale
                 paint.StrokeWidth = basePixelWidth / totalScale;
             }
             else if (primitive is LinePrimitive line)
             {
-                // Для остальных линий (например, реальных дорожек Trace) сохраняем их физический размер
                 paint.StrokeWidth = line.Thickness;
             }
-            
 
             switch (primitive)
             {
@@ -374,34 +428,34 @@ public class CircuitBoardCanvas : SKCanvasView, IDisposable
                             path.LineTo(points[i]);
                         }
 
-                        // 1. Устанавливаем радиус скругления оси трассы (в мм)
-                        // Радиус должен быть БОЛЬШЕ половины ширины трассы (например, 1.0 мм при ширине 0.5 мм)
-                        float traceWidth = polyline.Thickness > 0 ? polyline.Thickness : 0.25f;
-                        float cornerRadius = traceWidth * 1.5f; // или задавай через свойство polyline.CornerRadius
+                        if (primitive.Type == PrimitiveType.Trace)
+                        {
+                            float traceWidth = polyline.Thickness > 0 ? polyline.Thickness : 0.25f;
+                            float cornerRadius = traceWidth * 1.5f;
 
-                        // 2. Применяем эффект скругления углов геометрии
-                        using var cornerEffect = SKPathEffect.CreateCorner(cornerRadius);
+                            using var cornerEffect = SKPathEffect.CreateCorner(cornerRadius);
+                            paint.StrokeWidth = traceWidth;
+                            paint.StrokeJoin = SKStrokeJoin.Round;
+                            paint.PathEffect = cornerEffect;
 
-                        paint.StrokeWidth = traceWidth;
-                        paint.StrokeJoin = SKStrokeJoin.Round;
-                        paint.PathEffect = cornerEffect;
-
-                        canvas.DrawPath(path, paint);
-
-                        // Сбрасываем эффект, чтобы он не повлиял на следующие элементы
-                        paint.PathEffect = null;
+                            canvas.DrawPath(path, paint);
+                            paint.PathEffect = null;
+                        }
+                        else
+                        {
+                            canvas.DrawPath(path, paint);
+                        }
                     }
 
                     break;
                 }
 
-                case CirclePrimitive circle:
-                    canvas.DrawCircle(circle.X, circle.Y, circle.Radius, paint);
-                    break;
-
                 case RectanglePrimitive rect:
-                    var skRect = new SKRect(rect.X - rect.Width / 2f, rect.Y - rect.Height / 2f,
-                        rect.X + rect.Width / 2f, rect.Y + rect.Height / 2f);
+                    var skRect = new SKRect(
+                        rect.X - rect.Width / 2f,
+                        rect.Y - rect.Height / 2f,
+                        rect.X + rect.Width / 2f,
+                        rect.Y + rect.Height / 2f);
 
                     if (rect.CornerRadius > 0f)
                         canvas.DrawRoundRect(skRect, rect.CornerRadius, rect.CornerRadius, paint);

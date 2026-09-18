@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Timers;
 using Avalonia.Threading;
@@ -6,12 +7,12 @@ using AvaloniaEdit.Document;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Quartz.Application.Interfaces;
 using Quartz.Core.Models;
+using Quartz.Core.Models.BoardEntities;
 
 namespace Quartz.UI.ViewModels;
 
 public abstract partial class EditorVM : FileVM
 {
-    private readonly IBoardProcessingCoordinator _coordinator;
 
     private const int Delay = 300;
     private readonly Timer _timer;
@@ -26,8 +27,6 @@ public abstract partial class EditorVM : FileVM
     public EditorVM(MainVM mainVM, string filePath, DirectoryVM? parent, IBoardProcessingCoordinator coordinator)
         : base(mainVM, filePath, parent)
     {
-        _coordinator = coordinator ?? throw new ArgumentNullException(nameof(coordinator));
-
         if (Document != null)
         {
             Document.TextChanged += DocumentOnTextChanged;
@@ -58,32 +57,26 @@ public abstract partial class EditorVM : FileVM
 
     private void OnTimerElapsed(object? sender, ElapsedEventArgs e)
     {
-        Dispatcher.UIThread.InvokeAsync(() =>
-        {
-            Errors.Clear();
-
-            if (Document == null)
-                return;
-
-            var text = Document.Text;
-
-            if (string.IsNullOrEmpty(text))
-                return;
-
-            // Вся обработка выполняется в одном вызове!
-            var result = _coordinator.Process(text);
-
-            foreach (var err in result.Errors)
-            {
-                Errors.Add(err);
-            }
-
-            OnProcessingFinished(result);
-        });
+        Dispatcher.UIThread.InvokeAsync(TriggerProcess);
     }
 
-    protected virtual void OnProcessingFinished(LayerProcessResult result)
+    /// <summary>
+    /// Принудительный запуск обработки документа в обход таймера (например, при обновлении других файлов)
+    /// </summary>
+    public void TriggerProcess()
     {
-        // Переопределяется в наследниках для обновления Canvas и моделей
+        _timer.Stop(); // Сбрасываем таймер, если он тикал
+        Errors.Clear();
+
+        if (Document == null)
+            return;
+
+        var text = Document.Text;
+        if (string.IsNullOrEmpty(text))
+            return;
+
+        ProcessDocument(text);
     }
+
+    protected abstract void ProcessDocument(string text);
 }

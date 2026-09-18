@@ -4,8 +4,7 @@ namespace Quartz.Core.Models.BoardEntities;
 
 public class Trace : BoardEntity //BoardDimensionalObject
 {
-    public int Id { get; set; }
-    public string Name { get; set; } = string.Empty; // Имя цепи (GND, VCC)
+    public Net Net { get; set; } = new(); // Имя цепи (GND, VCC)
 
     public Endpoint From { get; set; } // "(R1.1).1"
     public Endpoint To { get; set; } // "(U1).12"

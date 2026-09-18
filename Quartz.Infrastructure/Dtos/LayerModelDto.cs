@@ -20,4 +20,7 @@ public record LayerModelDto
 
     [YamlMember(Alias = "styles")]
     public List<Style?>? Styles { get; set; } = [];
+
+    [YamlMember(Alias = "name")]
+    public string? Name { get; init; }
 }

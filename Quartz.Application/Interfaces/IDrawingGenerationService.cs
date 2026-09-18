@@ -5,5 +5,12 @@ namespace Quartz.Application.Interfaces;
 
 public interface IDrawingGenerationService
 {
-    List<DrawingPrimitive> Generate(LayerModel model);
+    // 1. Отрисовка конкретного слоя (только то, что лежит НА ЭТОМ слое: трассы, пады, шелкография)
+    List<DrawingPrimitive> GenerateLayerPrimitives(LayerModel layer);
+
+    // 2. Отрисовка общих 2D-элементов платы (контур платы, Vias, Airwires/Nets)
+    List<DrawingPrimitive> GenerateBoardOverlayPrimitives(BoardModel board);
+
+    // 3. Генерация данных для 3D-рендера (текстолит + стекап слоев + объемные компоненты)
+    // Board3DModelScene Generate3DScene(BoardModel board); или как-то так
 }
