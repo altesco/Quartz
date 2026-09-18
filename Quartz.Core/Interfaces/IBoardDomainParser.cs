@@ -13,4 +13,6 @@ public interface IBoardDomainParser
         IReadOnlyDictionary<string, LayerModel>? layersMap,
         IReadOnlyCollection<string>? availableLayerPaths,
         out List<EditorError> errors);
+
+    void ValidateInterlayerNetsVia(BoardModel board, List<EditorError> errors);
 }

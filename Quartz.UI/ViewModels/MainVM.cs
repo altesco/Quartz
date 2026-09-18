@@ -84,7 +84,7 @@ public partial class MainVM : ObservableObject
 
         // 1. ВАЖНО: Запоминаем текущий размер (пропорцию) целевой панели, 
         // пока она еще находится в родительском контейнере
-        string oldSize = targetPanel.Size ?? "1*";
+        string oldSize = targetPanel.Size;
 
         var splitContainer = CreateSplitContainer(targetPanel, newPanel, side);
         if (splitContainer is null)

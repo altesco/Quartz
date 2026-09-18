@@ -4,5 +4,6 @@ namespace Quartz.Application.Interfaces;
 
 public interface ILogicValidationService
 {
-    List<EditorError> Validate(LayerModel model);
+    List<EditorError> ValidateLayer(LayerModel model);
+    List<EditorError> ValidateBoard(BoardModel model);
 }

@@ -49,7 +49,7 @@ public class App : Avalonia.Application
         services.AddSingleton<IBoardDomainParser, BoardDomainParser>();
 
         // 2. Application Services
-        services.AddSingleton<ILogicValidationService, BoardValidationService>();
+        services.AddSingleton<ILogicValidationService, LogicValidationService>();
         services.AddSingleton<IDrawingGenerationService, DrawingGenerationService>();
         services.AddSingleton<IBoardProcessingCoordinator, BoardProcessingCoordinator>();
 

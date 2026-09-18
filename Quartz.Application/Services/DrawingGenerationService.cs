@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Runtime.CompilerServices;
 using Quartz.Application.Interfaces;
 using Quartz.Core.Enums;
 using Quartz.Core.Models;
@@ -8,7 +9,9 @@ namespace Quartz.Application.Services;
 
 public class DrawingGenerationService : IDrawingGenerationService
 {
-    public List<DrawingPrimitive> GenerateLayerPrimitives(LayerModel model)
+    private readonly ConditionalWeakTable<BoardModel, Dictionary<string, string>> _compToLayerCache = new();
+
+    public List<DrawingPrimitive> GenerateLayerPrimitives(LayerModel model, BoardModel? board = null)
     {
         List<DrawingPrimitive> primitives = [];
 
@@ -26,34 +29,37 @@ public class DrawingGenerationService : IDrawingGenerationService
 
             foreach (var pin in comp.Pins.Values)
             {
-                if (pin.Shape != null)
-                {
-                    primitives.Add(GetShapePrimitive(
-                        pin.Shape,
-                        new Point2D(pin.Point.X + comp.Point.X, pin.Point.Y + comp.Point.Y),
-                        PrimitiveType.Pin));
-                }
+                primitives.Add(GetShapePrimitive(
+                    pin.Shape,
+                    new Point2D(pin.Point.X + comp.Point.X, pin.Point.Y + comp.Point.Y),
+                    PrimitiveType.Pin));
             }
 
-            if (comp.Footprint?.Shape != null)
+            if (comp.Footprint != null)
             {
-                primitives.Add(GetShapePrimitive(comp.Footprint.Shape, comp.Point, PrimitiveType.Footprint));
+                if (comp.Footprint.Shape != null)
+                {
+                    primitives.Add(GetShapePrimitive(comp.Footprint.Shape, comp.Point, PrimitiveType.Footprint));
+                }
 
                 foreach (var pad in comp.Footprint.Pads.Values)
                 {
-                    if (pad.Shape != null)
-                    {
-                        primitives.Add(GetShapePrimitive(
-                            pad.Shape,
-                            new Point2D(pad.Point.X + comp.Point.X, pad.Point.Y + comp.Point.Y),
-                            PrimitiveType.Pad));
-                    }
+                    primitives.Add(GetShapePrimitive(
+                        pad.Shape,
+                        new Point2D(pad.Point.X + comp.Point.X, pad.Point.Y + comp.Point.Y),
+                        PrimitiveType.Pad));
                 }
             }
         }
 
         foreach (var trace in model.Traces)
         {
+            if (trace.From?.Pad == null || trace.From?.Comp == null ||
+                trace.To?.Pad == null || trace.To?.Comp == null)
+            {
+                continue;
+            }
+
             var polylinePrimitive = new PolylinePrimitive
             {
                 Type = PrimitiveType.Trace,
@@ -105,17 +111,90 @@ public class DrawingGenerationService : IDrawingGenerationService
             }
         }
 
+        if (board != null)
+        {
+            primitives.AddRange(GenerateLayerNetPrimitives(model, board));
+        }
+
         return primitives;
     }
 
-    /// <summary>
-    /// Безопасно генерирует примитивы для Vias и Nets с проверками на null.
-    /// </summary>
+    private List<DrawingPrimitive> GenerateLayerNetPrimitives(LayerModel currentLayer, BoardModel board)
+    {
+        var primitives = new List<DrawingPrimitive>();
+
+        var compToLayer = _compToLayerCache.GetValue(board, b => b.Layers
+            .SelectMany(l => l.Value.Components.Keys.Select(c => (Comp: c, Layer: l.Key)))
+            .ToDictionary(x => x.Comp, x => x.Layer, StringComparer.OrdinalIgnoreCase));
+
+        foreach (var net in board.Nets.Values)
+        {
+            for (int i = 0; i < net.Nodes.Count - 1; i++)
+            {
+                var nodeA = net.Nodes[i];
+                var nodeB = net.Nodes[i + 1];
+
+                if (nodeA?.Comp == null || nodeA.Pad == null || nodeB?.Comp == null || nodeB.Pad == null)
+                    continue;
+
+                if (!compToLayer.TryGetValue(nodeA.Comp.Name, out var layerA) ||
+                    !compToLayer.TryGetValue(nodeB.Comp.Name, out var layerB))
+                    continue;
+
+                var posA = GetGlobalPadPoint(nodeA);
+                var posB = GetGlobalPadPoint(nodeB);
+
+                bool isCurrentA = string.Equals(layerA, currentLayer.Name, StringComparison.OrdinalIgnoreCase);
+                bool isCurrentB = string.Equals(layerB, currentLayer.Name, StringComparison.OrdinalIgnoreCase);
+
+                if (isCurrentA && isCurrentB)
+                {
+                    primitives.Add(CreateNetSegment(posA, posB));
+                }
+                else if (isCurrentA)
+                {
+                    var key = new NodeViaKey(nodeA.Comp.Name, nodeA.Pad.Name, layerA, layerB);
+                    if (board.NearestVias.TryGetValue(key, out var nearestVia))
+                    {
+                        var viaPos = new Vector2((float)nearestVia.Point.X, (float)nearestVia.Point.Y);
+                        primitives.Add(CreateNetSegment(posA, viaPos));
+                    }
+                }
+                else if (isCurrentB)
+                {
+                    var key = new NodeViaKey(nodeB.Comp.Name, nodeB.Pad.Name, layerB, layerA);
+                    if (board.NearestVias.TryGetValue(key, out var nearestVia))
+                    {
+                        var viaPos = new Vector2((float)nearestVia.Point.X, (float)nearestVia.Point.Y);
+                        primitives.Add(CreateNetSegment(viaPos, posB));
+                    }
+                }
+            }
+        }
+
+        return primitives;
+    }
+
+    private static Vector2 GetGlobalPadPoint(Endpoint node)
+    {
+        return new Vector2(
+            (float)(node.Pad.Point.X + node.Comp.Point.X),
+            (float)(node.Pad.Point.Y + node.Comp.Point.Y)
+        );
+    }
+
+    private static PolylinePrimitive CreateNetSegment(Vector2 start, Vector2 end)
+    {
+        var poly = new PolylinePrimitive { Type = PrimitiveType.Net };
+        poly.Points.Add(start);
+        poly.Points.Add(end);
+        return poly;
+    }
+
     public List<DrawingPrimitive> GenerateBoardOverlayPrimitives(BoardModel board)
     {
         List<DrawingPrimitive> primitives = [];
 
-        // 1. Межслойные переходные отверстия (Vias)
         foreach (var via in board.Vias.Values)
         {
             if (via.Shape != null)
@@ -124,35 +203,23 @@ public class DrawingGenerationService : IDrawingGenerationService
             }
         }
 
-        // 2. Связи / Airwires (Nets)
-        foreach (var net in board.Nets.Values)
-        {
-            var netPrimitive = new PolylinePrimitive { Type = PrimitiveType.Net };
-
-            foreach (var node in net.Nodes)
-            {
-                // Защита от NullReference, если узлы сети не до конца связались с компонентами/пэдами
-                if (node.Comp == null || node.Pad == null) continue;
-
-                netPrimitive.Points.Add(new Vector2
-                {
-                    X = (float)(node.Pad.Point.X + node.Comp.Point.X),
-                    Y = (float)(node.Pad.Point.Y + node.Comp.Point.Y)
-                });
-            }
-
-            // Добавляем примитив только если есть минимум 2 валидные точки для отрисовки линии
-            if (netPrimitive.Points.Count >= 2)
-            {
-                primitives.Add(netPrimitive);
-            }
-        }
-
         return primitives;
     }
 
-    private static DrawingPrimitive GetShapePrimitive(Shape shape, Point2D startPoint, PrimitiveType type)
+    private static DrawingPrimitive GetShapePrimitive(Shape? shape, Point2D startPoint, PrimitiveType type)
     {
+        if (shape == null)
+        {
+            return new RectanglePrimitive
+            {
+                Type = type,
+                X = (float)startPoint.X,
+                Y = (float)startPoint.Y,
+                Width = 0,
+                Height = 0
+            };
+        }
+
         switch (shape)
         {
             case RectShape rect:
@@ -181,7 +248,12 @@ public class DrawingGenerationService : IDrawingGenerationService
                 };
 
             default:
-                return new RectanglePrimitive();
+                return new RectanglePrimitive
+                {
+                    Type = type,
+                    X = (float)startPoint.X,
+                    Y = (float)startPoint.Y
+                };
         }
     }
 

@@ -10,6 +10,9 @@ public class BoardModel
 
     public Dictionary<string, LayerModel> Layers { get; init; } = new();//FrozenDictionary<string, LayerModel>.Empty;
 
+    // Предрассчитанный кеш ближайших Via: O(1) доступ при рендере!
+    public Dictionary<NodeViaKey, Via> NearestVias { get; init; } = new();
+
     public Dictionary<string, Component> GetAllComponents()
     {
         return Layers.Values

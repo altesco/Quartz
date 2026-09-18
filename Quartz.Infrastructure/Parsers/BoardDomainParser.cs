@@ -44,7 +44,6 @@ public class BoardDomainParser : IBoardDomainParser
 
         try
         {
-            // Обязательно нормализуем пустые теги перед извлечением путей!
             string normalizedYaml = NormalizeEmptyTaggedObjects(yamlText);
             var dto = _deserializer.Deserialize<BoardModelDto?>(normalizedYaml);
 
@@ -94,12 +93,18 @@ public class BoardDomainParser : IBoardDomainParser
                 return null;
             }
 
-            // Передаем layersMap и availableLayerPaths в доменный маппер!
-            return dto.ToDomain(
+            var board = dto.ToDomain(
                 componentsMap,
                 out errors,
                 layersMap: layersMap,
                 availableLayerPaths: availableLayerPaths);
+
+            if (board != null)
+            {
+                ValidateInterlayerNetsVia(board, errors);
+            }
+
+            return board;
         }
         catch (YamlException ex)
         {
@@ -112,6 +117,56 @@ public class BoardDomainParser : IBoardDomainParser
             });
 
             return null;
+        }
+    }
+
+    public void ValidateInterlayerNetsVia(
+        BoardModel board,
+        List<EditorError> errors)
+    {
+        var compToLayer = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (layerName, layer) in board.Layers)
+        {
+            foreach (var compName in layer.Components.Keys)
+            {
+                compToLayer[compName] = layerName;
+            }
+        }
+
+        foreach (var net in board.Nets.Values)
+        {
+            for (int i = 0; i < net.Nodes.Count - 1; i++)
+            {
+                var nodeA = net.Nodes[i];
+                var nodeB = net.Nodes[i + 1];
+
+                if (nodeA?.Comp == null || nodeB?.Comp == null)
+                    continue;
+
+                if (!compToLayer.TryGetValue(nodeA.Comp.Name, out var layerA) ||
+                    !compToLayer.TryGetValue(nodeB.Comp.Name, out var layerB))
+                {
+                    continue;
+                }
+
+                if (!string.Equals(layerA, layerB, StringComparison.OrdinalIgnoreCase))
+                {
+                    var keyA = new NodeViaKey(nodeA.Comp.Name, nodeA.Pad.Name, layerA, layerB);
+
+                    // Мгновенная проверка O(1)!
+                    if (!board.NearestVias.ContainsKey(keyA))
+                    {
+                        errors.Add(new EditorError
+                        {
+                            Message =
+                                $"В сети '{net.Name}' отсутствует переходное отверстие (Via) между слоями '{layerA}' (компонент '{nodeA.Comp.Name}') и '{layerB}' (компонент '{nodeB.Comp.Name}').",
+                            Line = net.Line,
+                            Column = net.Column,
+                            Length = net.Length
+                        });
+                    }
+                }
+            }
         }
     }
 

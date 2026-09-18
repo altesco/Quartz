@@ -5,7 +5,7 @@ using Quartz.Core.Models;
 
 namespace Quartz.UI.ViewModels;
 
-public partial class LayerVM : File2D
+public class LayerVM : File2D
 {
     private readonly IBoardProcessingCoordinator _coordinator;
 

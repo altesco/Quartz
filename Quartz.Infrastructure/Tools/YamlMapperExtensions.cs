@@ -319,7 +319,8 @@ public static class YamlMapperExtensions
                                 (style as PadStyle)?.DrillDiameter?.ToMillimeters(dto.Unit ?? defaultUnit) ?? 0
             },
             PinDto => new Pin(),
-            ViaDto viaDto => MapVia(viaDto, style as ViaStyle, netsMap, layersMap, defaultUnit, errors),
+            ViaDto viaDto => MapVia(viaDto, style as ViaStyle, netsMap, layersMap, defaultUnit,
+                errors),
             _ => null
         };
 
@@ -387,29 +388,45 @@ public static class YamlMapperExtensions
         var drill = viaDto.DrillDiameter?.ToMillimeters(viaUnit) ??
                     viaStyle?.DrillDiameter?.ToMillimeters(viaUnit) ?? 0;
 
-        var fromLayerName = !string.IsNullOrWhiteSpace(viaDto.From) ? viaDto.From : viaStyle?.From ?? string.Empty;
-        var toLayerName = !string.IsNullOrWhiteSpace(viaDto.To) ? viaDto.To : viaStyle?.To ?? string.Empty;
+        var fromName = !string.IsNullOrWhiteSpace(viaDto.From) ? viaDto.From : viaStyle?.From ?? string.Empty;
+        var toName = !string.IsNullOrWhiteSpace(viaDto.To) ? viaDto.To : viaStyle?.To ?? string.Empty;
 
-        LayerModel? fromLayer = null;
-        if (string.IsNullOrWhiteSpace(fromLayerName))
+        if (string.IsNullOrWhiteSpace(fromName))
         {
             errors.AddError("Не указан начальный слой (from) для Via", viaDto.Line, viaDto.Column, viaDto.Length);
         }
-        else if (layersMap == null || !layersMap.TryGetValue(fromLayerName, out fromLayer))
-        {
-            errors.AddError($"Слой '{fromLayerName}' не найден на плате для Via", viaDto.Line, viaDto.Column,
-                viaDto.Length);
-        }
 
-        LayerModel? toLayer = null;
-        if (string.IsNullOrWhiteSpace(toLayerName))
+        if (string.IsNullOrWhiteSpace(toName))
         {
             errors.AddError("Не указан конечный слой (to) для Via", viaDto.Line, viaDto.Column, viaDto.Length);
         }
-        else if (layersMap == null || !layersMap.TryGetValue(toLayerName, out toLayer))
+
+        var targetLayers = new List<LayerModel>();
+
+        if (layersMap != null)
         {
-            errors.AddError($"Слой '{toLayerName}' не найден на плате для Via", viaDto.Line, viaDto.Column,
-                viaDto.Length);
+            bool hasFrom = layersMap.TryGetValue(fromName, out var fromLayer);
+            bool hasTo = layersMap.TryGetValue(toName, out var toLayer);
+
+            if (!hasFrom && !string.IsNullOrWhiteSpace(fromName))
+                errors.AddError($"Слой '{fromName}' не найден на плате", viaDto.Line, viaDto.Column, viaDto.Length);
+
+            if (!hasTo && !string.IsNullOrWhiteSpace(toName))
+                errors.AddError($"Слой '{toName}' не найден на плате", viaDto.Line, viaDto.Column, viaDto.Length);
+
+            if (hasFrom && hasTo)
+            {
+                int start = Math.Min(fromLayer!.Index, toLayer!.Index);
+                int end = Math.Max(fromLayer.Index, toLayer.Index);
+
+                foreach (var layer in layersMap.Values)
+                {
+                    if (layer.Index >= start && layer.Index <= end)
+                    {
+                        targetLayers.Add(layer);
+                    }
+                }
+            }
         }
 
         return errors.Count > 0
@@ -417,8 +434,7 @@ public static class YamlMapperExtensions
             : new Via
             {
                 Net = netDomain!,
-                From = fromLayer!,
-                To = toLayer!,
+                Layers = targetLayers,
                 DrillDiameter = drill
             };
     }
@@ -658,7 +674,7 @@ public static class YamlMapperExtensions
             return null;
         }
 
-        if (comp.Footprint == null || !comp.Footprint.Pads.TryGetValue(dto.Pad, out var pad))
+        if (!comp.Footprint.Pads.TryGetValue(dto.Pad, out var pad))
         {
             errors.AddError($"{targetLabel}: контакт '{dto.Pad}' не найден на компоненте '{dto.Comp}'", dto.Line,
                 dto.Column, dto.Length);
@@ -682,10 +698,9 @@ public static class YamlMapperExtensions
     {
         var localErrors = new List<EditorError>();
 
-        // Обязательное свойство name у слоя
         if (string.IsNullOrWhiteSpace(dto.Name))
         {
-            localErrors.AddError("Отсутствует обязательное свойство name у слоя");//dto.Line, dto.Column, dto.Length);
+            localErrors.AddError("Отсутствует обязательное свойство name у слоя");
         }
 
         var stylesMap = dto.Styles.MapToDictionary(
@@ -717,7 +732,6 @@ public static class YamlMapperExtensions
             localErrors
         );
 
-        // Проверка дубликатов компонентов между слоями
         foreach (var kvp in parsedComponents)
         {
             if (!componentsMap.TryAdd(kvp.Key, kvp.Value))
@@ -806,7 +820,6 @@ public static class YamlMapperExtensions
         var localErrors = new List<EditorError>();
         stylesMap ??= new Dictionary<string, Style>();
 
-        // Проверка существования файлов слоев из секции layers:
         if (dto.Layers != null)
         {
             foreach (var layerPath in dto.Layers)
@@ -816,7 +829,7 @@ public static class YamlMapperExtensions
                 if (availableLayerPaths != null &&
                     !availableLayerPaths.Contains(layerPath, StringComparer.OrdinalIgnoreCase))
                 {
-                    localErrors.AddError($"Файл слоя '{layerPath}' не найден в проекте");//, dto.Line, dto.Column, dto.Length);
+                    localErrors.AddError($"Файл слоя '{layerPath}' не найден в проекте");
                 }
             }
         }
@@ -837,7 +850,8 @@ public static class YamlMapperExtensions
             "Vias",
             (viaDto, errs) =>
             {
-                var v = viaDto.ToDomain(stylesMap, LengthUnit.Mm, out var e, netsMap, layersMap) as Via;
+                var v =
+                    viaDto.ToDomain(stylesMap, LengthUnit.Mm, out var e, netsMap, layersMap) as Via;
                 errs.AddRange(e);
                 return v;
             },
