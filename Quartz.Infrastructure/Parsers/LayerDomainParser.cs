@@ -100,10 +100,10 @@ public class LayerDomainParser : ILayerDomainParser
 
         if (string.IsNullOrWhiteSpace(yamlText))
         {
-            return new LayerModel
-            {
-                Shape = new RectShape { Width = 600, Height = 800 }
-            };
+            return new LayerModel();
+            // {
+            //     Shape = new RectShape { Width = 600, Height = 800 }
+            // };
         }
 
         if (!ValidateTags(yamlText, errors))

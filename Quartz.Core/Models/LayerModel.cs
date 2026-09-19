@@ -10,7 +10,7 @@ public class LayerModel
 
     public LengthUnit Unit { get; set; } = LengthUnit.Mm;
 
-    public IReadOnlyDictionary<string, Component> Components { get; init; } = FrozenDictionary<string, Component>.Empty;
+    public IReadOnlyDictionary<string, Component> Components { get; set; } = FrozenDictionary<string, Component>.Empty;
 
     public List<Trace> Traces { get; set; } = [];
 

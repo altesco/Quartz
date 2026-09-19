@@ -5,7 +5,7 @@ public class Resistor : Component
     public string PowerRating { get; set; } = "0.125W"; 
 }
 
-public class Capacitor : Component // Исправил опечатку "capasitor" на правильное Capacitor
+public class Capacitor : Component 
 {
     public int VoltageMax { get; set; } = 16; // Макс. напряжение
     public bool IsPolar { get; set; } = false; // Полярный электролит или нет

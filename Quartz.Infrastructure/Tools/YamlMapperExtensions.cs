@@ -784,6 +784,9 @@ public static class YamlMapperExtensions
             localErrors
         );
 
+        layerModel.Components = parsedComponents;
+        layerModel.Traces = traces;
+
         if (dto.Shape != null)
         {
             var shapeDomain = dto.Shape.ToDomain(stylesMap, dto.Unit, out var shapeErrors);
