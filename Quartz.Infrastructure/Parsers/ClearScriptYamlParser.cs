@@ -27,37 +27,14 @@ public class ClearScriptYamlParser : IYamlParser, IDisposable
 
         _engine.Execute(File.ReadAllText(libPath));
 
+        var jsTagsArray = YamlTagRegistry.GetTagsAsJsArray();
+
+        _engine.Execute($@"
+            const supportedTags = new Set({jsTagsArray});
+            const emptyObjectTags = new Set({jsTagsArray});
+        ");
+
         _engine.Execute(@"
-            const supportedTags = new Set([
-                '!rect',
-                '!path',
-                '!resistor',
-                '!capacitor',
-                '!transistor',
-                '!diode',
-                '!inductor',
-                '!ic',
-                '!connector',
-                //'!trace',
-                '!line',
-                '!arc'
-            ]);
-
-            const emptyObjectTags = new Set([
-                '!rect',
-                '!path',
-                '!resistor',
-                '!capacitor',
-                '!transistor',
-                '!diode',
-                '!inductor',
-                '!ic',
-                '!connector',
-                //'!trace',
-                '!line',
-                '!arc'
-            ]);
-
             function positionFromOffset(text, offset) {
                 if (typeof offset !== 'number' || offset < 0) {
                     return {

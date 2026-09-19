@@ -15,17 +15,11 @@ public class DrawingGenerationService : IDrawingGenerationService
     {
         List<DrawingPrimitive> primitives = [];
 
-        if (model.Shape != null)
-        {
-            primitives.Add(GetShapePrimitive(model.Shape, new Point2D(0, 0), PrimitiveType.BoardOutline));
-        }
+        primitives.Add(GetShapePrimitive(model.Shape, new Point2D(0, 0), PrimitiveType.BoardOutline));
 
         foreach (var comp in model.Components.Values)
         {
-            if (comp.Shape != null)
-            {
-                primitives.Add(GetShapePrimitive(comp.Shape, comp.Point, PrimitiveType.ComponentOutline));
-            }
+            primitives.Add(GetShapePrimitive(comp.Shape, comp.Point, PrimitiveType.ComponentOutline));
 
             foreach (var pin in comp.Pins.Values)
             {
@@ -35,48 +29,48 @@ public class DrawingGenerationService : IDrawingGenerationService
                     PrimitiveType.Pin));
             }
 
-            if (comp.Footprint != null)
-            {
-                if (comp.Footprint.Shape != null)
-                {
-                    primitives.Add(GetShapePrimitive(comp.Footprint.Shape, comp.Point, PrimitiveType.Footprint));
-                }
+            primitives.Add(GetShapePrimitive(comp.Footprint.Shape, comp.Point, PrimitiveType.Footprint));
 
-                foreach (var pad in comp.Footprint.Pads.Values)
-                {
-                    primitives.Add(GetShapePrimitive(
-                        pad.Shape,
-                        new Point2D(pad.Point.X + comp.Point.X, pad.Point.Y + comp.Point.Y),
-                        PrimitiveType.Pad));
-                }
+            foreach (var pad in comp.Footprint.Pads.Values)
+            {
+                primitives.Add(GetShapePrimitive(
+                    pad.Shape,
+                    new Point2D(pad.Point.X + comp.Point.X, pad.Point.Y + comp.Point.Y),
+                    PrimitiveType.Pad));
             }
         }
 
         foreach (var trace in model.Traces)
         {
-            if (trace.From?.Pad == null || trace.From?.Comp == null ||
-                trace.To?.Pad == null || trace.To?.Comp == null)
-            {
-                continue;
-            }
-
             var polylinePrimitive = new PolylinePrimitive
             {
                 Type = PrimitiveType.Trace,
                 Thickness = (float)trace.Width
             };
 
-            var start = new Vector2
+            var start = new Vector2();
+            if (trace.From is PadEndpoint padEndpointFrom)
             {
-                X = (float)(trace.From.Pad.Point.X + trace.From.Comp.Point.X),
-                Y = (float)(trace.From.Pad.Point.Y + trace.From.Comp.Point.Y)
-            };
+                start.X = (float)(padEndpointFrom.Pad.Point.X + padEndpointFrom.Comp.Point.X);
+                start.Y = (float)(padEndpointFrom.Pad.Point.Y + padEndpointFrom.Comp.Point.Y);
+            }
+            else if (trace.From is ViaEndpoint viaEndpointFrom)
+            {
+                start.X = (float)viaEndpointFrom.Via.Point.X;
+                start.Y = (float)viaEndpointFrom.Via.Point.Y;
+            }
 
-            var end = new Vector2
+            var end = new Vector2();
+            if (trace.To is PadEndpoint padEndpointTo)
             {
-                X = (float)(trace.To.Pad.Point.X + trace.To.Comp.Point.X),
-                Y = (float)(trace.To.Pad.Point.Y + trace.To.Comp.Point.Y)
-            };
+                end.X = (float)(padEndpointTo.Pad.Point.X + padEndpointTo.Comp.Point.X);
+                end.Y = (float)(padEndpointTo.Pad.Point.Y + padEndpointTo.Comp.Point.Y);
+            }
+            else if (trace.To is ViaEndpoint viaEndpointTo)
+            {
+                end.X = (float)viaEndpointTo.Via.Point.X;
+                end.Y = (float)viaEndpointTo.Via.Point.Y;
+            }
 
             polylinePrimitive.Points.Add(start);
 
@@ -134,9 +128,6 @@ public class DrawingGenerationService : IDrawingGenerationService
                 var nodeA = net.Nodes[i];
                 var nodeB = net.Nodes[i + 1];
 
-                if (nodeA?.Comp == null || nodeA.Pad == null || nodeB?.Comp == null || nodeB.Pad == null)
-                    continue;
-
                 if (!compToLayer.TryGetValue(nodeA.Comp.Name, out var layerA) ||
                     !compToLayer.TryGetValue(nodeB.Comp.Name, out var layerB))
                     continue;
@@ -175,7 +166,7 @@ public class DrawingGenerationService : IDrawingGenerationService
         return primitives;
     }
 
-    private static Vector2 GetGlobalPadPoint(Endpoint node)
+    private static Vector2 GetGlobalPadPoint(PadEndpoint node)
     {
         return new Vector2(
             (float)(node.Pad.Point.X + node.Comp.Point.X),
@@ -197,10 +188,7 @@ public class DrawingGenerationService : IDrawingGenerationService
 
         foreach (var via in board.Vias.Values)
         {
-            if (via.Shape != null)
-            {
-                primitives.Add(GetShapePrimitive(via.Shape, via.Point, PrimitiveType.Via));
-            }
+            primitives.Add(GetShapePrimitive(via.Shape, via.Point, PrimitiveType.Via));
         }
 
         return primitives;

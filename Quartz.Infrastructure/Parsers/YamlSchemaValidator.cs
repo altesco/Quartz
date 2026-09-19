@@ -9,23 +9,6 @@ namespace Quartz.Infrastructure.Parsers;
 
 public class YamlSchemaValidator : IYamlSchemaValidator
 {
-    // 1. Реестр соответствия тегов YAML и C#-типов моделей
-    private static readonly Dictionary<string, Type> TagToTypeMap = new(StringComparer.OrdinalIgnoreCase)
-    {
-        { "!rect", typeof(RectShapeDto) },
-        { "!path", typeof(PathShapeDto) },
-        { "!resistor", typeof(ResistorDto) },
-        { "!capacitor", typeof(CapacitorDto) },
-        { "!transistor", typeof(TransistorDto) },
-        { "!diode", typeof(DiodeDto) },
-        { "!inductor", typeof(InductorDto) },
-        { "!ic", typeof(IntegratedCircuitDto) },
-        { "!connector", typeof(ConnectorDto) },
-        //{ "!trace", typeof(TraceDto) },
-        { "!line", typeof(LineSegmentDto) },
-        { "!arc", typeof(ArcSegmentDto) }
-    };
-
     // Кеш свойств C#-типов, чтобы не дёргать рефлексию на каждый символ
     private static readonly Dictionary<Type, HashSet<string>> PropertyCache = new();
 
@@ -114,7 +97,7 @@ public class YamlSchemaValidator : IYamlSchemaValidator
             {
                 var tag = node.Tag.Value;
 
-                if (TagToTypeMap.TryGetValue(tag, out var mappedType))
+                if (YamlTagRegistry.TagToTypeMap.TryGetValue(tag, out var mappedType))
                 {
                     targetType = mappedType;
                 }
@@ -146,7 +129,7 @@ public class YamlSchemaValidator : IYamlSchemaValidator
                 {
                     var tag = item.Tag.Value;
 
-                    if (TagToTypeMap.TryGetValue(tag, out var mappedType))
+                    if (YamlTagRegistry.TagToTypeMap.TryGetValue(tag, out var mappedType))
                     {
                         targetType = mappedType;
                     }
@@ -167,7 +150,45 @@ public class YamlSchemaValidator : IYamlSchemaValidator
                 {
                     ValidateNodeAgainstType(itemMapping, targetType, errors);
                 }
+                else if (item is YamlScalarNode && targetType != null)
+                {
+                    // Пропускаем скаляры в списках (например, список строк для чего-нибудь)
+                    if (targetType == typeof(string) || targetType.IsPrimitive || targetType.IsEnum)
+                    {
+                        continue;
+                    }
+                }
             }
+        }
+        // 4. Проверка на скаляр (Вариант БЕЗ тегов для Via и базовых типов)
+        else if (node is YamlScalarNode scalarNode)
+        {
+            // Вот сюда вставляешь! И обязательно проверяешь IsEmpty!
+            if (!scalarNode.Tag.IsEmpty && scalarNode.Tag.Value == "!via")
+            {
+                return;
+            }
+
+            if (expectedType == typeof(PadEndpointDto))
+            {
+                // Это просто строка (имя via), валидатор пропускает, так как схема верна
+                return;
+            }
+
+            // Также пропускаем обычные свойства-примитивы, чтобы валидатор не ругался на числа и строки
+            if (expectedType == typeof(string) || expectedType.IsPrimitive || expectedType.IsEnum)
+            {
+                return;
+            }
+
+            errors.Add(new EditorError
+            {
+                Message =
+                    $"Ожидался объект типа '{expectedType.Name}', но получено простое значение '{scalarNode.Value}'",
+                Line = scalarNode.Start.Line,
+                Column = scalarNode.Start.Column,
+                Length = scalarNode.Value?.Length ?? 1
+            });
         }
     }
 

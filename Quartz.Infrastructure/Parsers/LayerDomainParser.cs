@@ -1,6 +1,7 @@
 using Quartz.Core.Interfaces;
 using Quartz.Core.Models;
 using Quartz.Core.Models.BoardEntities;
+using Quartz.Infrastructure.Converters;
 using Quartz.Infrastructure.Dtos;
 using Quartz.Infrastructure.Tools;
 using YamlDotNet.Core;
@@ -15,32 +16,24 @@ public class LayerDomainParser : ILayerDomainParser
 {
     private readonly IDeserializer _deserializer;
 
-    private static readonly HashSet<string> SupportedTags = new(StringComparer.Ordinal)
-    {
-        "!rect", "!path", "!resistor", "!capacitor", "!transistor",
-        "!diode", "!inductor", "!ic", "!connector", "!line", "!arc"
-    };
-
     public LayerDomainParser()
     {
-        _deserializer = new DeserializerBuilder()
+        var builder = new DeserializerBuilder()
             .WithNamingConvention(HyphenatedNamingConvention.Instance)
             .IgnoreUnmatchedProperties()
             .WithNodeDeserializer(
                 inner => new PositionNodeDeserializer(inner),
-                s => s.InsteadOf<ObjectNodeDeserializer>())
-            .WithTagMapping("!resistor", typeof(ResistorDto))
-            .WithTagMapping("!capacitor", typeof(CapacitorDto))
-            .WithTagMapping("!transistor", typeof(TransistorDto))
-            .WithTagMapping("!diode", typeof(DiodeDto))
-            .WithTagMapping("!inductor", typeof(InductorDto))
-            .WithTagMapping("!ic", typeof(IntegratedCircuitDto))
-            .WithTagMapping("!connector", typeof(ConnectorDto))
-            .WithTagMapping("!rect", typeof(RectShapeDto))
-            .WithTagMapping("!path", typeof(PathShapeDto))
-            .WithTagMapping("!line", typeof(LineSegmentDto))
-            .WithTagMapping("!arc", typeof(ArcSegmentDto))
-            .Build();
+                s => s.InsteadOf<ObjectNodeDeserializer>());
+
+        // Автоматически регистрируем все теги из реестра
+        foreach (var tagMapping in YamlTagRegistry.TagToTypeMap)
+        {
+            builder.WithTagMapping(tagMapping.Key, tagMapping.Value);
+        }
+
+        builder.WithTypeConverter(new ViaEndpointConverter());
+
+        _deserializer = builder.Build();
     }
 
     public Dictionary<string, Component> ParseComponents(string yamlText, out List<EditorError> errors)
@@ -180,7 +173,7 @@ public class LayerDomainParser : ILayerDomainParser
 
                 string tag = node.Tag.Value ?? string.Empty;
 
-                if (string.IsNullOrWhiteSpace(tag) || SupportedTags.Contains(tag))
+                if (string.IsNullOrWhiteSpace(tag) || YamlTagRegistry.SupportedTags.Contains(tag))
                     continue;
 
                 errors.Add(new EditorError
@@ -267,14 +260,7 @@ public class LayerDomainParser : ILayerDomainParser
 
     private static string? GetEmptyObjectTag(string trimmedLine)
     {
-        string[] tags =
-        [
-            "!rect", "!path",
-            "!line", "!arc",
-            "!resistor", "!capacitor", "!transistor", "!diode", "!inductor", "!ic", "!connector"
-        ];
-
-        foreach (string tag in tags)
+        foreach (var tag in YamlTagRegistry.SupportedTags)
         {
             if (!trimmedLine.EndsWith(tag, StringComparison.Ordinal))
                 continue;

@@ -10,7 +10,7 @@ public abstract class Component : BoardEntity//BoardDimensionalObject
 
     public Point2D Point { get; set; } = new();
 
-    public Shape Shape { get; set; } = new RectShape();
+    public Shape Shape { get; set; } = new RectShape { Width = 55, Height = 30 };
 
     public double Angle { get; set; } = 0.0; // Угол поворота (0, 90, 180, 270)
 

@@ -153,7 +153,6 @@ public static class YamlMapperExtensions
         out List<EditorError> errors)
     {
         errors = [];
-
         var style = TryGetStyle(typeof(ComponentStyle), dto, stylesMap, out var styleErrors) as ComponentStyle;
         if (styleErrors.Count > 0)
         {
@@ -180,8 +179,7 @@ public static class YamlMapperExtensions
             _ => null
         };
 
-        if (comp == null)
-            return null;
+        if (comp == null) return null;
 
         comp.Line = dto.Line;
         comp.Column = dto.Column;
@@ -193,19 +191,17 @@ public static class YamlMapperExtensions
         comp.Angle = dto.Angle ?? style?.Angle ?? 0;
         comp.NameSettings = dto.NameSettings?.ToDomain() ?? style?.NameSettings?.ToDomain() ?? new NameSettings();
 
+        // Задаем Shape ТОЛЬКО если он был явно указан
         var shapeDto = dto.Shape ?? style?.Shape;
         if (shapeDto != null)
         {
             var shapeDomain = shapeDto.ToDomain(stylesMap, compUnit, out var shapeErrors);
-            if (shapeDomain == null)
-                errors.AddRange(shapeErrors);
-            else
+            if (shapeDomain != null)
                 comp.Shape = shapeDomain;
+            else
+                errors.AddRange(shapeErrors);
         }
-        else
-        {
-            comp.Shape = new RectShape { Height = 20, Width = 35 };
-        }
+        // Если null — comp.Shape сохраняет дефолт, заложенный в классе компонента!
 
         if (string.IsNullOrWhiteSpace(dto.Name))
         {
@@ -250,7 +246,6 @@ public static class YamlMapperExtensions
         out List<EditorError> errors)
     {
         errors = [];
-
         var style = TryGetStyle(typeof(FootprintStyle), dto, stylesMap, out var styleErrors) as FootprintStyle;
         if (styleErrors.Count > 0)
         {
@@ -265,14 +260,10 @@ public static class YamlMapperExtensions
         if (shapeDto != null)
         {
             var shapeDomain = shapeDto.ToDomain(stylesMap, footprintUnit, out var shapeErrors);
-            if (shapeDomain == null)
-                errors.AddRange(shapeErrors);
-            else
+            if (shapeDomain != null)
                 footprintDomain.Shape = shapeDomain;
-        }
-        else
-        {
-            footprintDomain.Shape = new RectShape { Height = 20, Width = 35 };
+            else
+                errors.AddRange(shapeErrors);
         }
 
         footprintDomain.Pads = (dto.Pads ?? style?.Pads).MapToDictionary(
@@ -301,7 +292,6 @@ public static class YamlMapperExtensions
         IReadOnlyDictionary<string, LayerModel>? layersMap = null)
     {
         errors = [];
-
         var style = TryGetStyle(typeof(ConnectionStyle), dto, stylesMap, out var styleErrors) as ConnectionStyle;
         if (styleErrors.Count > 0)
         {
@@ -319,13 +309,11 @@ public static class YamlMapperExtensions
                                 (style as PadStyle)?.DrillDiameter?.ToMillimeters(dto.Unit ?? defaultUnit) ?? 0
             },
             PinDto => new Pin(),
-            ViaDto viaDto => MapVia(viaDto, style as ViaStyle, netsMap, layersMap, defaultUnit,
-                errors),
+            ViaDto viaDto => MapVia(viaDto, style as ViaStyle, netsMap, layersMap, defaultUnit, errors),
             _ => null
         };
 
-        if (connection is null)
-            return null;
+        if (connection is null) return null;
 
         var connectionUnit = dto.Unit ?? style?.Unit ?? defaultUnit;
         connection.Line = dto.Line;
@@ -339,23 +327,15 @@ public static class YamlMapperExtensions
         }
         else connection.Name = dto.Name;
 
+        // Больше НИКАКИХ ошибок про обязательность shape!
         var shapeDto = dto.Shape ?? style?.Shape;
-        if (shapeDto == null)
-        {
-            if (connection is not Via)
-            {
-                errors.AddError("Отсутствует обязательное свойство shape", connection.Line, connection.Column,
-                    connection.Length);
-            }
-        }
-        else
+        if (shapeDto != null)
         {
             var shapeDomain = shapeDto.ToDomain(stylesMap, connectionUnit, out var shapeErrors);
-
-            if (shapeDomain == null)
-                errors.AddRange(shapeErrors);
-            else
+            if (shapeDomain != null)
                 connection.Shape = shapeDomain;
+            else
+                errors.AddRange(shapeErrors);
         }
 
         return errors.Count > 0 ? null : connection;
@@ -582,13 +562,104 @@ public static class YamlMapperExtensions
 
     // --- TRACES & ENDPOINTS ---
 
+    public static EndpointBase? ToDomain(
+        this EndpointBaseDto? dto,
+        string targetLabel,
+        BoardEntityDto host,
+        IReadOnlyDictionary<string, Component> componentsMap,
+        IReadOnlyDictionary<string, Via>? viasMap,
+        out List<EditorError> errors)
+    {
+        errors = [];
+
+        if (dto == null)
+        {
+            errors.AddError($"{targetLabel}: не указана точка подключения", host.Line, host.Column, host.Length);
+            return null;
+        }
+
+        switch (dto)
+        {
+            case PadEndpointDto padDto:
+            {
+                if (padDto.Comp == null)
+                {
+                    errors.AddError($"{targetLabel}: не указан компонент в точке подключения", padDto.Line,
+                        padDto.Column, padDto.Length);
+                    return null;
+                }
+
+                if (!componentsMap.TryGetValue(padDto.Comp, out var comp))
+                {
+                    errors.AddError(
+                        $"{targetLabel}: компонент '{padDto.Comp}' не найден или недоступен в текущем контексте",
+                        padDto.Line, padDto.Column, padDto.Length);
+                    return null;
+                }
+
+                if (string.IsNullOrWhiteSpace(padDto.Pad))
+                {
+                    errors.AddError($"{targetLabel}: не указан контакт в точке подключения", padDto.Line, padDto.Column,
+                        padDto.Length);
+                    return null;
+                }
+
+                if (!comp.Footprint.Pads.TryGetValue(padDto.Pad, out var pad))
+                {
+                    errors.AddError($"{targetLabel}: контакт '{padDto.Pad}' не найден на компоненте '{padDto.Comp}'",
+                        padDto.Line, padDto.Column, padDto.Length);
+                    return null;
+                }
+
+                return new PadEndpoint
+                {
+                    Comp = comp,
+                    Pad = pad
+                };
+            }
+
+            case ViaEndpointDto viaDto:
+            {
+                // Замени 'ViaName' на то свойство, которое ты реально используешь в ViaEndpointDto для хранения имени отверстия, если оно отличается.
+                var viaName = viaDto.Name ?? string.Empty;
+
+                if (string.IsNullOrWhiteSpace(viaName))
+                {
+                    errors.AddError($"{targetLabel}: не указано имя переходного отверстия (via)", viaDto.Line,
+                        viaDto.Column, viaDto.Length);
+                    return null;
+                }
+
+                if (viasMap == null)
+                {
+                    return new ViaEndpoint();
+                }
+
+                if (!viasMap.TryGetValue(viaName, out var via))
+                {
+                    errors.AddError($"{targetLabel}: переходное отверстие '{viaName}' не найдено на плате", viaDto.Line,
+                        viaDto.Column, viaDto.Length);
+                    return null;
+                }
+
+                return new ViaEndpoint { Via = via };
+            }
+
+            default:
+                errors.AddError($"{targetLabel}: неизвестный тип точки подключения '{dto.GetType().Name}'", dto.Line,
+                    dto.Column, dto.Length);
+                return null;
+        }
+    }
+
     public static Trace? ToDomain(
         this TraceDto dto,
-        Dictionary<string, Component> componentsMap,
+        IReadOnlyDictionary<string, Component> componentsMap,
         IReadOnlyDictionary<string, Style> stylesMap,
         IReadOnlyDictionary<string, Net> netsMap,
         LengthUnit layerUnit,
-        out List<EditorError> errors)
+        out List<EditorError> errors,
+        IReadOnlyDictionary<string, Via>? viasMap = null)
     {
         errors = [];
 
@@ -599,8 +670,8 @@ public static class YamlMapperExtensions
             return null;
         }
 
-        var from = dto.From.ToDomain("Трасса (From)", dto, componentsMap, out var fromErrors);
-        var to = dto.To.ToDomain("Трасса (To)", dto, componentsMap, out var toErrors);
+        var from = dto.From.ToDomain("Трасса (From)", dto, componentsMap, viasMap, out var fromErrors);
+        var to = dto.To.ToDomain("Трасса (To)", dto, componentsMap, viasMap, out var toErrors);
 
         var traceUnit = dto.Unit ?? style?.Unit ?? layerUnit;
 
@@ -608,13 +679,13 @@ public static class YamlMapperExtensions
         errors.AddRange(toErrors);
 
         Net netDomain = new();
-        if (string.IsNullOrWhiteSpace(dto.NetName))
+        if (string.IsNullOrWhiteSpace(dto.Net))
         {
             errors.AddError("Не указано значение свойства net", dto.Line, dto.Column, dto.Length);
         }
-        else if (!netsMap.TryGetValue(dto.NetName, out var net))
+        else if (!netsMap.TryGetValue(dto.Net, out var net))
         {
-            errors.AddError($"Сеть '{dto.NetName}' не найдена на плате", dto.Line, dto.Column, dto.Length);
+            errors.AddError($"Сеть '{dto.Net}' не найдена на плате", dto.Line, dto.Column, dto.Length);
         }
         else netDomain = net;
 
@@ -639,62 +710,14 @@ public static class YamlMapperExtensions
             };
     }
 
-    public static Endpoint? ToDomain(
-        this EndpointDto? dto,
-        string targetLabel,
-        BoardEntityDto host,
-        Dictionary<string, Component> componentsMap,
-        out List<EditorError> errors)
-    {
-        errors = [];
-
-        if (dto == null)
-        {
-            errors.AddError($"{targetLabel}: не указана точка подключения", host.Line, host.Column, host.Length);
-            return null;
-        }
-
-        if (dto.Comp == null)
-        {
-            errors.AddError($"{targetLabel}: не указан компонент в точке подключения", dto.Line, dto.Column,
-                dto.Length);
-            return null;
-        }
-
-        if (!componentsMap.TryGetValue(dto.Comp, out var comp))
-        {
-            errors.AddError($"{targetLabel}: компонент '{dto.Comp}' не найден на плате", dto.Line, dto.Column,
-                dto.Length);
-            return null;
-        }
-
-        if (string.IsNullOrWhiteSpace(dto.Pad))
-        {
-            errors.AddError($"{targetLabel}: не указан контакт в точке подключения", dto.Line, dto.Column, dto.Length);
-            return null;
-        }
-
-        if (!comp.Footprint.Pads.TryGetValue(dto.Pad, out var pad))
-        {
-            errors.AddError($"{targetLabel}: контакт '{dto.Pad}' не найден на компоненте '{dto.Comp}'", dto.Line,
-                dto.Column, dto.Length);
-            return null;
-        }
-
-        return new Endpoint
-        {
-            Comp = comp,
-            Pad = pad
-        };
-    }
-
     // --- HIGH-LEVEL BOARD & LAYER MODELS ---
 
     public static LayerModel ToDomain(
         this LayerModelDto dto,
         Dictionary<string, Component> componentsMap,
         IReadOnlyDictionary<string, Net> netsMap,
-        out List<EditorError> errors)
+        out List<EditorError> errors,
+        IReadOnlyDictionary<string, Via>? viasMap = null)
     {
         var localErrors = new List<EditorError>();
 
@@ -702,6 +725,12 @@ public static class YamlMapperExtensions
         {
             localErrors.AddError("Отсутствует обязательное свойство name у слоя");
         }
+
+        var layerModel = new LayerModel
+        {
+            Name = dto.Name ?? string.Empty,
+            Unit = dto.Unit
+        };
 
         var stylesMap = dto.Styles.MapToDictionary(
             "Styles",
@@ -747,32 +776,25 @@ public static class YamlMapperExtensions
             "Traces",
             (traceDto, errs) =>
             {
-                var t = traceDto.ToDomain(componentsMap, stylesMap, netsMap, dto.Unit, out var e);
+                // Передаем локальные компоненты слоя (parsedComponents) и viasMap
+                var t = traceDto.ToDomain(parsedComponents, stylesMap, netsMap, dto.Unit, out var e, viasMap);
                 errs.AddRange(e);
                 return t;
             },
             localErrors
         );
 
-        Shape shape = new RectShape { Width = 600d.ToMillimeters(dto.Unit), Height = 800d.ToMillimeters(dto.Unit) };
         if (dto.Shape != null)
         {
             var shapeDomain = dto.Shape.ToDomain(stylesMap, dto.Unit, out var shapeErrors);
-            if (shapeDomain == null)
+            if (shapeDomain != null)
+                layerModel.Shape = shapeDomain;
+            else
                 localErrors.AddRange(shapeErrors);
-            else shape = shapeDomain;
         }
 
         errors = localErrors;
-
-        return new LayerModel
-        {
-            Name = dto.Name ?? string.Empty,
-            Shape = shape,
-            Unit = dto.Unit,
-            Components = parsedComponents,
-            Traces = traces
-        };
+        return layerModel;
     }
 
     public static Net? ToDomain(
@@ -792,9 +814,21 @@ public static class YamlMapperExtensions
             "Nodes",
             (nodeDto, errs) =>
             {
-                var n = nodeDto.ToDomain($"Net '{dto.Name}'", dto, componentsMap, out var e);
+                // Получаем базовый EndpointBase
+                var n = nodeDto.ToDomain($"Net '{dto.Name}'", dto, componentsMap, null, out var e);
                 errs.AddRange(e);
-                return n;
+
+                if (n == null) return null;
+
+                // Проверяем, что это именно контакт компонента, так как Net.Nodes принимает только PadEndpoint
+                if (n is not PadEndpoint pad)
+                {
+                    errs.AddError($"В сети '{dto.Name}' допускаются только подключения к контактам компонентов (Pad).",
+                        nodeDto?.Line ?? dto.Line, nodeDto?.Column ?? dto.Column, nodeDto?.Length ?? dto.Length);
+                    return null;
+                }
+
+                return pad;
             },
             errors
         );
@@ -802,7 +836,7 @@ public static class YamlMapperExtensions
         return new Net
         {
             Name = dto.Name,
-            Nodes = nodes,
+            Nodes = nodes, // Теперь здесь возвращается List<PadEndpoint>, как и просит твой класс
             Line = dto.Line,
             Column = dto.Column,
             Length = dto.Length

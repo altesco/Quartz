@@ -2,7 +2,7 @@ using YamlDotNet.Serialization;
 
 namespace Quartz.Infrastructure.Dtos;
 
-public record EndpointDto : BoardEntityDto
+public record PadEndpointDto : EndpointBaseDto
 {
     [YamlMember(Alias = "comp")]
     public string? Comp { get; init; }

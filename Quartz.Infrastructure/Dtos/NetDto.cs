@@ -8,5 +8,5 @@ public record NetDto : BoardEntityDto
     public string? Name { get; init; }
 
     [YamlMember(Alias = "nodes")] 
-    public List<EndpointDto?>? Nodes { get; init; } = [];
+    public List<PadEndpointDto?>? Nodes { get; init; } = [];
 }

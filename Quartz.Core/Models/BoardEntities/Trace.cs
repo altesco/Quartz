@@ -2,12 +2,12 @@ using Quartz.Core.Enums;
 
 namespace Quartz.Core.Models.BoardEntities;
 
-public class Trace : BoardEntity //BoardDimensionalObject
+public class Trace : BoardEntity
 {
     public Net Net { get; set; } = new(); // Имя цепи (GND, VCC)
 
-    public Endpoint From { get; set; } // "(R1.1).1"
-    public Endpoint To { get; set; } // "(U1).12"
+    public EndpointBase From { get; set; } = new ViaEndpoint();
+    public EndpointBase To { get; set; } = new ViaEndpoint();
 
     public double Width { get; set; } = 0.25; // Ширина дорожки
     public CoordinateMode CoordMode { get; set; } = CoordinateMode.Relative;
