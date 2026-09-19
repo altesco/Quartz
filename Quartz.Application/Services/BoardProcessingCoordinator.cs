@@ -302,18 +302,22 @@ public class BoardProcessingCoordinator : IBoardProcessingCoordinator
     {
         var allErrors = new List<EditorError>();
 
+        // 1. Проверяем синтаксис
         var syntaxErrors = _syntaxParser.ValidateSyntax(text);
         if (syntaxErrors.Count > 0)
             return new ProcessResult<LayerModel>(syntaxErrors.ToList(), [], null);
 
+        // 2. Проверяем схему и типы (вот тут отлавливается width: "")
         var schemaErrors = _schemaValidator.ValidateSchemaAndTags(text, typeof(LayerModel));
         allErrors.AddRange(schemaErrors);
         if (schemaErrors.Count > 0)
             return new ProcessResult<LayerModel>(allErrors, [], null);
 
+        // 3. Если схема валидна — безопасно парсим в доменную модель!
         var layerModel = _layerDomainParser.Parse(text, components, nets, out var domainErrors);
         allErrors.AddRange(domainErrors);
 
+        // 4. Проверяем бизнес-логику
         if (layerModel != null)
         {
             var logicErrors = _logicValidator.ValidateLayer(layerModel);
