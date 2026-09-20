@@ -23,31 +23,35 @@ public class LayerVM : File2D
     {
         Errors.Clear();
 
-        // Если есть проект платы — запускаем пересборку ВСЕГО проекта через MainVM!
-        // Это обновит BoardModel и уберет ложные ошибки про несуществующие компоненты.
+        // Если есть проект платы — запускаем пересборку ВСЕГО проекта через MainVM
         if (MainVM.CurrentBoard != null)
         {
-            MainVM.ReloadCurrentProject(); // Метод в MainVM, который вызывает ProcessProject
+            MainVM.ReloadCurrentProject();
             return;
         }
 
-        // Если проект не открыт (одиночный файл) — используем быструю локальную обработку:
+        // Одиночный файл
         var result = _coordinator.Process(text, null);
 
+        // Ошибки заносим ВСЕГДА, чтобы редактор подсвечивал строки
         foreach (var err in result.Errors)
         {
             Errors.Add(err);
         }
 
+        // ЕСЛИ ЕСТЬ ОШИБКИ — ЗАМИРАЕМ! Ни модель, ни холст НЕ ТРОГАЕМ!
+        if (result.Errors.Count > 0)
+        {
+            return;
+        }
+
+        // Обновляем только если ошибок нет вообще!
         if (result.Model is { } model)
         {
             LayerModel = model;
         }
 
-        // Обновляем холст ТОЛЬКО если есть что рисовать!
-        // При ошибках result.Primitives будет пустым, и благодаря этому условию
-        // на экране останется последний успешный чертеж!
-        if (Canvas != null && result.Primitives.Count > 0)
+        if (Canvas != null)
         {
             Canvas.RenderData = result.Primitives;
         }

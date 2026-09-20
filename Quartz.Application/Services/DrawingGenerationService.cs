@@ -107,11 +107,41 @@ public class DrawingGenerationService : IDrawingGenerationService
 
         if (board != null)
         {
+            // Отрисовка трасс сетей
             primitives.AddRange(GenerateLayerNetPrimitives(model, board));
+
+            // ВОТ ОНО! Рисуем вии только на тех слоях, через которые они реально проходят
+            foreach (var via in board.Vias.Values)
+            {
+                if (via.Layers.Any(l => string.Equals(l.Name, model.Name, StringComparison.OrdinalIgnoreCase)))
+                {
+                    primitives.Add(GetShapePrimitive(via.Shape, via.Point, PrimitiveType.Via));
+                }
+            }
         }
 
         return primitives;
     }
+
+    public List<DrawingPrimitive> GenerateBoardOverlayPrimitives(BoardModel board)
+    {
+        // Переходные отверстия теперь отрисовываются послойно в GenerateLayerPrimitives.
+        // Оставляем этот метод возвращать пустой список для совместимости с твоим координатором,
+        // или если потом захочешь рисовать тут глобальные маркеры.
+        return [];
+    }
+
+    // public List<DrawingPrimitive> GenerateBoardOverlayPrimitives(BoardModel board)
+    // {
+    //     List<DrawingPrimitive> primitives = [];
+
+    //     foreach (var via in board.Vias.Values)
+    //     {
+    //         primitives.Add(GetShapePrimitive(via.Shape, via.Point, PrimitiveType.Via));
+    //     }
+
+    //     return primitives;
+    // }
 
     private List<DrawingPrimitive> GenerateLayerNetPrimitives(LayerModel currentLayer, BoardModel board)
     {
@@ -119,6 +149,7 @@ public class DrawingGenerationService : IDrawingGenerationService
 
         var compToLayer = _compToLayerCache.GetValue(board, b => b.Layers
             .SelectMany(l => l.Value.Components.Keys.Select(c => (Comp: c, Layer: l.Key)))
+            .DistinctBy(x => x.Comp, StringComparer.OrdinalIgnoreCase) // <--- ВОТ ЗДЕСЬ ФИЛЬТРУЕМ ДУБЛИКАТЫ!
             .ToDictionary(x => x.Comp, x => x.Layer, StringComparer.OrdinalIgnoreCase));
 
         foreach (var net in board.Nets.Values)
@@ -153,7 +184,9 @@ public class DrawingGenerationService : IDrawingGenerationService
                 }
                 else if (isCurrentB)
                 {
-                    var key = new NodeViaKey(nodeB.Comp.Name, nodeB.Pad.Name, layerB, layerA);
+                    // Берем ключ от nodeA, а не от nodeB, чтобы выйти из ТОЙ ЖЕ САМОЙ вии!
+                    // Мы запрашиваем переход с layerA на layerB для компонента nodeA.
+                    var key = new NodeViaKey(nodeA.Comp.Name, nodeA.Pad.Name, layerA, layerB);
                     if (board.NearestVias.TryGetValue(key, out var nearestVia))
                     {
                         var viaPos = new Vector2((float)nearestVia.Point.X, (float)nearestVia.Point.Y);
@@ -180,18 +213,6 @@ public class DrawingGenerationService : IDrawingGenerationService
         poly.Points.Add(start);
         poly.Points.Add(end);
         return poly;
-    }
-
-    public List<DrawingPrimitive> GenerateBoardOverlayPrimitives(BoardModel board)
-    {
-        List<DrawingPrimitive> primitives = [];
-
-        foreach (var via in board.Vias.Values)
-        {
-            primitives.Add(GetShapePrimitive(via.Shape, via.Point, PrimitiveType.Via));
-        }
-
-        return primitives;
     }
 
     private static DrawingPrimitive GetShapePrimitive(Shape? shape, Point2D startPoint, PrimitiveType type)

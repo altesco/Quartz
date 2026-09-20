@@ -104,11 +104,13 @@ public class BoardProcessingCoordinator : IBoardProcessingCoordinator
         }
 
         // 2. ЭТАП 2: Валидация файла .brd
-        boardErrors.AddRange(_syntaxParser.ValidateSyntax(boardText));
+        var syntaxErrors = _syntaxParser.ValidateSyntax(boardText);
+        boardErrors.AddRange(syntaxErrors);
         boardErrors.AddRange(_schemaValidator.ValidateSchemaAndTags(boardText, typeof(BoardModel)));
 
         BoardModel? boardModel = null;
-        if (boardErrors.Count == 0)
+        // Блокируем парсинг ТОЛЬКО если сломан сам синтаксис YAML, а не если забыли обязательное поле!
+        if (syntaxErrors.Count == 0)
         {
             boardModel = _boardDomainParser.Parse(
                 boardText,
@@ -139,7 +141,7 @@ public class BoardProcessingCoordinator : IBoardProcessingCoordinator
                 }
             }
 
-            var layerResult = ProcessLayerInternal(layerText, otherLayersComponents, netsForLayer);
+            var layerResult = ProcessLayerInternal(layerText, otherLayersComponents, netsForLayer, boardModel?.Vias);
 
             if (extraLayerErrors.TryGetValue(path, out var extraErrs) && extraErrs.Count > 0)
             {
@@ -147,7 +149,7 @@ public class BoardProcessingCoordinator : IBoardProcessingCoordinator
                 layerResult = new ProcessResult<LayerModel>(combinedErrors, layerResult.Primitives, layerResult.Model);
             }
 
-            if (layerResult.Model != null && indicesByLayerName.TryGetValue(layerResult.Model.Name, out var idx))
+            if (layerResult.Model?.Name != null && indicesByLayerName.TryGetValue(layerResult.Model.Name, out var idx))
             {
                 layerResult.Model.Index = idx;
             }
@@ -187,7 +189,7 @@ public class BoardProcessingCoordinator : IBoardProcessingCoordinator
         // 4. ЭТАП 4: Генерация оверлея (Vias)
         var boardPrimitives = boardModel != null
             ? _drawingGenerator.GenerateBoardOverlayPrimitives(boardModel)
-            : new List<DrawingPrimitive>();
+            : [];
 
         return (new ProcessResult<BoardModel>(boardErrors, boardPrimitives, boardModel), layerResults);
     }
@@ -232,9 +234,6 @@ public class BoardProcessingCoordinator : IBoardProcessingCoordinator
                 var nodeA = net.Nodes[i];
                 var nodeB = net.Nodes[i + 1];
 
-                if (nodeA?.Comp == null || nodeA.Pad == null || nodeB?.Comp == null || nodeB.Pad == null)
-                    continue;
-
                 if (!compToLayer.TryGetValue(nodeA.Comp.Name, out var layerA) ||
                     !compToLayer.TryGetValue(nodeB.Comp.Name, out var layerB))
                     continue;
@@ -274,7 +273,7 @@ public class BoardProcessingCoordinator : IBoardProcessingCoordinator
 
         foreach (var via in netVias)
         {
-            if (via.Layers != null && via.Layers.Count > 0)
+            if (via.Layers.Count > 0)
             {
                 bool hasA = via.Layers.Any(l => string.Equals(l.Name, layerA, StringComparison.OrdinalIgnoreCase));
                 bool hasB = via.Layers.Any(l => string.Equals(l.Name, layerB, StringComparison.OrdinalIgnoreCase));
@@ -298,7 +297,8 @@ public class BoardProcessingCoordinator : IBoardProcessingCoordinator
     private ProcessResult<LayerModel> ProcessLayerInternal(
         string text,
         Dictionary<string, Component> components,
-        IReadOnlyDictionary<string, Net> nets)
+        IReadOnlyDictionary<string, Net> nets,
+        IReadOnlyDictionary<string, Via>? allVias) // <-- Сюда приходит глобальный словарь Vias
     {
         var allErrors = new List<EditorError>();
 
@@ -307,14 +307,33 @@ public class BoardProcessingCoordinator : IBoardProcessingCoordinator
         if (syntaxErrors.Count > 0)
             return new ProcessResult<LayerModel>(syntaxErrors.ToList(), [], null);
 
-        // 2. Проверяем схему и типы (вот тут отлавливается width: "")
+        // 2. Проверяем схему и типы
         var schemaErrors = _schemaValidator.ValidateSchemaAndTags(text, typeof(LayerModel));
         allErrors.AddRange(schemaErrors);
-        if (schemaErrors.Count > 0)
-            return new ProcessResult<LayerModel>(allErrors, [], null);
 
-        // 3. Если схема валидна — безопасно парсим в доменную модель!
-        var layerModel = _layerDomainParser.Parse(text, components, nets, out var domainErrors);
+        // --- ВЫТЯГИВАЕМ ИМЯ СЛОЯ И ФИЛЬТРУЕМ VIA ---
+
+        string? currentLayerName = _layerDomainParser.ExtractLayerName(text);
+
+        // Создаем локальный словарь Via за O(V) один раз на весь слой
+        var layerVias = new Dictionary<string, Via>(StringComparer.OrdinalIgnoreCase);
+
+        if (allVias != null && !string.IsNullOrWhiteSpace(currentLayerName))
+        {
+            foreach (var (viaName, via) in allVias)
+            {
+                // Проверяем, пронизывает ли отверстие текущий слой.
+                if (via.Layers.Any(l => string.Equals(l.Name, currentLayerName, StringComparison.OrdinalIgnoreCase)))
+                {
+                    layerVias.Add(viaName, via);
+                }
+            }
+        }
+
+        // -------------------------------------------
+
+        // 3. ПЕРЕДАЕМ ОТФИЛЬТРОВАННЫЙ layerVias В ПАРСЕР:
+        var layerModel = _layerDomainParser.Parse(text, components, nets, layerVias, out var domainErrors);
         allErrors.AddRange(domainErrors);
 
         // 4. Проверяем бизнес-логику
@@ -336,7 +355,8 @@ public class BoardProcessingCoordinator : IBoardProcessingCoordinator
         var components = boardModel?.GetAllComponents() ??
                          new Dictionary<string, Component>(StringComparer.OrdinalIgnoreCase);
         var nets = boardModel?.Nets ?? new Dictionary<string, Net>(StringComparer.OrdinalIgnoreCase);
+        var vias = boardModel?.Vias ?? new Dictionary<string, Via>(StringComparer.OrdinalIgnoreCase);
 
-        return ProcessLayerInternal(text, components, nets);
+        return ProcessLayerInternal(text, components, nets, vias);
     }
 }

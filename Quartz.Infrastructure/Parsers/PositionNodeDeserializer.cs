@@ -34,6 +34,9 @@ public sealed class PositionNodeDeserializer : INodeDeserializer
         catch
         {
             // При неполном YAML во время редактирования YamlDotNet может бросить исключение.
+            // Возвращаем true, чтобы парсер не падал в истерику:
+            value = expectedType.IsValueType ? Activator.CreateInstance(expectedType) : null;
+            return true;
         }
 
         return false;

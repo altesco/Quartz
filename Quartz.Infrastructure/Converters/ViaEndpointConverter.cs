@@ -11,12 +11,59 @@ public class ViaEndpointConverter : IYamlTypeConverter
 
     public object ReadYaml(IParser parser, Type type, ObjectDeserializer rootDeserializer)
     {
-        var scalar = parser.Consume<Scalar>();
-
-        return new ViaEndpointDto
+        // 1. Обычный вариант: !via VIA_1
+        if (parser.TryConsume<Scalar>(out var scalar))
         {
-            Name = scalar.Value
-        };
+            return new ViaEndpointDto
+            {
+                Name = scalar.Value
+            };
+        }
+
+        // 2. Если пользователь написал !via в форме маппинга
+        if (parser.Current is MappingStart)
+        {
+            string? name = null;
+            parser.Consume<MappingStart>();
+
+            while (!parser.Accept<MappingEnd>(out _))
+            {
+                if (parser.TryConsume<Scalar>(out var keyScalar))
+                {
+                    if (string.Equals(keyScalar.Value, "name", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (parser.TryConsume<Scalar>(out var valueScalar))
+                        {
+                            name = valueScalar.Value;
+                        }
+                        else
+                        {
+                            rootDeserializer(typeof(object));
+                        }
+                    }
+                    else
+                    {
+                        // Пропускаем значение неизвестного ключа целиком
+                        rootDeserializer(typeof(object));
+                    }
+                }
+                else
+                {
+                    parser.MoveNext();
+                }
+            }
+
+            parser.Consume<MappingEnd>();
+
+            return new ViaEndpointDto
+            {
+                Name = name
+            };
+        }
+
+        // 3. Если там недописанный ввод — просто сдвигаем парсер дальше через MoveNext()
+        parser.MoveNext();
+        return new ViaEndpointDto();
     }
 
     public void WriteYaml(IEmitter emitter, object? value, Type type, ObjectSerializer serializer)

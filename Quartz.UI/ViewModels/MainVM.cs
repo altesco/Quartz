@@ -436,7 +436,8 @@ public partial class MainVM : ObservableObject
     /// </summary>
     public void NotifyLayersBoardUpdated(
         List<DrawingPrimitive> boardOverlayPrimitives,
-        IDictionary<string, ProcessResult<LayerModel>> layerResults)
+        IDictionary<string, ProcessResult<LayerModel>> layerResults,
+        bool hasAnyErrors)
     {
         foreach (var layerVM in GetOpenLayersRecursive(RootNode))
         {
@@ -444,23 +445,28 @@ public partial class MainVM : ObservableObject
 
             if (layerResults.TryGetValue(relPath, out var layerResult))
             {
+                // 1. Ошибки слоя обновляем ВСЕГДА, чтобы редактор кода закрашивал проблемные строки
                 layerVM.Errors.Clear();
                 foreach (var err in layerResult.Errors)
                 {
                     layerVM.Errors.Add(err);
                 }
 
-                if (layerResult.Model != null)
+                // 2. А вот модель и рендер-данные меняем ТОЛЬКО если во всем проекте НЕТ ошибок!
+                if (!hasAnyErrors)
                 {
-                    layerVM.LayerModel = layerResult.Model;
-                }
+                    if (layerResult.Model != null)
+                    {
+                        layerVM.LayerModel = layerResult.Model;
+                    }
 
-                if (layerVM.Canvas != null)
-                {
-                    // Склеиваем примитивы текущего слоя и оверлей платы (Vias + Nets)
-                    layerVM.Canvas.RenderData = layerResult.Primitives
-                        .Concat(boardOverlayPrimitives)
-                        .ToList();
+                    if (layerVM.Canvas != null)
+                    {
+                        // Склеиваем примитивы текущего слоя и оверлей платы (Vias + Nets)
+                        layerVM.Canvas.RenderData = layerResult.Primitives
+                            .Concat(boardOverlayPrimitives)
+                            .ToList();
+                    }
                 }
             }
         }

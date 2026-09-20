@@ -9,6 +9,7 @@ public interface ILayerDomainParser
         string yamlText, 
         Dictionary<string, Component> componentsMap, 
         IReadOnlyDictionary<string, Net> netsMap, 
+        IReadOnlyDictionary<string, Via>? viasMap,
         out List<EditorError> errors);
 
     Dictionary<string, Component> ParseComponents(string yamlText, out List<EditorError> errors);

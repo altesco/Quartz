@@ -1,4 +1,5 @@
 using System.IO;
+using System.Linq;
 using Quartz.Application.Interfaces;
 using Quartz.Core.Enums;
 using Quartz.Core.Models;
@@ -35,17 +36,21 @@ public class BoardVM : EditorVM
             Errors.Add(err);
         }
 
-        BoardModel = boardResult.Model;
+        // Проверяем ошибки во всем проекте
+        bool hasAnyErrors = boardResult.Errors.Count > 0 ||
+                            layerResults.Values.Any(r => r.Errors.Count > 0);
 
-        // Пробрасываем примитивы платы (List<DrawingPrimitive>) 
-        // и словарь результатов слоев (Dictionary<string, ProcessResult<LayerModel>>)
-        MainVM.NotifyLayersBoardUpdated(boardResult.Primitives, layerResults);
+        if (!hasAnyErrors)
+        {
+            BoardModel = boardResult.Model;
+        }
+
+        // Передаем примитивы, результаты слоев И флаг наличия ошибок!
+        MainVM.NotifyLayersBoardUpdated(boardResult.Primitives, layerResults, hasAnyErrors);
     }
 
     public void ProcessBoardProject()
     {
-        // Если документ открыт в редакторе — берем его Text. 
-        // Если нет — читаем свежий текст прямо с диска!
         string text = !string.IsNullOrWhiteSpace(Document?.Text)
             ? Document.Text
             : File.ReadAllText(FilePath);

@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using Quartz.Core.Enums;
 using YamlDotNet.Serialization;
 
@@ -5,6 +6,7 @@ namespace Quartz.Infrastructure.Dtos;
 
 public abstract record ComponentDto : BoardDimensionalObjectDto
 {
+    [Required]
     [YamlMember(Alias = "name")] 
     public string? Name { get; init; } 
 
@@ -20,6 +22,7 @@ public abstract record ComponentDto : BoardDimensionalObjectDto
     [YamlMember(Alias = "angle")] 
     public double? Angle { get; init; }
 
+    [Required]
     [YamlMember(Alias = "footprint")] 
     public FootprintDto? Footprint { get; init; }
 

@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using Quartz.Core.Enums;
 using Quartz.Infrastructure.Dtos.Styles;
 using YamlDotNet.Serialization;
@@ -21,6 +22,7 @@ public record LayerModelDto
     [YamlMember(Alias = "styles")]
     public List<Style?>? Styles { get; set; } = [];
 
+    [Required]
     [YamlMember(Alias = "name")]
     public string? Name { get; init; }
 }
