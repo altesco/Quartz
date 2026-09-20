@@ -1,7 +1,6 @@
 using Quartz.Core.Interfaces;
 using Quartz.Core.Models;
 using Quartz.Core.Models.BoardEntities;
-using Quartz.Infrastructure.Converters;
 using Quartz.Infrastructure.Dtos;
 using Quartz.Infrastructure.Tools;
 using YamlDotNet.Core;
@@ -29,8 +28,6 @@ public class LayerDomainParser : ILayerDomainParser
         {
             builder.WithTagMapping(tagMapping.Key, tagMapping.Value);
         }
-
-        builder.WithTypeConverter(new ViaEndpointConverter());
 
         _deserializer = builder.Build();
     }

@@ -603,7 +603,7 @@ public static class YamlMapperExtensions
 
                 return null;
             }
-            
+
             case ViaEndpointDto viaDto:
             {
                 if (viaDto.Name != null)
@@ -661,7 +661,14 @@ public static class YamlMapperExtensions
             if (!netsMap.TryGetValue(dto.Net, out var net))
                 errors.AddError($"Сеть '{dto.Net}' не найдена на плате", dto.Line, dto.Column, dto.Length);
             else
+            {
                 netDomain = net;
+
+                if (from is ViaEndpoint vFrom && net.Name != vFrom.Via.Net.Name)
+                    errors.AddError($"Переходное отверстие '{vFrom.Via.Name}' принадлежит сети '{vFrom.Via.Net.Name}'", dto.Line, dto.Column, dto.Length);
+                if (to is ViaEndpoint vTo && net.Name != vTo.Via.Net.Name)
+                    errors.AddError($"Переходное отверстие '{vTo.Via.Name}' принадлежит сети '{vTo.Via.Net.Name}'", dto.Line, dto.Column, dto.Length);
+            }
         }
 
         if (dto.Width <= 0)
