@@ -39,21 +39,15 @@ public class LayerVM : File2D
             Errors.Add(err);
         }
 
-        // ЕСЛИ ЕСТЬ ОШИБКИ — ЗАМИРАЕМ! Ни модель, ни холст НЕ ТРОГАЕМ!
-        // if (result.Errors.Count > 0)
-        // {
-        //     return;
-        // }
-
         // Обновляем модель и канвас в любом случае, если парсер хоть что-то вернул!
-        if (result.Model != null)
-        {
-            LayerModel = result.Model;
-        }
+        if (result.Model == null) 
+            return;
+        
+        LayerModel = result.Model;
 
-        if (Canvas != null)
-        {
-            Canvas.RenderData = result.Primitives;
-        }
+        if (Canvas == null)
+            return;
+            
+        Canvas.RenderData = result.Primitives;
     }
 }

@@ -443,37 +443,37 @@ public partial class MainVM : ObservableObject
         {
             string relPath = GetRelativePath(layerVM.FilePath);
 
-            if (layerResults.TryGetValue(relPath, out var layerResult))
+            if (!layerResults.TryGetValue(relPath, out var layerResult)) 
+                continue;
+            
+            // 1. Ошибки слоя обновляем ВСЕГДА, чтобы редактор кода закрашивал проблемные строки
+            layerVM.Errors.Clear();
+            foreach (var err in layerResult.Errors)
             {
-                // 1. Ошибки слоя обновляем ВСЕГДА, чтобы редактор кода закрашивал проблемные строки
-                layerVM.Errors.Clear();
-                foreach (var err in layerResult.Errors)
-                {
-                    layerVM.Errors.Add(err);
-                }
-
-                // 2. Модель обновляем, если координатор смог собрать хоть что-то
-                if (layerResult.Model != null)
-                {
-                    layerVM.LayerModel = layerResult.Model;
-                }
-
-                // 3. Холст обновляем ВСЕГДА! Отрисуем всё, что получилось распарсить
-                if (layerVM.Canvas != null)
-                {
-                    var layerPrimitives = layerResult.Primitives;
-                    var overlayPrimitives = boardOverlayPrimitives ?? [];
-
-                    // Склеиваем примитивы текущего слоя и оверлей платы (Vias + Nets)
-                    layerVM.Canvas.RenderData = layerPrimitives
-                        .Concat(overlayPrimitives)
-                        .ToList();
-                }
+                layerVM.Errors.Add(err);
             }
+
+            // 2. Модель обновляем, если координатор смог собрать хоть что-то
+            if (layerResult.Model == null) 
+                continue;
+                
+            layerVM.LayerModel = layerResult.Model;
+
+            // 3. Холст обновляем ВСЕГДА! Отрисуем всё, что получилось распарсить
+            if (layerVM.Canvas == null) 
+                continue;
+                    
+            var layerPrimitives = layerResult.Primitives;
+            var overlayPrimitives = boardOverlayPrimitives ?? [];
+
+            // Склеиваем примитивы текущего слоя и оверлей платы (Vias + Nets)
+            layerVM.Canvas.RenderData = layerPrimitives
+                .Concat(overlayPrimitives)
+                .ToList();
         }
     }
 
-// --- ВСПОМОГАТЕЛЬНЫЕ ПРИВАТНЫЕ МЕТОДЫ ---
+    // --- ВСПОМОГАТЕЛЬНЫЕ ПРИВАТНЫЕ МЕТОДЫ ---
 
     private IEnumerable<LayerVM> GetOpenLayersRecursive(LayoutRootVM node)
     {

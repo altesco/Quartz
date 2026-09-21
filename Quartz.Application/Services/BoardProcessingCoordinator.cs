@@ -345,7 +345,7 @@ public class BoardProcessingCoordinator : IBoardProcessingCoordinator
 
         var primitives = layerModel != null
             ? _drawingGenerator.GenerateLayerPrimitives(layerModel)
-            : new List<DrawingPrimitive>();
+            : [];
 
         return new ProcessResult<LayerModel>(allErrors, primitives, layerModel);
     }

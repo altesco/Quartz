@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Timers;
 using Avalonia.Threading;
@@ -7,7 +6,6 @@ using AvaloniaEdit.Document;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Quartz.Application.Interfaces;
 using Quartz.Core.Models;
-using Quartz.Core.Models.BoardEntities;
 
 namespace Quartz.UI.ViewModels;
 
