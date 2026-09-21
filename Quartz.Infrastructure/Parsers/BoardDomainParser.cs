@@ -15,27 +15,29 @@ public class BoardDomainParser : IBoardDomainParser
 {
     private readonly IDeserializer _deserializer;
 
-    private static readonly HashSet<string> SupportedTags = new(StringComparer.Ordinal)
-    {
-        "!rect",
-        "!path",
-        "!line",
-        "!arc"
-    };
+    // private static readonly HashSet<string> SupportedTags = new(StringComparer.Ordinal)
+    // {
+    //     "!rect",
+    //     "!path",
+    //     "!line",
+    //     "!arc"
+    // };
 
     public BoardDomainParser()
     {
-        _deserializer = new DeserializerBuilder()
+        var builder = new DeserializerBuilder()
             .WithNamingConvention(HyphenatedNamingConvention.Instance)
             .IgnoreUnmatchedProperties()
             .WithNodeDeserializer(
                 inner => new PositionNodeDeserializer(inner),
-                s => s.InsteadOf<ObjectNodeDeserializer>())
-            .WithTagMapping("!rect", typeof(RectShapeDto))
-            .WithTagMapping("!path", typeof(PathShapeDto))
-            .WithTagMapping("!line", typeof(LineSegmentDto))
-            .WithTagMapping("!arc", typeof(ArcSegmentDto))
-            .Build();
+                s => s.InsteadOf<ObjectNodeDeserializer>());
+            
+        foreach (var tagMapping in YamlTagRegistry.BoardTagsMap)
+        {
+            builder.WithTagMapping(tagMapping.Key, tagMapping.Value);
+        }
+
+        _deserializer = builder.Build();
     }
 
     public List<string> ExtractLayerPaths(string yamlText)
@@ -177,7 +179,7 @@ public class BoardDomainParser : IBoardDomainParser
 
                 string tag = node.Tag.Value ?? string.Empty;
 
-                if (string.IsNullOrWhiteSpace(tag) || SupportedTags.Contains(tag))
+                if (string.IsNullOrWhiteSpace(tag) || YamlTagRegistry.BoardTags.Contains(tag))
                     continue;
 
                 errors.Add(new EditorError
@@ -264,13 +266,7 @@ public class BoardDomainParser : IBoardDomainParser
 
     private static string? GetEmptyObjectTag(string trimmedLine)
     {
-        string[] tags =
-        [
-            "!rect", "!path",
-            "!line", "!arc"
-        ];
-
-        foreach (string tag in tags)
+        foreach (string tag in YamlTagRegistry.BoardTags)
         {
             if (!trimmedLine.EndsWith(tag, StringComparison.Ordinal))
                 continue;

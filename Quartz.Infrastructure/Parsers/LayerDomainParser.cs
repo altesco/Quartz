@@ -24,7 +24,7 @@ public class LayerDomainParser : ILayerDomainParser
                 inner => new PositionNodeDeserializer(inner),
                 s => s.InsteadOf<ObjectNodeDeserializer>());
 
-        foreach (var tagMapping in YamlTagRegistry.TagToTypeMap)
+        foreach (var tagMapping in YamlTagRegistry.LayerTagsMap)
         {
             builder.WithTagMapping(tagMapping.Key, tagMapping.Value);
         }
@@ -163,7 +163,7 @@ public class LayerDomainParser : ILayerDomainParser
 
                 string tag = node.Tag.Value ?? string.Empty;
 
-                if (string.IsNullOrWhiteSpace(tag) || YamlTagRegistry.SupportedTags.Contains(tag))
+                if (string.IsNullOrWhiteSpace(tag) || YamlTagRegistry.LayerTags.Contains(tag))
                     continue;
 
                 errors.Add(new EditorError
@@ -250,7 +250,7 @@ public class LayerDomainParser : ILayerDomainParser
 
     private static string? GetEmptyObjectTag(string trimmedLine)
     {
-        foreach (var tag in YamlTagRegistry.SupportedTags)
+        foreach (var tag in YamlTagRegistry.LayerTags)
         {
             if (!trimmedLine.EndsWith(tag, StringComparison.Ordinal))
                 continue;

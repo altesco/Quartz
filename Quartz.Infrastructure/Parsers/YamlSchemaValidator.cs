@@ -235,7 +235,7 @@ public class YamlSchemaValidator : IYamlSchemaValidator
             if (!node.Tag.IsEmpty)
             {
                 var tag = node.Tag.Value;
-                if (YamlTagRegistry.TagToTypeMap.TryGetValue(tag, out var mappedType))
+                if (YamlTagRegistry.LayerTagsMap.TryGetValue(tag, out var mappedType))
                 {
                     targetType = mappedType;
                 }
@@ -276,7 +276,7 @@ public class YamlSchemaValidator : IYamlSchemaValidator
                 if (!item.Tag.IsEmpty)
                 {
                     var tag = item.Tag.Value;
-                    if (YamlTagRegistry.TagToTypeMap.TryGetValue(tag, out var mappedType))
+                    if (YamlTagRegistry.LayerTagsMap.TryGetValue(tag, out var mappedType))
                     {
                         targetType = mappedType;
                     }
@@ -325,7 +325,7 @@ public class YamlSchemaValidator : IYamlSchemaValidator
         {
             var targetType = expectedType;
             if (!scalarNode.Tag.IsEmpty &&
-                YamlTagRegistry.TagToTypeMap.TryGetValue(scalarNode.Tag.Value, out var mappedType))
+                YamlTagRegistry.LayerTagsMap.TryGetValue(scalarNode.Tag.Value, out var mappedType))
             {
                 targetType = mappedType;
             }

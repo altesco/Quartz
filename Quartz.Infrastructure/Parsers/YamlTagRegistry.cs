@@ -6,7 +6,7 @@ namespace Quartz.Infrastructure.Parsers;
 public static class YamlTagRegistry
 {
     // Тот самый словарь, который раньше лежал в YamlSchemaValidator
-    public static readonly Dictionary<string, Type> TagToTypeMap = new(StringComparer.OrdinalIgnoreCase)
+    public static readonly Dictionary<string, Type> LayerTagsMap = new(StringComparer.OrdinalIgnoreCase)
     {
         { "!rect", typeof(RectShapeDto) },
         { "!path", typeof(PathShapeDto) },
@@ -40,13 +40,23 @@ public static class YamlTagRegistry
         { "!trace-style", typeof(TraceStyle) }
     };
 
-    // Кешированный список поддерживаемых тегов (для LayerDomainParser)
-    public static readonly HashSet<string> SupportedTags = new(TagToTypeMap.Keys, StringComparer.OrdinalIgnoreCase);
-
-    // для ClearScript: отдаем теги в виде JS-массива
-    public static string GetTagsAsJsArray()
+    public static readonly Dictionary<string, Type> BoardTagsMap = new(StringComparer.OrdinalIgnoreCase)
     {
-        var tags = string.Join(",\n                ", SupportedTags.Select(t => $"'{t}'"));
-        return $"[\n                {tags}\n            ]";
-    }
+        { "!rect", typeof(RectShapeDto) },
+        { "!path", typeof(PathShapeDto) },
+        { "!line", typeof(LineSegmentDto) },
+        { "!arc", typeof(ArcSegmentDto) },
+        { "!via", typeof(ViaEndpointDto) },
+
+        // стили плат
+        { "!via-style", typeof(ViaStyle) },
+        { "!name-settings-style", typeof(NameSettingsStyle) },
+        { "!path-style", typeof(PathShapeStyle) },
+        { "!rect-style", typeof(RectShapeStyle) }
+    };
+
+    // Кешированный список поддерживаемых тегов (для LayerDomainParser)
+    public static readonly HashSet<string> LayerTags = new(LayerTagsMap.Keys, StringComparer.OrdinalIgnoreCase);
+
+    public static readonly HashSet<string> BoardTags = new(BoardTagsMap.Keys, StringComparer.OrdinalIgnoreCase);
 }
