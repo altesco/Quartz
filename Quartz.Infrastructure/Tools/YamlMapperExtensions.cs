@@ -136,7 +136,7 @@ public static class YamlMapperExtensions
         {
             errors.AddError($"Стиль '{dto.Style}' не найден в секции styles", dto.Line, dto.Column, dto.Length);
         }
-        else if (baseStyle.GetType() != styleType)
+        else if (!styleType.IsInstanceOfType(baseStyle))
         {
             errors.AddError($"Стиль '{dto.Style}' не предназначен для типа '{dto.GetType()}' (ожидался '{styleType}')",
                 dto.Line, dto.Column, dto.Length);
@@ -204,16 +204,15 @@ public static class YamlMapperExtensions
         }
 
         List<EditorError> footprintErrors = [];
-        var footprintDomain = dto.Footprint?.ToDomain(stylesMap, compUnit, layerUnit, out footprintErrors) ??
-                              style?.Footprint?.ToDomain(stylesMap, compUnit, layerUnit, out footprintErrors);
+        var footprintDomain = dto.Footprint?.ToDomain(stylesMap, compUnit, layerUnit, out footprintErrors);
 
         if (footprintErrors.Count > 0)
         {
             errors.AddRange(footprintErrors);
         }
-        else
+        else if (footprintDomain != null)
         {
-            comp.Footprint = footprintDomain!;
+            comp.Footprint = footprintDomain;
         }
 
         comp.Pins = (dto.Pins ?? style?.Pins).MapToDictionary(

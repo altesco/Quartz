@@ -1,4 +1,5 @@
 using Quartz.Infrastructure.Dtos;
+using Quartz.Infrastructure.Dtos.Styles;
 
 namespace Quartz.Infrastructure.Parsers;
 
@@ -19,7 +20,24 @@ public static class YamlTagRegistry
         { "!line", typeof(LineSegmentDto) },
         { "!arc", typeof(ArcSegmentDto) },
         { "!via", typeof(ViaEndpointDto) },
-        { "!pad", typeof(PadEndpointDto) }
+        { "!pad", typeof(PadEndpointDto) },
+
+        // стили
+        { "!resistor-style", typeof(ResistorStyle) },
+        { "!capacitor-style", typeof(CapacitorStyle) },
+        { "!transistor-style", typeof(TransistorStyle) },
+        { "!diode-style", typeof(DiodeStyle) },
+        { "!inductor-style", typeof(InductorStyle) },
+        { "!ic-style", typeof(IntegratedCircuitStyle) },
+        { "!connector-style", typeof(ConnectorStyle) },
+        { "!pad-style", typeof(PadStyle) },
+        { "!pin-style", typeof(PinStyle) },
+        { "!via-style", typeof(ViaStyle) },
+        { "!footprint-style", typeof(FootprintStyle) },
+        { "!name-settings-style", typeof(NameSettingsStyle) }, 
+        { "!path-style", typeof(PathShapeStyle) },
+        { "!rect-style", typeof(RectShapeStyle) },
+        { "!trace-style", typeof(TraceStyle) }
     };
 
     // Кешированный список поддерживаемых тегов (для LayerDomainParser)

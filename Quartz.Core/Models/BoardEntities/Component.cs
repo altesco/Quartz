@@ -3,7 +3,7 @@ using Quartz.Core.Enums;
 
 namespace Quartz.Core.Models.BoardEntities;
 
-public abstract class Component : BoardEntity//BoardDimensionalObject
+public abstract class Component : BoardEntity
 {
     public string Name { get; set; } = ""; // Уникальное имя (R1, C10, U2)
     public double Value { get; set; } // Номинал (10k, 100nF, 5V)

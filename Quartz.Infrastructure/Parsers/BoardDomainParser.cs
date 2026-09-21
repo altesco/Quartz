@@ -99,10 +99,7 @@ public class BoardDomainParser : IBoardDomainParser
                 layersMap: layersMap,
                 availableLayerPaths: availableLayerPaths);
 
-            if (board != null)
-            {
-                ValidateInterlayerNetsVia(board, errors);
-            }
+            ValidateInterlayerNetsVia(board, errors);
 
             return board;
         }
@@ -139,9 +136,6 @@ public class BoardDomainParser : IBoardDomainParser
             {
                 var nodeA = net.Nodes[i];
                 var nodeB = net.Nodes[i + 1];
-
-                if (nodeA?.Comp == null || nodeB?.Comp == null)
-                    continue;
 
                 if (!compToLayer.TryGetValue(nodeA.Comp.Name, out var layerA) ||
                     !compToLayer.TryGetValue(nodeB.Comp.Name, out var layerB))

@@ -24,7 +24,7 @@ public class YamlSchemaValidator : IYamlSchemaValidator
     {
         targetType ??= typeof(LayerModelDto);
 
-        if (targetType != null && DomainToDtoMap.TryGetValue(targetType, out var dtoType))
+        if (DomainToDtoMap.TryGetValue(targetType, out var dtoType))
         {
             targetType = dtoType;
         }
