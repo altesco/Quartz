@@ -31,21 +31,23 @@ public class BoardVM : EditorVM
         var layerTexts = MainVM.GetAllLayerTexts();
         var (boardResult, layerResults) = _coordinator.ProcessProject(text, layerTexts);
 
+        // Ошибки заносим ВСЕГДА, чтобы UI их подсвечивал
         foreach (var err in boardResult.Errors)
         {
             Errors.Add(err);
         }
 
-        // Проверяем ошибки во всем проекте
-        bool hasAnyErrors = boardResult.Errors.Count > 0 ||
-                            layerResults.Values.Any(r => r.Errors.Count > 0);
-
-        if (!hasAnyErrors)
+        // Обновляем модель платы ВСЕГДА, если координатор смог ее собрать!
+        if (boardResult.Model != null)
         {
             BoardModel = boardResult.Model;
         }
 
-        // Передаем примитивы, результаты слоев И флаг наличия ошибок!
+        // Флаг нужен только для уведомления UI (например, показе иконки ошибки в статусе)
+        bool hasAnyErrors = boardResult.Errors.Count > 0 ||
+                            layerResults.Values.Any(r => r.Errors.Count > 0);
+
+        // Передаем примитивы и результаты далее — канвас отрисует всё, что получилось собрать!
         MainVM.NotifyLayersBoardUpdated(boardResult.Primitives, layerResults, hasAnyErrors);
     }
 

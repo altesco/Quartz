@@ -452,21 +452,22 @@ public partial class MainVM : ObservableObject
                     layerVM.Errors.Add(err);
                 }
 
-                // 2. А вот модель и рендер-данные меняем ТОЛЬКО если во всем проекте НЕТ ошибок!
-                if (!hasAnyErrors)
+                // 2. Модель обновляем, если координатор смог собрать хоть что-то
+                if (layerResult.Model != null)
                 {
-                    if (layerResult.Model != null)
-                    {
-                        layerVM.LayerModel = layerResult.Model;
-                    }
+                    layerVM.LayerModel = layerResult.Model;
+                }
 
-                    if (layerVM.Canvas != null)
-                    {
-                        // Склеиваем примитивы текущего слоя и оверлей платы (Vias + Nets)
-                        layerVM.Canvas.RenderData = layerResult.Primitives
-                            .Concat(boardOverlayPrimitives)
-                            .ToList();
-                    }
+                // 3. Холст обновляем ВСЕГДА! Отрисуем всё, что получилось распарсить
+                if (layerVM.Canvas != null)
+                {
+                    var layerPrimitives = layerResult.Primitives;
+                    var overlayPrimitives = boardOverlayPrimitives ?? [];
+
+                    // Склеиваем примитивы текущего слоя и оверлей платы (Vias + Nets)
+                    layerVM.Canvas.RenderData = layerPrimitives
+                        .Concat(overlayPrimitives)
+                        .ToList();
                 }
             }
         }

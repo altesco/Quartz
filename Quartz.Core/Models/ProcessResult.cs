@@ -16,4 +16,3 @@ public record ProcessResult<TModel>
 
     public TModel? Model { get; init; }
 }
-    

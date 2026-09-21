@@ -1,8 +1,8 @@
 namespace Quartz.Core.Models.BoardEntities;
 
-public abstract class Connection : BoardEntity //BoardDimensionalObject
+public abstract class Connection : BoardEntity
 {
-    public string Name { get; set; } = ""; // Например: "GND", "VCC", "1", "A"
+    public string Name { get; set; } = "";
 
     // Координата пина
     public Point2D Point { get; set; }

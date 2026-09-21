@@ -14,8 +14,6 @@ public class LayerModel
 
     public List<Trace> Traces { get; set; } = [];
 
-    public IReadOnlyDictionary<string, Via> Vias { get; init; } = FrozenDictionary<string, Via>.Empty;
-
     public string Name { get; set; } = "";
     public int Index { get; set; }
 }

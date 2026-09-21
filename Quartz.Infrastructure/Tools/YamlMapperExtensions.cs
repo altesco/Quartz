@@ -28,7 +28,7 @@ public static class YamlMapperExtensions
         this IList<TDto?>? dtos,
         string collectionName,
         Func<TDto, List<EditorError>, TDomain?> mapFunc,
-        Func<TDomain, string> nameSelector,
+        Func<TDomain, string?> nameSelector,
         List<EditorError> globalErrors) where TDto : class
     {
         var map = new Dictionary<string, TDomain>(StringComparer.OrdinalIgnoreCase);
@@ -185,7 +185,8 @@ public static class YamlMapperExtensions
         comp.Line = dto.Line;
         comp.Column = dto.Column;
         comp.Length = dto.Length;
-        comp.Name = dto.Name!;
+
+        if (dto.Name != null) comp.Name = dto.Name;
 
         var compUnit = dto.Unit ?? style?.Unit ?? layerUnit;
         comp.Value = dto.Value ?? style?.Value ?? 0;
@@ -312,7 +313,8 @@ public static class YamlMapperExtensions
         connection.Column = dto.Column;
         connection.Length = dto.Length;
         connection.Point = dto.Point.ToDomain(connectionUnit);
-        connection.Name = dto.Name!;
+
+        if (dto.Name != null) connection.Name = dto.Name;
 
         var shapeDto = dto.Shape ?? style?.Shape;
         if (shapeDto != null)
@@ -474,11 +476,12 @@ public static class YamlMapperExtensions
                     var lastDto = p.Segments.Last();
                     var lastDomain = segments.Last();
 
-                    if (Math.Abs(lastDomain.Point.X - start.X) > tolerance ||
-                        Math.Abs(lastDomain.Point.Y - start.Y) > tolerance)
+                    if (lastDto != null && 
+                        (Math.Abs(lastDomain.Point.X - start.X) > tolerance ||
+                        Math.Abs(lastDomain.Point.Y - start.Y) > tolerance))
                     {
                         errors.AddError("Координаты последнего сегмента должны совпадать с координатами start-point",
-                            lastDto!.Line, lastDto.Column, lastDto.Length);
+                            lastDto.Line, lastDto.Column, lastDto.Length);
                     }
                 }
 
@@ -706,14 +709,15 @@ public static class YamlMapperExtensions
 
         var layerModel = new LayerModel
         {
-            Name = dto.Name!,
             Unit = dto.Unit
         };
 
+        if (dto.Name != null) layerModel.Name = dto.Name;
+
         var stylesMap = dto.Styles.MapToDictionary(
             "Styles",
-            (styleDto, errs) => styleDto,
-            style => style.Name!,
+            (styleDto, _) => styleDto,
+            style => style.Name,
             localErrors
         );
 
@@ -767,7 +771,7 @@ public static class YamlMapperExtensions
         return layerModel;
     }
 
-    public static Net? ToDomain(
+    public static Net ToDomain(
         this NetDto dto,
         Dictionary<string, Component> componentsMap,
         out List<EditorError> errors)
@@ -786,7 +790,7 @@ public static class YamlMapperExtensions
                 if (n is not PadEndpoint pad)
                 {
                     errs.AddError($"В сети '{dto.Name}' допускаются только подключения к контактам компонентов (Pad).",
-                        nodeDto?.Line ?? dto.Line, nodeDto?.Column ?? dto.Column, nodeDto?.Length ?? dto.Length);
+                        nodeDto.Line, nodeDto.Column, nodeDto.Length);
                     return null;
                 }
 
@@ -795,14 +799,17 @@ public static class YamlMapperExtensions
             errors
         );
 
-        return new Net
+        var net = new Net
         {
-            Name = dto.Name!,
             Nodes = nodes,
             Line = dto.Line,
             Column = dto.Column,
             Length = dto.Length
         };
+
+        if (dto.Name != null) net.Name = dto.Name;
+
+        return net;
     }
 
     public static BoardModel ToDomain(
