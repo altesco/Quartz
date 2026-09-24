@@ -28,10 +28,9 @@ public class LayoutGrid : Grid
         base.OnPropertyChanged(change);
         if (change.Property == SourceProperty)
         {
-            var oldVM = change.OldValue as SplitContainerVM;
             var newVM = change.NewValue as SplitContainerVM;
 
-            if (oldVM != null) oldVM.Children.CollectionChanged -= OnChildrenChanged;
+            if (change.OldValue is SplitContainerVM oldVM) oldVM.Children.CollectionChanged -= OnChildrenChanged;
             if (newVM != null) newVM.Children.CollectionChanged += OnChildrenChanged;
 
             Rebuild();
@@ -127,7 +126,7 @@ public class LayoutGrid : Grid
                 var bottomVM = Source.Children[i + 1];
                 TrackDefinition(bottomDef, () => bottomVM.Size = bottomDef.Height.ToString());
 
-                Grid.SetRow(splitter, i);
+                SetRow(splitter, i);
             }
 
             Children.Add(splitter);
@@ -139,15 +138,27 @@ public class LayoutGrid : Grid
         UntrackDefinition(definition);
 
         IDisposable subscription;
+
+        // Переходим на классические события Avalonia, которым не нужны внешние NuGet-пакеты
         if (definition is ColumnDefinition columnDefinition)
         {
-            subscription = columnDefinition.GetObservable(ColumnDefinition.WidthProperty)
-                .Subscribe(_ => update());
+            columnDefinition.PropertyChanged += OnWidthChanged;
+            subscription = new CustomDisposable(() => columnDefinition.PropertyChanged -= OnWidthChanged);
+
+            void OnWidthChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
+            {
+                if (e.Property == ColumnDefinition.WidthProperty) update();
+            }
         }
         else if (definition is RowDefinition rowDefinition)
         {
-            subscription = rowDefinition.GetObservable(RowDefinition.HeightProperty)
-                .Subscribe(_ => update());
+            rowDefinition.PropertyChanged += OnHeightChanged;
+            subscription = new CustomDisposable(() => rowDefinition.PropertyChanged -= OnHeightChanged);
+
+            void OnHeightChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
+            {
+                if (e.Property == RowDefinition.HeightProperty) update();
+            }
         }
         else
         {
@@ -174,4 +185,13 @@ public class LayoutGrid : Grid
 
         _definitionSubscriptions.Clear();
     }
+
+
+    private class CustomDisposable : IDisposable
+    {
+        private readonly Action _dispose;
+        public CustomDisposable(Action dispose) => _dispose = dispose;
+        public void Dispose() => _dispose();
+    }
 }
+

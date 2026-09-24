@@ -26,12 +26,15 @@
       <PrivateAssets Condition="'$(Configuration)' != 'Debug'">All</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Avalonia.Xaml.Behaviors" Version="11.0.10" />
+    <!-- <PackageReference Include="Avalonia.Xaml.Interactions" Version="11.3.0.6" /> -->
+    <PackageReference Include="AvaloniaEdit.TextMate" Version="12.0.0" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageReference Include="Lucide.Avalonia" Version="0.2.15" />
     <PackageReference Include="Microsoft.ClearScript.V8.Native.linux-x64" Version="7.5.1" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.11" />
     <PackageReference Include="ShadUI" Version="0.2.4" />
     <PackageReference Include="SkiaSharp" Version="3.119.4" />
+    <PackageReference Include="TextMateSharp.Grammars" Version="2.0.4" />
     <PackageReference Include="Tmds.DBus.Protocol" Version="0.94.2" />
   </ItemGroup>
 

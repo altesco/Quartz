@@ -15,12 +15,13 @@ public abstract partial class EditorVM : FileVM
     private const int Delay = 300;
     private readonly Timer _timer;
 
-    [ObservableProperty] private TextDocument _document = new();
+    [ObservableProperty] private TextDocument? _document = new();
 
     public ObservableCollection<EditorError> Errors { get; } = [];
 
     [ObservableProperty] private double _scrollX;
     [ObservableProperty] private double _scrollY;
+    [ObservableProperty] private double _fontSize = 14;
 
     public EditorVM(MainVM mainVM, string filePath, DirectoryVM? parent, IBoardProcessingCoordinator coordinator)
         : base(mainVM, filePath, parent)
@@ -41,7 +42,9 @@ public abstract partial class EditorVM : FileVM
     partial void OnDocumentChanged(TextDocument? oldValue, TextDocument? newValue)
     {
         if (oldValue != null)
+        {
             oldValue.TextChanged -= DocumentOnTextChanged;
+        }
 
         if (newValue != null)
             newValue.TextChanged += DocumentOnTextChanged;

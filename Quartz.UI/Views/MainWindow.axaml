@@ -9,6 +9,7 @@
     xmlns:enums="using:Quartz.UI.Enums"
     xmlns:tools="using:Quartz.UI.Tools"
     xmlns:vm="using:Quartz.UI.ViewModels"
+    xmlns:beh="using:Quartz.UI.Behaviors"
     Title="Quartz.UI"
     d:DesignHeight="450"
     d:DesignWidth="800"
@@ -51,7 +52,7 @@
                     ItemsSource="{Binding Tabs}"
                     SelectedItem="{Binding SelectedTab}">
                     <TabControl.Styles>
-                        <FluentTheme /> 
+                        <FluentTheme />
                         <Style Selector="TabItem">
                             <Setter Property="MinHeight" Value="0" />
                             <Setter Property="Height" Value="34" />
@@ -165,7 +166,7 @@
                     </TabControl.Styles>
 
                     <Interaction.Behaviors>
-                        <RoutedEventTriggerBehavior 
+                        <RoutedEventTriggerBehavior
                             RoutedEvent="{x:Static InputElement.PointerPressedEvent}"
                             RoutingStrategies="Tunnel">
                             <InvokeCommandAction Command="{Binding SelectPanelCommand}" />
@@ -199,11 +200,6 @@
                         <DataTemplate>
                             <Grid>
                                 <Interaction.Behaviors>
-                                    <!-- <EventTriggerBehavior EventName="PointerMoved">
-                                        <InvokeCommandAction
-                                            Command="{Binding $parent[TabControl].((vm:PanelVM)DataContext).TabReplacingCommand}"
-                                            PassEventArgsToCommand="True" />
-                                    </EventTriggerBehavior> -->
                                     <EventTriggerBehavior EventName="PointerReleased">
                                         <InvokeCommandAction
                                             Command="{Binding $parent[TabControl].((vm:PanelVM)DataContext).TabReplacedCommand}" />
@@ -257,11 +253,20 @@
                     tools:ScrollProps.VerticalOffset="{Binding ScrollY}"
                     Document="{Binding Document, Mode=TwoWay}"
                     FontFamily="Cascadia Code, Consolas, Courier New, Monospace"
-                    FontSize="14"
+                    FontSize="{Binding FontSize, Mode=TwoWay}"
                     HorizontalScrollBarVisibility="Auto"
                     ShowLineNumbers="True"
                     VerticalScrollBarVisibility="Visible"
-                    WordWrap="False"/>
+                    WordWrap="False">
+                    <ae:TextEditor.Options>
+                        <ae:TextEditorOptions
+                            ConvertTabsToSpaces="True"
+                            IndentationSize="4" />
+                    </ae:TextEditor.Options>
+                    <Interaction.Behaviors>
+                        <beh:TextEditorBehavior/>
+                    </Interaction.Behaviors>
+                </ae:TextEditor>
             </Grid>
         </DataTemplate>
 
@@ -347,11 +352,11 @@
             <ListBox.ItemTemplate>
                 <DataTemplate>
                     <Grid ColumnDefinitions="Auto,*,Auto" HorizontalAlignment="Left">
-                        <TextBlock 
-                            Grid.Column="1" 
-                            Text="{Binding Message}" 
+                        <TextBlock
+                            Grid.Column="1"
+                            Text="{Binding Message}"
                             Margin="4,0,4,0"
-                            TextTrimming="CharacterEllipsis"/>
+                            TextTrimming="CharacterEllipsis" />
                         <TextBlock Grid.Column="2">
                             <TextBlock.Text>
                                 <MultiBinding StringFormat="[Строка {0}, столбец {1}]">
@@ -373,8 +378,8 @@
             HorizontalAlignment="Right"
             Width="4"
             MinWidth="4"
-            Classes="overlay-splitter"/>
-        
+            Classes="overlay-splitter" />
+
         <GridSplitter
             x:Name="HorizontalSplitter"
             Grid.Column="1"

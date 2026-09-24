@@ -15,25 +15,25 @@ public static class Marker
     public static readonly AttachedProperty<IEnumerable<EditorError>?> ErrorsProperty =
         AvaloniaProperty.RegisterAttached<object, TextEditor, IEnumerable<EditorError>?>("Errors");
 
-    private static readonly ConditionalWeakTable<TextEditor, CollectionWatcher> _watchers = new();
+    private static readonly ConditionalWeakTable<TextEditor, CollectionWatcher> Watchers = new();
 
     static Marker()
     {
-        ErrorsProperty.Changed.Subscribe(OnErrorsChanged);
+        // Используем встроенный метод GetNewValue<T>() для правильного извлечения коллекции
+        ErrorsProperty.Changed.AddClassHandler<TextEditor>((editor, e) =>
+        {
+            var watcher = Watchers.GetValue(editor, ed => new CollectionWatcher(ed));
+            watcher.UpdateCollection(e.GetNewValue<IEnumerable<EditorError>?>());
+        });
     }
+
 
     public static IEnumerable<EditorError>? GetErrors(TextEditor element) => element.GetValue(ErrorsProperty);
 
     public static void SetErrors(TextEditor element, IEnumerable<EditorError>? value) =>
         element.SetValue(ErrorsProperty, value);
 
-    private static void OnErrorsChanged(AvaloniaPropertyChangedEventArgs<IEnumerable<EditorError>?> e)
-    {
-        if (e.Sender is not TextEditor editor) return;
-
-        var watcher = _watchers.GetValue(editor, ed => new CollectionWatcher(ed));
-        watcher.UpdateCollection(e.NewValue.Value);
-    }
+    // Метод OnErrorsChanged можно полностью удалить, так как его логика теперь выше
 
     private class CollectionWatcher
     {

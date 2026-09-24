@@ -1,6 +1,5 @@
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Controls.Primitives;
 using Avalonia.Data;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
@@ -48,19 +47,19 @@ public static class ScrollProps
 
     static ScrollProps()
     {
-        VerticalOffsetProperty.Changed.Subscribe(e => OnTargetOffsetChanged(e));
-        HorizontalOffsetProperty.Changed.Subscribe(e => OnTargetOffsetChanged(e));
+        // 1. Избавляемся от капризного Subscribe и используем AddClassHandler
+        VerticalOffsetProperty.Changed.AddClassHandler<TextEditor>((editor, e) =>
+            OnTargetOffsetChanged(editor, e.GetNewValue<double>()));
+        HorizontalOffsetProperty.Changed.AddClassHandler<TextEditor>((editor, e) =>
+            OnTargetOffsetChanged(editor, e.GetNewValue<double>()));
     }
 
-    private static void OnTargetOffsetChanged(AvaloniaPropertyChangedEventArgs<double> e)
+    private static void OnTargetOffsetChanged(TextEditor editor, double newValue)
     {
-        if (e.Sender is TextEditor editor)
-        {
-            if (double.IsNaN(e.NewValue.Value) || editor.GetValue(IsSyncingProperty)) return;
+        if (double.IsNaN(newValue) || editor.GetValue(IsSyncingProperty)) return;
 
-            EnsureSubscribed(editor);
-            TriggerRestoration(editor);
-        }
+        EnsureSubscribed(editor);
+        TriggerRestoration(editor);
     }
 
     private static void EnsureSubscribed(TextEditor editor)
@@ -79,7 +78,8 @@ public static class ScrollProps
 
         editor.GetValue(SubscriptionTokenProperty)?.Dispose();
 
-        var token = scrollViewer.GetObservable(ScrollViewer.OffsetProperty).Subscribe(offset =>
+        // 2. Вместо реактивного GetObservable вешаем подписку через стандартное событие ScrollChanged
+        EventHandler<ScrollChangedEventArgs> scrollHandler = (s, args) =>
         {
             if (editor.GetValue(IsSyncingProperty)) return;
 
@@ -91,20 +91,26 @@ public static class ScrollProps
             {
                 double curV = GetVerticalOffset(editor);
                 double curH = GetHorizontalOffset(editor);
+                var offset = scrollViewer.Offset;
 
+                // 3. Исправляем "Ambiguous invocation", явно указывая generic-тип <double> в SetValue
                 if (Math.Abs(curV - offset.Y) > 0.5)
-                    editor.SetValue(VerticalOffsetProperty, offset.Y);
+                    editor.SetValue<double>(VerticalOffsetProperty, offset.Y);
 
                 if (Math.Abs(curH - offset.X) > 0.5)
-                    editor.SetValue(HorizontalOffsetProperty, offset.X);
+                    editor.SetValue<double>(HorizontalOffsetProperty, offset.X);
             }
             finally
             {
                 editor.SetValue(IsSyncingProperty, false);
             }
-        });
+        };
 
-        editor.SetValue(SubscriptionTokenProperty, token);
+        scrollViewer.ScrollChanged += scrollHandler;
+
+        // Создаем токен отписки
+        var token = new ScrollSubscriptionToken(() => scrollViewer.ScrollChanged -= scrollHandler);
+        editor.SetValue<IDisposable?>(SubscriptionTokenProperty, token);
     }
 
     private static void TriggerRestoration(TextEditor editor)
@@ -141,5 +147,13 @@ public static class ScrollProps
                     DispatcherPriority.Background);
             }
         }, DispatcherPriority.Background);
+    }
+
+    // Класс-помощник для детерминированной отписки от события скролла
+    private class ScrollSubscriptionToken : IDisposable
+    {
+        private readonly Action _dispose;
+        public ScrollSubscriptionToken(Action dispose) => _dispose = dispose;
+        public void Dispose() => _dispose();
     }
 }
