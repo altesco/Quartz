@@ -20,7 +20,7 @@ public record LayerModelDto
     public List<TraceDto?>? Traces { get; set; }
 
     [YamlMember(Alias = "styles")]
-    public List<Style?>? Styles { get; set; } = [];
+    public List<StyleDto?>? Styles { get; set; } = [];
 
     [Required]
     [YamlMember(Alias = "name")]

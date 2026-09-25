@@ -3,7 +3,7 @@ using YamlDotNet.Serialization;
 
 namespace Quartz.Infrastructure.Dtos.Styles;
 
-public abstract record Style : BoardEntityDto
+public abstract record StyleDto : BoardEntityDto
 {
     [Required]
     [YamlMember(Alias = "name")] 

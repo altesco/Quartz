@@ -299,7 +299,7 @@ public partial class MainVM : ObservableObject
                 .OrderBy(x => x, StringComparer.OrdinalIgnoreCase);
             foreach (var f in files)
             {
-                if (Path.GetExtension(f) is ".brd" or ".lyr" or ".sch")
+                if (Path.GetExtension(f) is ".pcby" or ".layy" or ".schy")
                 {
                     var file = LoadFile(f, dir);
                     if (file != null)
@@ -320,7 +320,7 @@ public partial class MainVM : ObservableObject
         var ext = Path.GetExtension(path);
         switch (ext)
         {
-            case ".brd":
+            case ".pcby":
                 var board = new BoardVM(mainVM: this, parent: parent, filePath: path,
                     coordinator: _boardProcessingCoordinator)
                 {
@@ -328,7 +328,7 @@ public partial class MainVM : ObservableObject
                 };
                 CurrentBoard = board;
                 return board;
-            case ".lyr":
+            case ".layy":
                 var layer = new LayerVM(mainVM: this, parent: parent, filePath: path,
                     coordinator: _boardProcessingCoordinator)
                 {
@@ -400,7 +400,7 @@ public partial class MainVM : ObservableObject
     // --- МЕТОДЫ ДЛЯ СВЯЗИ ПЛАТЫ И СЛОЕВ ---
 
     /// <summary>
-    /// Собирает тексты всех слоев (.lyr) проекта.
+    /// Собирает тексты всех слоев (.layy) проекта.
     /// Приоритет отдается несохраненным изменениям из открытых вкладок.
     /// </summary>
     public Dictionary<string, string> GetAllLayerTexts()
@@ -414,7 +414,7 @@ public partial class MainVM : ObservableObject
                 l => l,
                 StringComparer.OrdinalIgnoreCase);
 
-        // 2. Обходим дерево файлов и собираем тексты всех .lyr
+        // 2. Обходим дерево файлов и собираем тексты всех .layy
         CollectLayersFromTreeRecursive(FileTree, result, openLayers);
 
         return result;
@@ -425,7 +425,7 @@ public partial class MainVM : ObservableObject
         if (CurrentBoard is { } boardVm)
         {
             // Запускаем принудительную пересборку платы, 
-            // даже если файл .brd не открыт во вкладке редактора!
+            // даже если файл .pcby не открыт во вкладке редактора!
             boardVm.ProcessBoardProject();
         }
     }

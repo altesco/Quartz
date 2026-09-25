@@ -1,7 +1,10 @@
+using System.Collections.Frozen;
 using Quartz.Core.Interfaces;
 using Quartz.Core.Models;
 using Quartz.Core.Models.BoardEntities;
+using Quartz.Core.Models.BoardEntities.Styles;
 using Quartz.Infrastructure.Dtos;
+using Quartz.Infrastructure.Dtos.Styles;
 using Quartz.Infrastructure.Tools;
 using YamlDotNet.Core;
 using YamlDotNet.Core.Events;
@@ -32,6 +35,78 @@ public class LayerDomainParser : ILayerDomainParser
         _deserializer = builder.Build();
     }
 
+    public FrozenDictionary<string, Style> ParseStyles(LayerModelDto dto, out List<EditorError> errors)
+    {
+        List<EditorError> localErrors = [];
+
+        var stylesMap = new Dictionary<string, Style>(
+            dto.Styles?.Count ?? 0,
+            StringComparer.OrdinalIgnoreCase
+        );
+
+        if (dto.Styles is { Count: > 0 })
+        {
+            var level1Shapes = new List<ShapeStyleDto>();
+            var level2SubStyles = new List<StyleDto>();
+            var level3MainStyles = new List<StyleDto>();
+
+            foreach (var styleDto in dto.Styles)
+            {
+                if (styleDto is null) continue;
+
+                switch (styleDto)
+                {
+                    case ShapeStyleDto shape:
+                        level1Shapes.Add(shape);
+                        break;
+                    case PinStyleDto or PadStyleDto or ViaStyleDto or TraceStyleDto:
+                        level2SubStyles.Add(styleDto);
+                        break;
+                    default:
+                        level3MainStyles.Add(styleDto);
+                        break;
+                }
+            }
+
+            void TryRegisterStyle(Style? styleDomain, BoardEntityDto styleDto)
+            {
+                if (styleDomain != null && !string.IsNullOrWhiteSpace(styleDomain.Name))
+                {
+                    if (!stylesMap.TryAdd(styleDomain.Name, styleDomain))
+                    {
+                        localErrors.AddError($"Дубликат Name стиля: {styleDomain.Name}",
+                            styleDto.Line, styleDto.Column, styleDto.Length);
+                    }
+                }
+            }
+
+            foreach (var shapeDto in level1Shapes)
+            {
+                var shapeDomain = shapeDto.ToDomain(dto.Unit, out var e);
+                localErrors.AddRange(e);
+                TryRegisterStyle(shapeDomain, shapeDto);
+            }
+
+            foreach (var styleDto in level2SubStyles)
+            {
+                var styleDomain = styleDto.ToDomain(dto.Unit, stylesMap, out var e);
+                localErrors.AddRange(e);
+                TryRegisterStyle(styleDomain, styleDto);
+            }
+
+            foreach (var styleDto in level3MainStyles)
+            {
+                var styleDomain = styleDto.ToDomain(dto.Unit, stylesMap, out var e);
+                localErrors.AddRange(e);
+                TryRegisterStyle(styleDomain, styleDto);
+            }
+        }
+
+        errors = localErrors;
+
+        return stylesMap.ToFrozenDictionary();
+    }
+
     public Dictionary<string, Component> ParseComponents(string yamlText, out List<EditorError> errors)
     {
         errors = [];
@@ -48,12 +123,8 @@ public class LayerDomainParser : ILayerDomainParser
             var dto = _deserializer.Deserialize<LayerModelDto?>(normalizedYaml);
             if (dto == null) return new Dictionary<string, Component>(StringComparer.OrdinalIgnoreCase);
 
-            var stylesMap = dto.Styles.MapToDictionary(
-                "Styles",
-                (styleDto, _) => styleDto,
-                style => style.Name!,
-                errors
-            );
+            var stylesMap = ParseStyles(dto, out var styleErrors);
+            errors.AddRange(styleErrors);
 
             var components = dto.Components.MapToDictionary(
                 "Components",
@@ -83,7 +154,7 @@ public class LayerDomainParser : ILayerDomainParser
         }
     }
 
-    public LayerModel? Parse(
+    public LayerModel? ParseLayer(
         string yamlText,
         Dictionary<string, Component> componentsMap,
         IReadOnlyDictionary<string, Net> netsMap,
@@ -115,7 +186,13 @@ public class LayerDomainParser : ILayerDomainParser
                 return null;
             }
 
-            return dto.ToDomain(componentsMap, netsMap, out errors, viasMap);
+            var stylesMap = ParseStyles(dto, out var stylesErrors);
+            errors.AddRange(stylesErrors);
+
+            var layerDomain = dto.ToDomain(componentsMap, netsMap, stylesMap, out var layerErrors, viasMap);
+            errors.AddRange(layerErrors);
+
+            return layerDomain;
         }
         catch (YamlException ex)
         {

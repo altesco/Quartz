@@ -5,7 +5,7 @@ namespace Quartz.Core.Interfaces;
 
 public interface ILayerDomainParser
 {
-    LayerModel? Parse(
+    LayerModel? ParseLayer(
         string yamlText, 
         Dictionary<string, Component> componentsMap, 
         IReadOnlyDictionary<string, Net> netsMap, 

@@ -1,5 +1,5 @@
 namespace Quartz.Infrastructure.Dtos.Styles;
 
-public record PinStyle : ConnectionStyle
+public record PinStyleDto : ConnectionStyleDto
 {
 }

@@ -3,7 +3,7 @@ using YamlDotNet.Serialization;
 
 namespace Quartz.Infrastructure.Dtos.Styles;
 
-public record PadStyle : ConnectionStyle
+public record PadStyleDto : ConnectionStyleDto
 {
     [YamlMember(Alias = "drill-diameter")] 
     public double? DrillDiameter { get; init; }

@@ -22,7 +22,7 @@ public class BoardVM : EditorVM
 
     public BoardModel? BoardModel { get; set; }
 
-    public override Extension Extension => Extension.Brd;
+    public override Extension Extension => Extension.Pcby;
 
     protected override void ProcessDocument(string text)
     {

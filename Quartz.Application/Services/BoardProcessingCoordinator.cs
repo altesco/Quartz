@@ -103,7 +103,7 @@ public class BoardProcessingCoordinator : IBoardProcessingCoordinator
             }
         }
 
-        // 2. ЭТАП 2: Валидация файла .brd
+        // 2. ЭТАП 2: Валидация файла .pcby
         var syntaxErrors = _syntaxParser.ValidateSyntax(boardText);
         boardErrors.AddRange(syntaxErrors);
         boardErrors.AddRange(_schemaValidator.ValidateSchemaAndTags(boardText, typeof(BoardModel)));
@@ -333,7 +333,7 @@ public class BoardProcessingCoordinator : IBoardProcessingCoordinator
         // -------------------------------------------
 
         // 3. ПЕРЕДАЕМ ОТФИЛЬТРОВАННЫЙ layerVias В ПАРСЕР:
-        var layerModel = _layerDomainParser.Parse(text, components, nets, layerVias, out var domainErrors);
+        var layerModel = _layerDomainParser.ParseLayer(text, components, nets, layerVias, out var domainErrors);
         allErrors.AddRange(domainErrors);
 
         // 4. Проверяем бизнес-логику

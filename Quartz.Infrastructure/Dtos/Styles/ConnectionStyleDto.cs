@@ -3,7 +3,7 @@ using YamlDotNet.Serialization;
 
 namespace Quartz.Infrastructure.Dtos.Styles;
 
-public abstract record ConnectionStyle : Style
+public abstract record ConnectionStyleDto : StyleDto
 {
     [YamlMember(Alias = "shape")] 
     public ShapeDto? Shape { get; init; }

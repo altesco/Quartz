@@ -2,7 +2,7 @@ using YamlDotNet.Serialization;
 
 namespace Quartz.Infrastructure.Dtos.Styles;
 
-public record RectShapeStyle : ShapeStyle
+public record RectShapeStyleDto : ShapeStyleDto
 {
     [YamlMember(Alias = "width")] 
     public double? Width { get; init; }

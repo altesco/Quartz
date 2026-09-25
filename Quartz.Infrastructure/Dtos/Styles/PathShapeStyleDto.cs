@@ -2,7 +2,7 @@ using YamlDotNet.Serialization;
 
 namespace Quartz.Infrastructure.Dtos.Styles;
 
-public record PathShapeStyle : ShapeStyle
+public record PathShapeStyleDto : ShapeStyleDto
 {
     [YamlMember(Alias = "start-point")] 
     public Point2DDto? StartPoint { get; init; }

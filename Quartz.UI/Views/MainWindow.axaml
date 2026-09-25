@@ -252,7 +252,7 @@
                     tools:ScrollProps.HorizontalOffset="{Binding ScrollX}"
                     tools:ScrollProps.VerticalOffset="{Binding ScrollY}"
                     Document="{Binding Document, Mode=TwoWay}"
-                    FontFamily="Cascadia Code, Consolas, Courier New, Monospace"
+                    FontFamily="JetBrains Mono, Consolas, Courier New, Monospace"
                     FontSize="{Binding FontSize, Mode=TwoWay}"
                     HorizontalScrollBarVisibility="Auto"
                     ShowLineNumbers="True"
@@ -261,7 +261,8 @@
                     <ae:TextEditor.Options>
                         <ae:TextEditorOptions
                             ConvertTabsToSpaces="True"
-                            IndentationSize="4" />
+                            IndentationSize="2" 
+                            HighlightCurrentLine="True"/>
                     </ae:TextEditor.Options>
                     <Interaction.Behaviors>
                         <beh:TextEditorBehavior/>

@@ -28,11 +28,6 @@ namespace Quartz.UI.Behaviors
 
             if (AssociatedObject is null) return;
 
-            // Базовые настройки редактора
-            AssociatedObject.Options.ConvertTabsToSpaces = true;
-            AssociatedObject.Options.IndentationSize = 4;
-            AssociatedObject.Options.HighlightCurrentLine = true;
-
             // ИСПРАВЛЕНО: Перехватываем событие колесика на стадии ТУННЕЛИРОВАНИЯ (Tunnel).
             // Это аналог Preview-событий. Мы заберем ввод до того, как его поглотит встроенный скролл.
             AssociatedObject.AddHandler(

@@ -23,21 +23,21 @@ public static class YamlTagRegistry
         { "!pad", typeof(PadEndpointDto) },
 
         // стили
-        { "!resistor-style", typeof(ResistorStyle) },
-        { "!capacitor-style", typeof(CapacitorStyle) },
-        { "!transistor-style", typeof(TransistorStyle) },
-        { "!diode-style", typeof(DiodeStyle) },
-        { "!inductor-style", typeof(InductorStyle) },
-        { "!ic-style", typeof(IntegratedCircuitStyle) },
-        { "!connector-style", typeof(ConnectorStyle) },
-        { "!pad-style", typeof(PadStyle) },
-        { "!pin-style", typeof(PinStyle) },
-        { "!via-style", typeof(ViaStyle) },
-        { "!footprint-style", typeof(FootprintStyle) },
-        { "!name-settings-style", typeof(NameSettingsStyle) }, 
-        { "!path-style", typeof(PathShapeStyle) },
-        { "!rect-style", typeof(RectShapeStyle) },
-        { "!trace-style", typeof(TraceStyle) }
+        { "!resistor-style", typeof(ResistorStyleDto) },
+        { "!capacitor-style", typeof(CapacitorStyleDto) },
+        { "!transistor-style", typeof(TransistorStyleDto) },
+        { "!diode-style", typeof(DiodeStyleDto) },
+        { "!inductor-style", typeof(InductorStyleDto) },
+        { "!ic-style", typeof(IntegratedCircuitStyleDto) },
+        { "!connector-style", typeof(ConnectorStyleDto) },
+        { "!pad-style", typeof(PadStyleDto) },
+        { "!pin-style", typeof(PinStyleDto) },
+        { "!via-style", typeof(ViaStyleDto) },
+        { "!footprint-style", typeof(FootprintStyleDto) },
+        { "!name-settings-style", typeof(NameSettingsStyleDto) }, 
+        { "!path-style", typeof(PathShapeStyleDto) },
+        { "!rect-style", typeof(RectShapeStyleDto) },
+        { "!trace-style", typeof(TraceStyleDto) }
     };
 
     public static readonly Dictionary<string, Type> BoardTagsMap = new(StringComparer.OrdinalIgnoreCase)
@@ -49,10 +49,10 @@ public static class YamlTagRegistry
         { "!via", typeof(ViaEndpointDto) },
 
         // стили плат
-        { "!via-style", typeof(ViaStyle) },
-        { "!name-settings-style", typeof(NameSettingsStyle) },
-        { "!path-style", typeof(PathShapeStyle) },
-        { "!rect-style", typeof(RectShapeStyle) }
+        { "!via-style", typeof(ViaStyleDto) },
+        { "!name-settings-style", typeof(NameSettingsStyleDto) },
+        { "!path-style", typeof(PathShapeStyleDto) },
+        { "!rect-style", typeof(RectShapeStyleDto) }
     };
 
     // Кешированный список поддерживаемых тегов (для LayerDomainParser)

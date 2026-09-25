@@ -3,8 +3,8 @@ using Quartz.Core.Tools;
 using Quartz.Core.Enums;
 using Quartz.Core.Models;
 using Quartz.Core.Models.BoardEntities;
+using Quartz.Core.Models.BoardEntities.Styles;
 using Quartz.Infrastructure.Dtos;
-using Quartz.Infrastructure.Dtos.Styles;
 
 namespace Quartz.Infrastructure.Tools;
 
@@ -12,7 +12,7 @@ public static class YamlMapperExtensions
 {
     // --- ХЕЛПЕРЫ ---
 
-    private static void AddError(this List<EditorError> errors, string message, long line = 0, long column = 0,
+    public static void AddError(this List<EditorError> errors, string message, long line = 0, long column = 0,
         long length = 0)
     {
         errors.Add(new EditorError
@@ -51,8 +51,6 @@ public static class YamlMapperExtensions
             {
                 var name = nameSelector(domain);
 
-                // Защита! Если пользователь только начал набивать объект и name ещё null или пустой,
-                // мы просто не пихаем его в словарь, а ждем, пока он заполнит имя.
                 if (string.IsNullOrWhiteSpace(name))
                 {
                     continue;
@@ -76,7 +74,7 @@ public static class YamlMapperExtensions
         return map.ToFrozenDictionary();
     }
 
-    private static List<TDomain> MapToList<TDto, TDomain>(
+    public static List<TDomain> MapToList<TDto, TDomain>(
         this IList<TDto?>? dtos,
         string collectionName,
         Func<TDto, List<EditorError>, TDomain?> mapFunc,
@@ -135,11 +133,14 @@ public static class YamlMapperExtensions
         if (!stylesMap.TryGetValue(dto.Style, out var baseStyle))
         {
             errors.AddError($"Стиль '{dto.Style}' не найден в секции styles", dto.Line, dto.Column, dto.Length);
+            return null;
         }
-        else if (!styleType.IsInstanceOfType(baseStyle))
+
+        if (!styleType.IsInstanceOfType(baseStyle))
         {
             errors.AddError($"Стиль '{dto.Style}' не предназначен для типа '{dto.GetType()}' (ожидался '{styleType}')",
                 dto.Line, dto.Column, dto.Length);
+            return null;
         }
 
         return errors.Count > 0 ? null : baseStyle;
@@ -192,18 +193,23 @@ public static class YamlMapperExtensions
         comp.Value = dto.Value ?? style?.Value ?? 0;
         comp.Point = dto.Point.ToDomain(compUnit);
         comp.Angle = dto.Angle ?? style?.Angle ?? 0;
-        comp.NameSettings = dto.NameSettings?.ToDomain() ?? style?.NameSettings?.ToDomain() ?? new NameSettings();
+        comp.NameSettings = dto.NameSettings?.ToDomain() ?? style?.NameSettings ?? new NameSettings();
 
-        var shapeDto = dto.Shape ?? style?.Shape;
-        if (shapeDto != null)
+        // 1. Маппинг фигуры
+        if (dto.Shape != null)
         {
-            var shapeDomain = shapeDto.ToDomain(stylesMap, compUnit, out var shapeErrors);
+            var shapeDomain = dto.Shape.ToDomain(stylesMap, compUnit, out var shapeErrors);
             if (shapeDomain != null)
                 comp.Shape = shapeDomain;
             else
                 errors.AddRange(shapeErrors);
         }
+        else if (style?.Shape != null)
+        {
+            comp.Shape = style.Shape;
+        }
 
+        // 2. Маппинг футпринта
         List<EditorError> footprintErrors = [];
         var footprintDomain = dto.Footprint?.ToDomain(stylesMap, compUnit, layerUnit, out footprintErrors);
 
@@ -216,17 +222,38 @@ public static class YamlMapperExtensions
             comp.Footprint = footprintDomain;
         }
 
-        comp.Pins = (dto.Pins ?? style?.Pins).MapToDictionary(
-            "Pins",
-            (pinDto, errs) =>
+        // 3. Маппинг пинов
+        if (dto.Pins != null)
+        {
+            comp.Pins = dto.Pins.MapToDictionary(
+                "Pins",
+                (pinDto, errs) =>
+                {
+                    var p = pinDto.ToDomain(stylesMap, compUnit, out var e) as Pin;
+                    errs.AddRange(e);
+                    return p;
+                },
+                pin => pin.Name,
+                errors
+            );
+        }
+        else if (style?.Pins != null)
+        {
+            var pinsMap = new Dictionary<string, Pin>(StringComparer.OrdinalIgnoreCase);
+            foreach (var pin in style.Pins)
             {
-                var p = pinDto.ToDomain(stylesMap, compUnit, out var e) as Pin;
-                errs.AddRange(e);
-                return p;
-            },
-            pin => pin.Name,
-            errors
-        );
+                if (!string.IsNullOrWhiteSpace(pin.Name))
+                {
+                    pinsMap.TryAdd(pin.Name, pin);
+                }
+            }
+
+            comp.Pins = pinsMap.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
+        }
+        else
+        {
+            comp.Pins = FrozenDictionary<string, Pin>.Empty;
+        }
 
         return errors.Count > 0 ? null : comp;
     }
@@ -249,27 +276,50 @@ public static class YamlMapperExtensions
         var footprintUnit = dto.Unit ?? style?.Unit ?? layerUnit;
         var footprintDomain = new Footprint();
 
-        var shapeDto = dto.Shape ?? style?.Shape;
-        if (shapeDto != null)
+        if (dto.Shape != null)
         {
-            var shapeDomain = shapeDto.ToDomain(stylesMap, footprintUnit, out var shapeErrors);
+            var shapeDomain = dto.Shape.ToDomain(stylesMap, footprintUnit, out var shapeErrors);
             if (shapeDomain != null)
                 footprintDomain.Shape = shapeDomain;
             else
                 errors.AddRange(shapeErrors);
         }
+        else if (style?.Shape != null)
+        {
+            footprintDomain.Shape = style.Shape;
+        }
 
-        footprintDomain.Pads = (dto.Pads ?? style?.Pads).MapToDictionary(
-            "Pads",
-            (padDto, errs) =>
+        if (dto.Pads != null)
+        {
+            footprintDomain.Pads = dto.Pads.MapToDictionary(
+                "Pads",
+                (padDto, errs) =>
+                {
+                    var p = padDto.ToDomain(stylesMap, compUnit, out var e) as Pad;
+                    errs.AddRange(e);
+                    return p;
+                },
+                pad => pad.Name,
+                errors
+            );
+        }
+        else if (style?.Pads != null)
+        {
+            var padsMap = new Dictionary<string, Pad>(StringComparer.OrdinalIgnoreCase);
+            foreach (var pad in style.Pads)
             {
-                var p = padDto.ToDomain(stylesMap, compUnit, out var e) as Pad;
-                errs.AddRange(e);
-                return p;
-            },
-            pad => pad.Name,
-            errors
-        );
+                if (!string.IsNullOrWhiteSpace(pad.Name))
+                {
+                    padsMap.TryAdd(pad.Name, pad);
+                }
+            }
+
+            footprintDomain.Pads = padsMap.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
+        }
+        else
+        {
+            footprintDomain.Pads = FrozenDictionary<string, Pad>.Empty;
+        }
 
         return errors.Count > 0 ? null : footprintDomain;
     }
@@ -299,7 +349,7 @@ public static class YamlMapperExtensions
                 IsPlated = padDto.IsPlated ?? (style as PadStyle)?.IsPlated ?? false,
                 ElectricalType = padDto.ElectricalType ?? (style as PadStyle)?.ElectricalType ?? 0,
                 DrillDiameter = padDto.DrillDiameter?.ToMillimeters(dto.Unit ?? defaultUnit) ??
-                                (style as PadStyle)?.DrillDiameter?.ToMillimeters(dto.Unit ?? defaultUnit) ?? 0
+                                (style as PadStyle)?.DrillDiameter ?? 0
             },
             PinDto => new Pin(),
             ViaDto viaDto => MapVia(viaDto, style as ViaStyle, netsMap, layersMap, defaultUnit, errors),
@@ -316,14 +366,17 @@ public static class YamlMapperExtensions
 
         if (dto.Name != null) connection.Name = dto.Name;
 
-        var shapeDto = dto.Shape ?? style?.Shape;
-        if (shapeDto != null)
+        if (dto.Shape != null)
         {
-            var shapeDomain = shapeDto.ToDomain(stylesMap, connectionUnit, out var shapeErrors);
+            var shapeDomain = dto.Shape.ToDomain(stylesMap, connectionUnit, out var shapeErrors);
             if (shapeDomain != null)
                 connection.Shape = shapeDomain;
             else
                 errors.AddRange(shapeErrors);
+        }
+        else if (style?.Shape != null)
+        {
+            connection.Shape = style.Shape;
         }
 
         return errors.Count > 0 ? null : connection;
@@ -339,7 +392,6 @@ public static class YamlMapperExtensions
     {
         Net? netDomain = null;
 
-        // Проверяем сеть независимо. Лезем в словарь только если имя не пустое.
         if (!string.IsNullOrWhiteSpace(viaDto.NetName))
         {
             if (netsMap == null || !netsMap.TryGetValue(viaDto.NetName, out netDomain))
@@ -351,7 +403,7 @@ public static class YamlMapperExtensions
 
         var viaUnit = viaDto.Unit ?? viaStyle?.Unit ?? defaultUnit;
         var drill = viaDto.DrillDiameter?.ToMillimeters(viaUnit) ??
-                    viaStyle?.DrillDiameter?.ToMillimeters(viaUnit) ?? 0;
+                    viaStyle?.DrillDiameter ?? 0;
 
         var targetLayers = new List<LayerModel>();
         bool hasFrom = false;
@@ -362,7 +414,6 @@ public static class YamlMapperExtensions
             LayerModel? fromLayer = null;
             LayerModel? toLayer = null;
 
-            // То же самое со слоями — проверяем каждый по отдельности
             if (!string.IsNullOrWhiteSpace(viaDto.From))
             {
                 hasFrom = layersMap.TryGetValue(viaDto.From, out fromLayer);
@@ -379,7 +430,6 @@ public static class YamlMapperExtensions
                         viaDto.Length);
             }
 
-            // Добавляем слои в список только если нашли оба
             if (hasFrom && hasTo)
             {
                 int start = Math.Min(fromLayer!.Index, toLayer!.Index);
@@ -395,7 +445,6 @@ public static class YamlMapperExtensions
             }
         }
 
-        // Чтобы не отдавать полупустой доменный объект, проверяем, все ли базовые поля были заполнены
         bool hasMissingRequired = string.IsNullOrWhiteSpace(viaDto.NetName) ||
                                   string.IsNullOrWhiteSpace(viaDto.From) ||
                                   string.IsNullOrWhiteSpace(viaDto.To);
@@ -431,9 +480,9 @@ public static class YamlMapperExtensions
         {
             case RectShapeDto r:
             {
-                var width = r.Width ?? (style as RectShapeStyle)?.Width ?? 0;
-                var height = r.Height ?? (style as RectShapeStyle)?.Height ?? 0;
-                var cornerRadius = r.CornerRadius ?? (style as RectShapeStyle)?.CornerRadius ?? 0;
+                var width = r.Width?.ToMillimeters(unit) ?? (style as RectShapeStyle)?.Width ?? 0;
+                var height = r.Height?.ToMillimeters(unit) ?? (style as RectShapeStyle)?.Height ?? 0;
+                var cornerRadius = r.CornerRadius?.ToMillimeters(unit) ?? (style as RectShapeStyle)?.CornerRadius ?? 0;
 
                 if (width <= 0)
                     errors.AddError("Свойство width должно иметь значение больше 0", r.Line, r.Column, r.Length);
@@ -447,27 +496,38 @@ public static class YamlMapperExtensions
                     ? null
                     : new RectShape
                     {
-                        Width = width.ToMillimeters(unit),
-                        Height = height.ToMillimeters(unit),
-                        CornerRadius = cornerRadius.ToMillimeters(unit)
+                        Width = width,
+                        Height = height,
+                        CornerRadius = cornerRadius
                     };
             }
 
             case PathShapeDto p:
             {
-                var start = p.StartPoint?.ToDomain(unit) ??
-                            (style as PathShapeStyle)?.StartPoint?.ToDomain(unit) ?? new();
+                var start = p.StartPoint?.ToDomain(unit) ?? (style as PathShapeStyle)?.StartPoint ?? new();
 
-                var segments = (p.Segments ?? (style as PathShapeStyle)?.Segments).MapToList(
-                    "Segments",
-                    (seg, errs) =>
-                    {
-                        var s = seg.ToDomain(start, unit, out var e);
-                        errs.AddRange(e);
-                        return s;
-                    },
-                    errors
-                );
+                List<Segment> segments;
+                if (p.Segments != null)
+                {
+                    segments = p.Segments.MapToList(
+                        "Segments",
+                        (seg, errs) =>
+                        {
+                            var s = seg.ToDomain(start, unit, out var e);
+                            errs.AddRange(e);
+                            return s;
+                        },
+                        errors
+                    );
+                }
+                else if (style is PathShapeStyle { Segments: not null } path)
+                {
+                    segments = path.Segments;
+                }
+                else
+                {
+                    segments = [];
+                }
 
                 const double tolerance = 0.0001;
 
@@ -476,9 +536,9 @@ public static class YamlMapperExtensions
                     var lastDto = p.Segments.Last();
                     var lastDomain = segments.Last();
 
-                    if (lastDto != null && 
+                    if (lastDto != null &&
                         (Math.Abs(lastDomain.Point.X - start.X) > tolerance ||
-                        Math.Abs(lastDomain.Point.Y - start.Y) > tolerance))
+                         Math.Abs(lastDomain.Point.Y - start.Y) > tolerance))
                     {
                         errors.AddError("Координаты последнего сегмента должны совпадать с координатами start-point",
                             lastDto.Line, lastDto.Column, lastDto.Length);
@@ -554,8 +614,6 @@ public static class YamlMapperExtensions
 
     // --- TRACES & ENDPOINTS ---
 
-    // --- TRACES & ENDPOINTS ---
-
     public static EndpointBase? ToDomain(
         this EndpointBaseDto? dto,
         string targetLabel,
@@ -573,8 +631,6 @@ public static class YamlMapperExtensions
         {
             case PadEndpointDto padDto:
             {
-                // Проверки на Required уже пройдены до нас.
-                // Резолвим только семантические связи:
                 if (padDto.Comp != null)
                 {
                     if (!componentsMap.TryGetValue(padDto.Comp, out var comp))
@@ -667,9 +723,11 @@ public static class YamlMapperExtensions
                 netDomain = net;
 
                 if (from is ViaEndpoint vFrom && net.Name != vFrom.Via.Net.Name)
-                    errors.AddError($"Переходное отверстие '{vFrom.Via.Name}' принадлежит сети '{vFrom.Via.Net.Name}'", dto.Line, dto.Column, dto.Length);
+                    errors.AddError($"Переходное отверстие '{vFrom.Via.Name}' принадлежит сети '{vFrom.Via.Net.Name}'",
+                        dto.Line, dto.Column, dto.Length);
                 if (to is ViaEndpoint vTo && net.Name != vTo.Via.Net.Name)
-                    errors.AddError($"Переходное отверстие '{vTo.Via.Name}' принадлежит сети '{vTo.Via.Net.Name}'", dto.Line, dto.Column, dto.Length);
+                    errors.AddError($"Переходное отверстие '{vTo.Via.Name}' принадлежит сети '{vTo.Via.Net.Name}'",
+                        dto.Line, dto.Column, dto.Length);
             }
         }
 
@@ -678,8 +736,6 @@ public static class YamlMapperExtensions
             errors.AddError("Свойство width должно иметь значение больше 0", dto.Line, dto.Column, dto.Length);
         }
 
-        // Если есть ошибки валидации или эндпоинты не сопоставились (отсутствует Via/Comp/Pad в словарях),
-        // возвращаем null, чтобы битая трасса не попадала на отрисовку в (0;0).
         return errors.Count > 0 || from == null || to == null
             ? null
             : new Trace
@@ -688,7 +744,7 @@ public static class YamlMapperExtensions
                 From = from,
                 To = to,
                 CoordMode = dto.CoordMode,
-                Width = dto.Width?.ToMillimeters(traceUnit) ?? style?.Width.ToMillimeters(traceUnit) ?? 0.25,
+                Width = dto.Width?.ToMillimeters(traceUnit) ?? style?.Width ?? 0.25,
                 Points = dto.MiddlePoints?.Select(p => p.ToDomain(traceUnit)).ToList() ?? [],
                 Line = dto.Line,
                 Column = dto.Column,
@@ -702,6 +758,7 @@ public static class YamlMapperExtensions
         this LayerModelDto dto,
         Dictionary<string, Component> componentsMap,
         IReadOnlyDictionary<string, Net> netsMap,
+        IReadOnlyDictionary<string, Style> stylesMap,
         out List<EditorError> errors,
         IReadOnlyDictionary<string, Via>? viasMap = null)
     {
@@ -713,13 +770,6 @@ public static class YamlMapperExtensions
         };
 
         if (dto.Name != null) layerModel.Name = dto.Name;
-
-        var stylesMap = dto.Styles.MapToDictionary(
-            "Styles",
-            (styleDto, _) => styleDto,
-            style => style.Name,
-            localErrors
-        );
 
         var parsedComponents = dto.Components.MapToDictionary(
             "Components",

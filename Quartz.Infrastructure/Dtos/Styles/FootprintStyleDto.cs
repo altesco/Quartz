@@ -3,7 +3,7 @@ using YamlDotNet.Serialization;
 
 namespace Quartz.Infrastructure.Dtos.Styles;
 
-public record FootprintStyle : Style
+public record FootprintStyleDto : StyleDto
 {
     [YamlMember(Alias = "pads")]
     public List<PadDto?>? Pads { get; init; }

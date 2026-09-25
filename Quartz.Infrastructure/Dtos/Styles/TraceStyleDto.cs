@@ -3,10 +3,10 @@ using YamlDotNet.Serialization;
 
 namespace Quartz.Infrastructure.Dtos.Styles;
 
-public record TraceStyle : Style
+public record TraceStyleDto : StyleDto
 {
     [YamlMember(Alias = "width")] 
-    public double Width { get; init; } = 0.25; 
+    public double? Width { get; init; }
 
     [YamlMember(Alias = "unit")] 
     public LengthUnit? Unit { get; init; }

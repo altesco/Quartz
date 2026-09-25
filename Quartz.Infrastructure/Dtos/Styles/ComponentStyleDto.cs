@@ -3,7 +3,7 @@ using YamlDotNet.Serialization;
 
 namespace Quartz.Infrastructure.Dtos.Styles;
 
-public abstract record ComponentStyle : Style
+public abstract record ComponentStyleDto : StyleDto
 {
     [YamlMember(Alias = "value")] 
     public double? Value { get; init; }

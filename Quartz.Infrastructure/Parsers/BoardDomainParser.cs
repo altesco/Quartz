@@ -15,14 +15,6 @@ public class BoardDomainParser : IBoardDomainParser
 {
     private readonly IDeserializer _deserializer;
 
-    // private static readonly HashSet<string> SupportedTags = new(StringComparer.Ordinal)
-    // {
-    //     "!rect",
-    //     "!path",
-    //     "!line",
-    //     "!arc"
-    // };
-
     public BoardDomainParser()
     {
         var builder = new DeserializerBuilder()

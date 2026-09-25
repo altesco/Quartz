@@ -5,17 +5,17 @@ using Quartz.Core.Models;
 
 namespace Quartz.UI.ViewModels;
 
-public class LayerVM : File2D
+public class StyleVM : File2D
 {
     private readonly IBoardProcessingCoordinator _coordinator;
 
-    public LayerVM(MainVM mainVM, string filePath, DirectoryVM? parent, IBoardProcessingCoordinator coordinator)
+    public StyleVM(MainVM mainVM, string filePath, DirectoryVM? parent, IBoardProcessingCoordinator coordinator)
         : base(mainVM, filePath, parent, coordinator)
     {
         _coordinator = coordinator ?? throw new ArgumentNullException(nameof(coordinator));
     }
 
-    public override Extension Extension => Extension.Layy;
+    public override Extension Extension => Extension.Stly;
 
     public LayerModel? LayerModel { get; set; }
 
