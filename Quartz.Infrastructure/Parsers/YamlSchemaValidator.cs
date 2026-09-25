@@ -2,7 +2,9 @@ using System.ComponentModel.DataAnnotations;
 using System.Reflection;
 using Quartz.Core.Interfaces;
 using Quartz.Core.Models;
+using Quartz.Core.Models.BoardEntities.Styles;
 using Quartz.Infrastructure.Dtos;
+using Quartz.Infrastructure.Dtos.Styles;
 using YamlDotNet.Core;
 using YamlDotNet.RepresentationModel;
 using YamlDotNet.Serialization;
@@ -17,7 +19,8 @@ public class YamlSchemaValidator : IYamlSchemaValidator
     private static readonly Dictionary<Type, Type> DomainToDtoMap = new()
     {
         { typeof(LayerModel), typeof(LayerModelDto) },
-        { typeof(BoardModel), typeof(BoardModelDto) }
+        { typeof(BoardModel), typeof(BoardModelDto) },
+        { typeof(List<Style>), typeof(List<StyleDto>) }
     };
 
     public List<EditorError> ValidateSchemaAndTags(string yamlText, Type? targetType = null)
@@ -37,7 +40,7 @@ public class YamlSchemaValidator : IYamlSchemaValidator
             using var reader = new StringReader(yamlText);
             yaml.Load(reader);
         }
-        catch (YamlException ex) // <-- ЛОВИМ ОШИБКУ ПАРСЕРА!
+        catch (YamlException ex)
         {
             errors.Add(new EditorError
             {
@@ -50,31 +53,61 @@ public class YamlSchemaValidator : IYamlSchemaValidator
         }
         catch
         {
-            // На крайний случай для других исключений
             return errors;
         }
 
         if (yaml.Documents.Count == 0) return errors;
 
-        if (yaml.Documents[0].RootNode is YamlMappingNode rootMapping)
+        // Определяем карту тегов в зависимости от валидируемой модели
+        var tagsMap = targetType switch
         {
-            ValidateNodeAgainstType(rootMapping, targetType, errors);
+            _ when targetType == typeof(BoardModelDto) => YamlTagRegistry.BoardTagsMap,
+            _ when targetType == typeof(LayerModelDto) => YamlTagRegistry.LayerTagsMap,
+            _ when targetType == typeof(List<StyleDto>) => YamlTagRegistry.StylesTagsMap,
+            _ => throw new ArgumentException("Неподдерживаемый тип")
+        };
+
+
+        var rootNode = yaml.Documents[0].RootNode;
+
+        if (rootNode is YamlMappingNode rootMapping)
+        {
+            ValidateNodeAgainstType(rootMapping, targetType, errors, tagsMap);
+        }
+        else if (rootNode is YamlSequenceNode rootSequence)
+        {
+            var elementType = GetSequenceElementType(targetType);
+            if (elementType == null)
+            {
+                errors.Add(new EditorError
+                {
+                    Message = $"Ожидался объект '{GetFriendlyTypeName(targetType)}', но передан список",
+                    Line = rootSequence.Start.Line,
+                    Column = rootSequence.Start.Column,
+                    Length = 1
+                });
+                return errors;
+            }
+
+            InspectChildNode(rootSequence, targetType, errors, tagsMap, "RootList");
         }
 
         return errors;
     }
 
-    private static void ValidateNodeAgainstType(YamlMappingNode mapping, Type targetType, List<EditorError> errors)
+    private static void ValidateNodeAgainstType(
+        YamlMappingNode mapping,
+        Type targetType,
+        List<EditorError> errors,
+        IReadOnlyDictionary<string, Type> tagsMap)
     {
         var allowedProperties = GetAllowedProperties(targetType);
-        var providedProperties = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var entry in mapping.Children)
         {
             if (entry.Key is not YamlScalarNode keyNode) continue;
 
             var keyName = keyNode.Value ?? string.Empty;
-            providedProperties.Add(keyName);
 
             if (!allowedProperties.Contains(keyName))
             {
@@ -91,11 +124,10 @@ public class YamlSchemaValidator : IYamlSchemaValidator
             var propertyType = GetPropertyType(targetType, keyName);
             if (propertyType != null)
             {
-                InspectChildNode(entry.Value, propertyType, errors, keyName);
+                InspectChildNode(entry.Value, propertyType, errors, tagsMap, keyName);
             }
         }
 
-        // Проверка обязательных полей
         var requiredProperties = GetRequiredProperties(targetType);
 
         foreach (var reqProp in requiredProperties)
@@ -104,7 +136,6 @@ public class YamlSchemaValidator : IYamlSchemaValidator
                 c.Key is YamlScalarNode keyNode &&
                 string.Equals(keyNode.Value, reqProp, StringComparison.OrdinalIgnoreCase));
 
-            // Ключа нет вообще ИЛИ ключ есть, но его значение - пустой скаляр (например, "name: ")
             bool isMissingOrEmpty = pair.Key == null ||
                                     (pair.Value is YamlScalarNode valueNode &&
                                      string.IsNullOrWhiteSpace(valueNode.Value));
@@ -138,44 +169,33 @@ public class YamlSchemaValidator : IYamlSchemaValidator
         }
     }
 
-    private static void ValidateScalarAsObject(YamlScalarNode scalarNode, Type targetType, List<EditorError> errors)
-    {
-        // 1. Если пользователь напечатал незавершенный текст (например "f" или "к" без двоеточия)
-        if (!string.IsNullOrWhiteSpace(scalarNode.Value))
-        {
-            errors.Add(new EditorError
-            {
-                Message =
-                    $"Ожидались свойства объекта '{GetFriendlyTypeName(targetType)}', а не одиночное значение '{scalarNode.Value}'",
-                Line = scalarNode.Start.Line,
-                Column = scalarNode.Start.Column,
-                Length = scalarNode.Value.Length
-            });
-            return;
-        }
-
-        // 2. Если это просто пустой узел после тега (например, "- !line" или "- !resistor")
-        var requiredProperties = GetRequiredProperties(targetType);
-        foreach (var reqProp in requiredProperties)
-        {
-            errors.Add(new EditorError
-            {
-                Message =
-                    $"Обязательное свойство '{reqProp}' не заполнено в объекте '{GetFriendlyTypeName(targetType)}'",
-                Line = scalarNode.Start.Line,
-                Column = scalarNode.Start.Column,
-                Length = !scalarNode.Tag.IsEmpty ? scalarNode.Tag.Value.Length : 1
-            });
-        }
-    }
-
-    private static void InspectChildNode(YamlNode node, Type expectedType, List<EditorError> errors,
+    private static void InspectChildNode(
+        YamlNode node,
+        Type expectedType,
+        List<EditorError> errors,
+        IReadOnlyDictionary<string, Type> tagsMap,
         string propertyName = "")
     {
-        // 1. ЕСЛИ ОЖИДАЕТСЯ ПРОСТОЙ ТИП (строка, число, bool, enum)
+        // 1. ПРОВЕРКА НЕИЗВЕСТНЫХ ТЕГОВ
+        if (!node.Tag.IsEmpty)
+        {
+            var tag = node.Tag.Value;
+            if (!tagsMap.ContainsKey(tag))
+            {
+                errors.Add(new EditorError
+                {
+                    Message = $"Неизвестный тег элемента: '{tag}'",
+                    Line = node.Start.Line,
+                    Column = node.Start.Column,
+                    Length = tag.Length
+                });
+                return;
+            }
+        }
+
+        // 2. ЕСЛИ ОЖИДАЕТСЯ ПРОСТОЙ ТИП
         if (IsSimpleType(expectedType))
         {
-            // Если вместо простого значения передали объект {} или список []
             if (node is not YamlScalarNode scalarNode)
             {
                 var nodeType = node is YamlMappingNode ? "объект" : "список";
@@ -192,7 +212,6 @@ public class YamlSchemaValidator : IYamlSchemaValidator
                 return;
             }
 
-            // Валидация самого скаляра
             if (!scalarNode.Tag.IsEmpty && scalarNode.Tag.Value == "!via") return;
             if (expectedType == typeof(PadEndpointDto)) return;
 
@@ -214,45 +233,30 @@ public class YamlSchemaValidator : IYamlSchemaValidator
             return;
         }
 
-        // 2. ЕСЛИ ОЖИДАЕТСЯ СЛОВАРЬ (Dictionary)
+        // 3. ЕСЛИ ОЖИДАЕТСЯ СЛОВАРЬ (Dictionary)
         if (IsDictionaryType(expectedType, out var valueType))
         {
             if (node is YamlMappingNode dictMapping)
             {
                 foreach (var entry in dictMapping.Children)
                 {
-                    if (valueType != null) InspectChildNode(entry.Value, valueType, errors, propertyName);
+                    if (valueType != null) InspectChildNode(entry.Value, valueType, errors, tagsMap, propertyName);
                 }
             }
 
             return;
         }
 
-        // 3. ЕСЛИ ОЖИДАЕТСЯ СЛОЖНЫЙ ОБЪЕКТ
+        // 4. ЕСЛИ ОЖИДАЕТСЯ СЛОЖНЫЙ ОБЪЕКТ / СПИСОК
         if (node is YamlMappingNode childMapping)
         {
             var targetType = expectedType;
-            if (!node.Tag.IsEmpty)
+            if (!node.Tag.IsEmpty && tagsMap.TryGetValue(node.Tag.Value, out var mappedType))
             {
-                var tag = node.Tag.Value;
-                if (YamlTagRegistry.LayerTagsMap.TryGetValue(tag, out var mappedType))
-                {
-                    targetType = mappedType;
-                }
-                else
-                {
-                    errors.Add(new EditorError
-                    {
-                        Message = $"Неизвестный тег элемента: '{tag}'",
-                        Line = node.Start.Line,
-                        Column = node.Start.Column,
-                        Length = tag.Length
-                    });
-                    return;
-                }
+                targetType = mappedType;
             }
 
-            ValidateNodeAgainstType(childMapping, targetType, errors);
+            ValidateNodeAgainstType(childMapping, targetType, errors, tagsMap);
         }
         else if (node is YamlSequenceNode sequence)
         {
@@ -276,7 +280,7 @@ public class YamlSchemaValidator : IYamlSchemaValidator
                 if (!item.Tag.IsEmpty)
                 {
                     var tag = item.Tag.Value;
-                    if (YamlTagRegistry.LayerTagsMap.TryGetValue(tag, out var mappedType))
+                    if (tagsMap.TryGetValue(tag, out var mappedType))
                     {
                         targetType = mappedType;
                     }
@@ -293,11 +297,11 @@ public class YamlSchemaValidator : IYamlSchemaValidator
                     }
                 }
 
-                if (item is YamlMappingNode itemMapping && targetType != null)
+                if (item is YamlMappingNode itemMapping)
                 {
-                    ValidateNodeAgainstType(itemMapping, targetType, errors);
+                    ValidateNodeAgainstType(itemMapping, targetType, errors, tagsMap);
                 }
-                else if (item is YamlScalarNode scalarItem && targetType != null)
+                else if (item is YamlScalarNode scalarItem)
                 {
                     if (!IsSimpleType(targetType))
                     {
@@ -324,20 +328,47 @@ public class YamlSchemaValidator : IYamlSchemaValidator
         else if (node is YamlScalarNode scalarNode)
         {
             var targetType = expectedType;
-            if (!scalarNode.Tag.IsEmpty &&
-                YamlTagRegistry.LayerTagsMap.TryGetValue(scalarNode.Tag.Value, out var mappedType))
+            if (!scalarNode.Tag.IsEmpty && tagsMap.TryGetValue(scalarNode.Tag.Value, out var mappedType))
             {
                 targetType = mappedType;
             }
 
             if (!IsSimpleType(targetType))
             {
-                // проверка, чтобы не требовать объект:
-                if (targetType == typeof(ViaEndpointDto)) 
+                if (targetType == typeof(ViaEndpointDto))
                     return;
 
                 ValidateScalarAsObject(scalarNode, targetType, errors);
             }
+        }
+    }
+
+    private static void ValidateScalarAsObject(YamlScalarNode scalarNode, Type targetType, List<EditorError> errors)
+    {
+        if (!string.IsNullOrWhiteSpace(scalarNode.Value))
+        {
+            errors.Add(new EditorError
+            {
+                Message =
+                    $"Ожидались свойства объекта '{GetFriendlyTypeName(targetType)}', а не одиночное значение '{scalarNode.Value}'",
+                Line = scalarNode.Start.Line,
+                Column = scalarNode.Start.Column,
+                Length = scalarNode.Value.Length
+            });
+            return;
+        }
+
+        var requiredProperties = GetRequiredProperties(targetType);
+        foreach (var reqProp in requiredProperties)
+        {
+            errors.Add(new EditorError
+            {
+                Message =
+                    $"Обязательное свойство '{reqProp}' не заполнено в объекте '{GetFriendlyTypeName(targetType)}'",
+                Line = scalarNode.Start.Line,
+                Column = scalarNode.Start.Column,
+                Length = !scalarNode.Tag.IsEmpty ? scalarNode.Tag.Value.Length : 1
+            });
         }
     }
 
@@ -367,12 +398,7 @@ public class YamlSchemaValidator : IYamlSchemaValidator
 
         if (string.IsNullOrWhiteSpace(value) || value == "null" || value == "~")
         {
-            if (scalarNode.Style == ScalarStyle.Plain)
-            {
-                return true;
-            }
-
-            return false;
+            return scalarNode.Style == ScalarStyle.Plain;
         }
 
         if (targetType == typeof(double) || targetType == typeof(float) || targetType == typeof(decimal))

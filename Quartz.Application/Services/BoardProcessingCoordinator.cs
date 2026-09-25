@@ -3,6 +3,7 @@ using Quartz.Application.Interfaces;
 using Quartz.Core.Interfaces;
 using Quartz.Core.Models;
 using Quartz.Core.Models.BoardEntities;
+using Quartz.Core.Models.BoardEntities.Styles;
 
 namespace Quartz.Application.Services;
 
@@ -12,6 +13,7 @@ public class BoardProcessingCoordinator : IBoardProcessingCoordinator
     private readonly IYamlSchemaValidator _schemaValidator;
     private readonly ILayerDomainParser _layerDomainParser;
     private readonly IBoardDomainParser _boardDomainParser;
+    private readonly IStylesDomainParser _stylesDomainParser;
     private readonly ILogicValidationService _logicValidator;
     private readonly IDrawingGenerationService _drawingGenerator;
 
@@ -20,6 +22,7 @@ public class BoardProcessingCoordinator : IBoardProcessingCoordinator
         IYamlSchemaValidator schemaValidator,
         ILayerDomainParser layerDomainParser,
         IBoardDomainParser boardDomainParser,
+        IStylesDomainParser stylesDomainParser,
         ILogicValidationService logicValidator,
         IDrawingGenerationService drawingGenerator)
     {
@@ -27,14 +30,16 @@ public class BoardProcessingCoordinator : IBoardProcessingCoordinator
         _schemaValidator = schemaValidator;
         _layerDomainParser = layerDomainParser;
         _boardDomainParser = boardDomainParser;
+        _stylesDomainParser = stylesDomainParser;
         _logicValidator = logicValidator;
         _drawingGenerator = drawingGenerator;
     }
 
-    public (ProcessResult<BoardModel> BoardResult, Dictionary<string, ProcessResult<LayerModel>> LayerResults)
-        ProcessProject(string boardText, IReadOnlyDictionary<string, string> layerTexts)
+    public ProjectResult ProcessProject(
+        string boardText,
+        IReadOnlyDictionary<string, string> layerTexts,
+        IReadOnlyDictionary<string, string> styleTexts)
     {
-        var activeLayerPaths = _boardDomainParser.ExtractLayerPaths(boardText);
         var boardErrors = new List<EditorError>();
         var extraLayerErrors = new Dictionary<string, List<EditorError>>(StringComparer.OrdinalIgnoreCase);
 
@@ -42,23 +47,58 @@ public class BoardProcessingCoordinator : IBoardProcessingCoordinator
         {
             if (!extraLayerErrors.TryGetValue(filePath, out var errors))
             {
-                errors = new List<EditorError>();
+                errors = [];
                 extraLayerErrors[filePath] = errors;
             }
 
             return errors;
         }
 
-        // 1. ЭТАП 1: Предварительный сбор компонентов и карты индексов слоев
+        // =========================================================================
+        // 1. ЭТАП 1: Валидация и парсинг файлов стилей (.stly)
+        // =========================================================================
+        var stylesResults = new Dictionary<string, ProcessResult<List<Style>>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (path, styleText) in styleTexts)
+        {
+            stylesResults[path] = ProcessStyles(styleText);
+        }
+
+        var globalStyles = new Dictionary<string, Style>(StringComparer.OrdinalIgnoreCase);
+        foreach (var result in stylesResults.Values)
+        {
+            if (result.Model != null)
+            {
+                foreach (var style in result.Model)
+                {
+                    if (style.Name != null)
+                        globalStyles[style.Name] = style;
+                }
+            }
+        }
+
+        // =========================================================================
+        // 2. ЭТАП 2: Предварительный сбор компонентов и карты индексов слоев
+        // =========================================================================
+        var activeLayerPaths = _boardDomainParser.ExtractLayerPaths(boardText);
         var compsByFile = new Dictionary<string, Dictionary<string, Component>>(StringComparer.OrdinalIgnoreCase);
         var layersMap = new Dictionary<string, LayerModel>(StringComparer.OrdinalIgnoreCase);
         var layerPathByName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var indicesByLayerName = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var preExtractedNamesByPath = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         var layerIndex = 0;
         foreach (var path in activeLayerPaths)
         {
-            if (!layerTexts.TryGetValue(path, out var layerText)) continue;
+            if (!layerTexts.TryGetValue(path, out var layerText)) 
+                continue;
+            
+            var layerSyntaxErrors = _syntaxParser.ValidateSyntax(layerText);
+            if (layerSyntaxErrors.Count > 0)
+            {
+                // Записываем критические ошибки и ПРОПУСКАЕМ этот сломанный файл!
+                GetOrCreateExtraErrors(path).AddRange(layerSyntaxErrors);
+                continue;
+            }
 
             var comps = _layerDomainParser.ParseComponents(layerText, out _);
             compsByFile[path] = comps;
@@ -67,6 +107,7 @@ public class BoardProcessingCoordinator : IBoardProcessingCoordinator
 
             if (!string.IsNullOrWhiteSpace(layerName))
             {
+                preExtractedNamesByPath[path] = layerName;
                 var dummyLayer = new LayerModel { Name = layerName, Index = layerIndex };
                 layersMap.TryAdd(layerName, dummyLayer);
 
@@ -103,26 +144,30 @@ public class BoardProcessingCoordinator : IBoardProcessingCoordinator
             }
         }
 
-        // 2. ЭТАП 2: Валидация файла .pcby
+        // =========================================================================
+        // 3. ЭТАП 3: Валидация и парсинг файла платы (.pcby)
+        // =========================================================================
         var syntaxErrors = _syntaxParser.ValidateSyntax(boardText);
         boardErrors.AddRange(syntaxErrors);
         boardErrors.AddRange(_schemaValidator.ValidateSchemaAndTags(boardText, typeof(BoardModel)));
 
         BoardModel? boardModel = null;
-        // Блокируем парсинг ТОЛЬКО если сломан сам синтаксис YAML, а не если забыли обязательное поле!
         if (syntaxErrors.Count == 0)
         {
-            boardModel = _boardDomainParser.Parse(
+            boardModel = _boardDomainParser.ParseBoard(
                 boardText,
                 globalComponents,
                 layersMap,
                 layerTexts.Keys.ToList(),
+                globalStyles,
                 out var parseErrors);
 
             boardErrors.AddRange(parseErrors);
         }
 
-        // 3. ЭТАП 3: Валидация каждого слоя
+        // =========================================================================
+        // 4. ЭТАП 4: Валидация и парсинг каждого слоя (.layy)
+        // =========================================================================
         var layerResults = new Dictionary<string, ProcessResult<LayerModel>>(StringComparer.OrdinalIgnoreCase);
         var activeNets = boardModel?.Nets ?? new Dictionary<string, Net>(StringComparer.OrdinalIgnoreCase);
 
@@ -141,7 +186,14 @@ public class BoardProcessingCoordinator : IBoardProcessingCoordinator
                 }
             }
 
-            var layerResult = ProcessLayerInternal(layerText, otherLayersComponents, netsForLayer, boardModel?.Vias);
+            preExtractedNamesByPath.TryGetValue(path, out var preExtractedName);
+            var layerResult = ProcessLayerInternal(
+                layerText,
+                otherLayersComponents,
+                netsForLayer,
+                boardModel?.Vias,
+                globalStyles,
+                preExtractedName);
 
             if (extraLayerErrors.TryGetValue(path, out var extraErrs) && extraErrs.Count > 0)
             {
@@ -156,25 +208,24 @@ public class BoardProcessingCoordinator : IBoardProcessingCoordinator
 
             layerResults[path] = layerResult;
 
-            // Наполняем boardModel реальными слоями!
             if (isAttached && boardModel != null && layerResult.Model != null)
             {
                 boardModel.Layers[layerResult.Model.Name] = layerResult.Model;
             }
         }
 
+        // =========================================================================
+        // 5. ЭТАП 5: Пост-обработка платы и доменная валидация
+        // =========================================================================
         if (boardModel != null)
         {
-            // Строим кэш NearestVias за O(N + V) ТОЛЬКО КОГДА ВСЕ СЛОИ ПРИКРЕПЛЕНЫ!
             PopulateNearestVias(boardModel);
 
-            // Теперь проверяем отсутствующие Via за O(1) за запрос!
             _boardDomainParser.ValidateInterlayerNetsVia(boardModel, boardErrors);
 
             var boardLogicErrors = _logicValidator.ValidateBoard(boardModel);
             boardErrors.AddRange(boardLogicErrors);
 
-            // Генерируем примитивы за O(1) за запрос!
             foreach (var (path, layerResult) in layerResults)
             {
                 if (layerResult.Model != null)
@@ -186,23 +237,27 @@ public class BoardProcessingCoordinator : IBoardProcessingCoordinator
             }
         }
 
-        // 4. ЭТАП 4: Генерация оверлея (Vias)
+        // =========================================================================
+        // 6. ЭТАП 6: Генерация примитивов оверлея (Vias)
+        // =========================================================================
         var boardPrimitives = boardModel != null
             ? _drawingGenerator.GenerateBoardOverlayPrimitives(boardModel)
             : [];
 
-        return (new ProcessResult<BoardModel>(boardErrors, boardPrimitives, boardModel), layerResults);
+        return new ProjectResult(
+            new ProcessResult<BoardModel>(boardErrors, boardPrimitives, boardModel),
+            layerResults,
+            stylesResults);
     }
 
     private static void PopulateNearestVias(BoardModel board)
     {
         board.NearestVias.Clear();
 
-        // 1. Группируем Via по имени сети: O(V)
         var viasByNet = new Dictionary<string, List<Via>>(StringComparer.OrdinalIgnoreCase);
         foreach (var via in board.Vias.Values)
         {
-            if (string.IsNullOrWhiteSpace(via.Net.Name)) 
+            if (string.IsNullOrWhiteSpace(via.Net.Name))
                 continue;
             if (!viasByNet.TryGetValue(via.Net.Name, out var list))
             {
@@ -213,7 +268,6 @@ public class BoardProcessingCoordinator : IBoardProcessingCoordinator
             list.Add(via);
         }
 
-        // 2. Карта компонентов на слои: O(C)
         var compToLayer = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var (layerName, layer) in board.Layers)
         {
@@ -223,7 +277,6 @@ public class BoardProcessingCoordinator : IBoardProcessingCoordinator
             }
         }
 
-        // 3. Заполняем кэш за O(N * V_net) -> Линейная сложность O(N + V)
         foreach (var net in board.Nets.Values)
         {
             if (!viasByNet.TryGetValue(net.Name, out var netVias) || netVias.Count == 0)
@@ -298,31 +351,27 @@ public class BoardProcessingCoordinator : IBoardProcessingCoordinator
         string text,
         Dictionary<string, Component> components,
         IReadOnlyDictionary<string, Net> nets,
-        IReadOnlyDictionary<string, Via>? allVias) // <-- Сюда приходит глобальный словарь Vias
+        IReadOnlyDictionary<string, Via>? allVias,
+        IReadOnlyDictionary<string, Style>? globalStyles = null,
+        string? preExtractedLayerName = null)
     {
         var allErrors = new List<EditorError>();
 
-        // 1. Проверяем синтаксис
         var syntaxErrors = _syntaxParser.ValidateSyntax(text);
         if (syntaxErrors.Count > 0)
             return new ProcessResult<LayerModel>(syntaxErrors.ToList(), [], null);
 
-        // 2. Проверяем схему и типы
         var schemaErrors = _schemaValidator.ValidateSchemaAndTags(text, typeof(LayerModel));
         allErrors.AddRange(schemaErrors);
 
-        // --- ВЫТЯГИВАЕМ ИМЯ СЛОЯ И ФИЛЬТРУЕМ VIA ---
+        string? currentLayerName = preExtractedLayerName ?? _layerDomainParser.ExtractLayerName(text);
 
-        string? currentLayerName = _layerDomainParser.ExtractLayerName(text);
-
-        // Создаем локальный словарь Via за O(V) один раз на весь слой
         var layerVias = new Dictionary<string, Via>(StringComparer.OrdinalIgnoreCase);
 
         if (allVias != null && !string.IsNullOrWhiteSpace(currentLayerName))
         {
             foreach (var (viaName, via) in allVias)
             {
-                // Проверяем, пронизывает ли отверстие текущий слой.
                 if (via.Layers.Any(l => string.Equals(l.Name, currentLayerName, StringComparison.OrdinalIgnoreCase)))
                 {
                     layerVias.Add(viaName, via);
@@ -330,13 +379,9 @@ public class BoardProcessingCoordinator : IBoardProcessingCoordinator
             }
         }
 
-        // -------------------------------------------
-
-        // 3. ПЕРЕДАЕМ ОТФИЛЬТРОВАННЫЙ layerVias В ПАРСЕР:
-        var layerModel = _layerDomainParser.ParseLayer(text, components, nets, layerVias, out var domainErrors);
+        var layerModel = _layerDomainParser.ParseLayer(text, components, nets, layerVias, globalStyles, out var domainErrors);
         allErrors.AddRange(domainErrors);
 
-        // 4. Проверяем бизнес-логику
         if (layerModel != null)
         {
             var logicErrors = _logicValidator.ValidateLayer(layerModel);
@@ -350,13 +395,32 @@ public class BoardProcessingCoordinator : IBoardProcessingCoordinator
         return new ProcessResult<LayerModel>(allErrors, primitives, layerModel);
     }
 
-    public ProcessResult<LayerModel> Process(string text, BoardModel? boardModel)
+    public ProcessResult<LayerModel> ProcessLayer(string text, BoardModel? boardModel)
     {
         var components = boardModel?.GetAllComponents() ??
                          new Dictionary<string, Component>(StringComparer.OrdinalIgnoreCase);
         var nets = boardModel?.Nets ?? new Dictionary<string, Net>(StringComparer.OrdinalIgnoreCase);
         var vias = boardModel?.Vias ?? new Dictionary<string, Via>(StringComparer.OrdinalIgnoreCase);
 
+        // Для одиночного слоя стили платы недоступны в этом контексте без изменения сигнатуры, 
+        // поэтому передаем null, он будет использовать только свои внутренние.
         return ProcessLayerInternal(text, components, nets, vias);
+    }
+
+    public ProcessResult<List<Style>> ProcessStyles(string text)
+    {
+        var allErrors = new List<EditorError>();
+
+        var syntaxErrors = _syntaxParser.ValidateSyntax(text);
+        if (syntaxErrors.Count > 0)
+            return new ProcessResult<List<Style>>(syntaxErrors.ToList(), [], []);
+
+        var schemaErrors = _schemaValidator.ValidateSchemaAndTags(text, typeof(List<Style>));
+        allErrors.AddRange(schemaErrors);
+
+        var styles = _stylesDomainParser.ParseStyles(text, out var parseErrors);
+        allErrors.AddRange(parseErrors);
+
+        return new ProcessResult<List<Style>>(allErrors, [], styles);
     }
 }

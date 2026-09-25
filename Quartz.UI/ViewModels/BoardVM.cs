@@ -1,5 +1,5 @@
 using System.IO;
-using System.Linq;
+using System.Threading.Tasks;
 using Quartz.Application.Interfaces;
 using Quartz.Core.Enums;
 using Quartz.Core.Models;
@@ -21,42 +21,43 @@ public class BoardVM : EditorVM
     }
 
     public BoardModel? BoardModel { get; set; }
-
     public override Extension Extension => Extension.Pcby;
 
-    protected override void ProcessDocument(string text)
+    protected override async Task ProcessDocument(string text)
     {
         Errors.Clear();
 
+        // 1. Быстро забираем тексты из словаря MainVM (без обхода деревьев!)
+        var stylesTexts = MainVM.GetAllStylesTexts();
         var layerTexts = MainVM.GetAllLayerTexts();
-        var (boardResult, layerResults) = _coordinator.ProcessProject(text, layerTexts);
 
-        // Ошибки заносим ВСЕГДА, чтобы UI их подсвечивал
+        // 2. Считаем проект
+        var (boardResult, layerResults, stylesResults) = await Task.Run(() =>
+            _coordinator.ProcessProject(text, layerTexts, stylesTexts)
+        );
+
+        // 3. Обновляем ошибки и модель самой платы
         foreach (var err in boardResult.Errors)
         {
             Errors.Add(err);
         }
 
-        // Обновляем модель платы ВСЕГДА, если координатор смог ее собрать!
         if (boardResult.Model != null)
         {
             BoardModel = boardResult.Model;
         }
 
-        // Флаг нужен только для уведомления UI (например, показе иконки ошибки в статусе)
-        bool hasAnyErrors = boardResult.Errors.Count > 0 ||
-                            layerResults.Values.Any(r => r.Errors.Count > 0);
-
-        // Передаем примитивы и результаты далее — канвас отрисует всё, что получилось собрать!
-        MainVM.NotifyLayersBoardUpdated(boardResult.Primitives, layerResults, hasAnyErrors);
+        // 4. Отдаем результат в MainVM для рассылки по слоям
+        MainVM.NotifyStylesUpdated(stylesResults);
+        MainVM.NotifyLayersBoardUpdated(boardResult.Primitives, layerResults);
     }
 
-    public void ProcessBoardProject()
+    public async Task ProcessBoardProject()
     {
-        string text = !string.IsNullOrWhiteSpace(Document?.Text)
+        string text = Document != null && !string.IsNullOrWhiteSpace(Document.Text)
             ? Document.Text
             : File.ReadAllText(FilePath);
 
-        ProcessDocument(text);
+        await ProcessDocument(text);
     }
 }

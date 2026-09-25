@@ -904,7 +904,7 @@ public static class YamlMapperExtensions
             (viaDto, errs) =>
             {
                 var v =
-                    viaDto.ToDomain(stylesMap, LengthUnit.Mm, out var e, netsMap, layersMap) as Via;
+                    viaDto.ToDomain(stylesMap, dto.Unit, out var e, netsMap, layersMap) as Via;
                 errs.AddRange(e);
                 return v;
             },

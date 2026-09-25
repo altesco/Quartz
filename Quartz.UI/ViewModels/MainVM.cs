@@ -13,6 +13,7 @@ using CommunityToolkit.Mvvm.Input;
 using Quartz.Application.Interfaces;
 using Quartz.Core.Models;
 using Quartz.Core.Models.BoardEntities;
+using Quartz.Core.Models.BoardEntities.Styles;
 using Quartz.UI.Enums;
 
 namespace Quartz.UI.ViewModels;
@@ -40,6 +41,8 @@ public partial class MainVM : ObservableObject
 
     private readonly IBoardProcessingCoordinator _boardProcessingCoordinator;
 
+    private string? _projectRootDir;
+
     public MainVM(IBoardProcessingCoordinator boardProcessingCoordinator)
     {
         _boardProcessingCoordinator = boardProcessingCoordinator;
@@ -51,13 +54,20 @@ public partial class MainVM : ObservableObject
 
         _activePanel = (PanelVM)_rootNode;
 
-        FileTree.Add(LoadDirectories(
-            Path.Combine("/", "home", "alexandr", "Games", "Проект"),
-            parent: null
-        ));
+        _projectLayers.Clear();
+        _projectStyles.Clear();
+
+        // Запоминаем путь ДО вызова LoadDirectories!
+        _projectRootDir = Path.Combine("/", "home", "alexandr", "Games", "Проект");
+
+        var rootDirVM = LoadDirectories(_projectRootDir, parent: null);
+        FileTree.Add(rootDirVM);
     }
 
     public ObservableCollection<FileStructVM> FileTree { get; } = [];
+
+    private readonly Dictionary<string, LayerVM> _projectLayers = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, StylesFileVM> _projectStyles = new(StringComparer.OrdinalIgnoreCase);
 
     public BoardVM? CurrentBoard { get; set; }
 
@@ -299,7 +309,7 @@ public partial class MainVM : ObservableObject
                 .OrderBy(x => x, StringComparer.OrdinalIgnoreCase);
             foreach (var f in files)
             {
-                if (Path.GetExtension(f) is ".pcby" or ".layy" or ".schy")
+                if (Path.GetExtension(f) is ".pcby" or ".layy" or ".schy" or ".stly")
                 {
                     var file = LoadFile(f, dir);
                     if (file != null)
@@ -318,6 +328,8 @@ public partial class MainVM : ObservableObject
     private FileVM? LoadFile(string path, DirectoryVM? parent)
     {
         var ext = Path.GetExtension(path);
+        string relPath = GetRelativePath(path);
+
         switch (ext)
         {
             case ".pcby":
@@ -328,13 +340,31 @@ public partial class MainVM : ObservableObject
                 };
                 CurrentBoard = board;
                 return board;
+
             case ".layy":
                 var layer = new LayerVM(mainVM: this, parent: parent, filePath: path,
                     coordinator: _boardProcessingCoordinator)
                 {
                     FilePath = path
                 };
+
+                // ЗАПОМИНАЕМ СЛОЙ СРАЗУ ПРИ ОТКРЫТИИ ПРОЕКТА
+                
+                _projectLayers[relPath] = layer;
+
                 return layer;
+            
+            case ".stly":
+                var stylesFile = new StylesFileVM(mainVM: this, parent: parent, filePath: path,
+                    coordinator: _boardProcessingCoordinator)
+                {
+                    FilePath = path
+                };
+
+                // ЗАПОМИНАЕМ ФАЙЛ СТИЛЕЙ СРАЗУ ПРИ ОТКРЫТИИ ПРОЕКТА
+                _projectStyles[relPath] = stylesFile;
+
+                return stylesFile;
         }
 
         return null;
@@ -396,149 +426,78 @@ public partial class MainVM : ObservableObject
         dc.TapEndCommand.Execute(null);
     }
 
-
-    // --- МЕТОДЫ ДЛЯ СВЯЗИ ПЛАТЫ И СЛОЕВ ---
+    // --- ОПТИМИЗИРОВАННАЯ РАБОТА С ФАЙЛАМИ ---
 
     /// <summary>
-    /// Собирает тексты всех слоев (.layy) проекта.
-    /// Приоритет отдается несохраненным изменениям из открытых вкладок.
+    /// Мгновенно собирает тексты всех слоев без обхода UI и дерева файлов.
     /// </summary>
     public Dictionary<string, string> GetAllLayerTexts()
     {
         var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-        // 1. Собираем открытые в редакторе слои (у них самый свежий текст из Document.Text)
-        var openLayers = GetOpenLayersRecursive(RootNode)
-            .ToDictionary(
-                l => GetRelativePath(l.FilePath),
-                l => l,
-                StringComparer.OrdinalIgnoreCase);
-
-        // 2. Обходим дерево файлов и собираем тексты всех .layy
-        CollectLayersFromTreeRecursive(FileTree, result, openLayers);
+        foreach (var (relPath, layerVm) in _projectLayers)
+        {
+            // Берем актуальный текст из памяти редактора или с диска
+            result[relPath] = layerVm.GetActualText();
+        }
 
         return result;
     }
 
-    public void ReloadCurrentProject()
+    public Dictionary<string, string> GetAllStylesTexts()
     {
-        if (CurrentBoard is { } boardVm)
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var (relPath, stylesFileVm) in _projectStyles)
         {
-            // Запускаем принудительную пересборку платы, 
-            // даже если файл .pcby не открыт во вкладке редактора!
-            boardVm.ProcessBoardProject();
+            // Берем актуальный текст из памяти редактора или с диска
+            result[relPath] = stylesFileVm.GetActualText();
         }
+
+        return result;
     }
 
     /// <summary>
-    /// Уведомляет все открытые вкладки слоев об обновлении платы, 
-    /// передавая им уже просчитанные результаты или принуждая к перерисовке.
+    /// Запуск пересборки проекта платы.
+    /// </summary>
+    public void ReloadCurrentProject()
+    {
+        CurrentBoard?.ProcessBoardProject();
+    }
+
+    /// <summary>
+    /// Рассылает готовые результаты парсинга по зарегистрированным слоям.
     /// </summary>
     public void NotifyLayersBoardUpdated(
         List<DrawingPrimitive> boardOverlayPrimitives,
-        IDictionary<string, ProcessResult<LayerModel>> layerResults,
-        bool hasAnyErrors)
+        IDictionary<string, ProcessResult<LayerModel>> layerResults)
     {
-        foreach (var layerVM in GetOpenLayersRecursive(RootNode))
+        foreach (var (relPath, layerVM) in _projectLayers)
         {
-            string relPath = GetRelativePath(layerVM.FilePath);
-
-            if (!layerResults.TryGetValue(relPath, out var layerResult)) 
-                continue;
-            
-            // 1. Ошибки слоя обновляем ВСЕГДА, чтобы редактор кода закрашивал проблемные строки
-            layerVM.Errors.Clear();
-            foreach (var err in layerResult.Errors)
+            if (layerResults.TryGetValue(relPath, out var layerResult))
             {
-                layerVM.Errors.Add(err);
-            }
-
-            // 2. Модель обновляем, если координатор смог собрать хоть что-то
-            if (layerResult.Model == null) 
-                continue;
-                
-            layerVM.LayerModel = layerResult.Model;
-
-            // 3. Холст обновляем ВСЕГДА! Отрисуем всё, что получилось распарсить
-            if (layerVM.Canvas == null) 
-                continue;
-                    
-            var layerPrimitives = layerResult.Primitives;
-            var overlayPrimitives = boardOverlayPrimitives ?? [];
-
-            // Склеиваем примитивы текущего слоя и оверлей платы (Vias + Nets)
-            layerVM.Canvas.RenderData = layerPrimitives
-                .Concat(overlayPrimitives)
-                .ToList();
-        }
-    }
-
-    // --- ВСПОМОГАТЕЛЬНЫЕ ПРИВАТНЫЕ МЕТОДЫ ---
-
-    private IEnumerable<LayerVM> GetOpenLayersRecursive(LayoutRootVM node)
-    {
-        if (node is PanelVM panel)
-        {
-            foreach (var tab in panel.Tabs.OfType<LayerVM>())
-            {
-                yield return tab;
-            }
-        }
-        else if (node is SplitContainerVM container)
-        {
-            foreach (var child in container.Children)
-            {
-                foreach (var layer in GetOpenLayersRecursive(child))
-                {
-                    yield return layer;
-                }
+                // Отдаем слою его результат — пусть сам решает, как себя обновить
+                layerVM.ApplyProjectResult(layerResult, boardOverlayPrimitives);
             }
         }
     }
 
-    private void CollectLayersFromTreeRecursive(
-        IEnumerable<FileStructVM> items,
-        Dictionary<string, string> result,
-        Dictionary<string, LayerVM> openLayers)
+    public void NotifyStylesUpdated(IDictionary<string, ProcessResult<List<Style>>> styleResults)
     {
-        foreach (var item in items)
+        foreach (var (relPath, styleVM) in _projectStyles)
         {
-            if (item is DirectoryVM dir)
+            if (styleResults.TryGetValue(relPath, out var styleResult))
             {
-                CollectLayersFromTreeRecursive(dir.Children, result, openLayers);
-            }
-            else if (item is LayerVM layer)
-            {
-                string relPath = GetRelativePath(layer.FilePath);
-
-                // Если слой открыт в редакторе — берём не сохранённый текст из вкладки
-                if (openLayers.TryGetValue(relPath, out var openLayerVm))
-                {
-                    result[relPath] = openLayerVm.Document?.Text ?? string.Empty;
-                }
-                else
-                {
-                    // Иначе читаем с диска
-                    try
-                    {
-                        result[relPath] = File.ReadAllText(layer.FilePath);
-                    }
-                    catch
-                    {
-                        result[relPath] = string.Empty;
-                    }
-                }
+                styleVM.ApplyProjectResult(styleResult);
             }
         }
     }
 
-    private string GetRelativePath(string fullPath)
+    public string GetRelativePath(string fullPath)
     {
-        var rootDir = FileTree.FirstOrDefault()?.FilePath;
-        if (string.IsNullOrEmpty(rootDir))
+        if (string.IsNullOrEmpty(_projectRootDir))
             return Path.GetFileName(fullPath);
 
-        // Нормализуем слеши к UNIX-стилю для YAML
-        return Path.GetRelativePath(rootDir, fullPath).Replace('\\', '/');
+        return Path.GetRelativePath(_projectRootDir, fullPath).Replace('\\', '/');
     }
 }

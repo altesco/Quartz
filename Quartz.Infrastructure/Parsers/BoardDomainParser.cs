@@ -1,10 +1,10 @@
 using Quartz.Core.Interfaces;
 using Quartz.Core.Models;
 using Quartz.Core.Models.BoardEntities;
+using Quartz.Core.Models.BoardEntities.Styles;
 using Quartz.Infrastructure.Dtos;
 using Quartz.Infrastructure.Tools;
 using YamlDotNet.Core;
-using YamlDotNet.Core.Events;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
 using YamlDotNet.Serialization.NodeDeserializers;
@@ -23,7 +23,7 @@ public class BoardDomainParser : IBoardDomainParser
             .WithNodeDeserializer(
                 inner => new PositionNodeDeserializer(inner),
                 s => s.InsteadOf<ObjectNodeDeserializer>());
-            
+
         foreach (var tagMapping in YamlTagRegistry.BoardTagsMap)
         {
             builder.WithTagMapping(tagMapping.Key, tagMapping.Value);
@@ -38,7 +38,7 @@ public class BoardDomainParser : IBoardDomainParser
 
         try
         {
-            string normalizedYaml = NormalizeEmptyTaggedObjects(yamlText);
+            string normalizedYaml = YamlParserHelpers.NormalizeEmptyTaggedObjects(yamlText, YamlTagRegistry.BoardTags);
             var dto = _deserializer.Deserialize<BoardModelDto?>(normalizedYaml);
 
             return (dto?.Layers ?? []).OfType<string>().ToList();
@@ -49,11 +49,12 @@ public class BoardDomainParser : IBoardDomainParser
         }
     }
 
-    public BoardModel? Parse(
+    public BoardModel? ParseBoard(
         string yamlText,
         Dictionary<string, Component> componentsMap,
         IReadOnlyDictionary<string, LayerModel>? layersMap,
         IReadOnlyCollection<string>? availableLayerPaths,
+        IReadOnlyDictionary<string, Style>? externalStyles,
         out List<EditorError> errors)
     {
         errors = [];
@@ -63,12 +64,7 @@ public class BoardDomainParser : IBoardDomainParser
             return new BoardModel();
         }
 
-        if (!ValidateTags(yamlText, errors))
-        {
-            return null;
-        }
-
-        string normalizedYaml = NormalizeEmptyTaggedObjects(yamlText);
+        string normalizedYaml = YamlParserHelpers.NormalizeEmptyTaggedObjects(yamlText, YamlTagRegistry.BoardTags);
 
         try
         {
@@ -79,21 +75,33 @@ public class BoardDomainParser : IBoardDomainParser
                 errors.Add(new EditorError
                 {
                     Message = "Не удалось создать модель документа",
-                    Line = 1,
-                    Column = 1,
-                    Length = 1
+                    Line = 1, Column = 1, Length = 1
                 });
-
                 return null;
+            }
+
+            var localStyles = YamlParserHelpers.ParseLocalStyles(dto.Styles, dto.Unit, out var styleErrors);
+            errors.AddRange(styleErrors);
+
+            var mergedStyles = new Dictionary<string, Style>(StringComparer.OrdinalIgnoreCase);
+            if (externalStyles != null)
+            {
+                foreach (var (k, v) in externalStyles) mergedStyles[k] = v;
+            }
+
+            foreach (var (k, v) in localStyles)
+            {
+                mergedStyles[k] = v;
             }
 
             var board = dto.ToDomain(
                 componentsMap,
-                out errors,
+                out var boardErrors,
                 layersMap: layersMap,
-                availableLayerPaths: availableLayerPaths);
+                availableLayerPaths: availableLayerPaths,
+                stylesMap: mergedStyles);
 
-            ValidateInterlayerNetsVia(board, errors);
+            errors.AddRange(boardErrors);
 
             return board;
         }
@@ -155,143 +163,5 @@ public class BoardDomainParser : IBoardDomainParser
                 }
             }
         }
-    }
-
-    private static bool ValidateTags(string yamlText, List<EditorError> errors)
-    {
-        try
-        {
-            using var stringReader = new StringReader(yamlText);
-            var parser = new Parser(stringReader);
-
-            while (parser.MoveNext())
-            {
-                if (parser.Current is not NodeEvent node || node.Tag.IsEmpty)
-                    continue;
-
-                string tag = node.Tag.Value ?? string.Empty;
-
-                if (string.IsNullOrWhiteSpace(tag) || YamlTagRegistry.BoardTags.Contains(tag))
-                    continue;
-
-                errors.Add(new EditorError
-                {
-                    Message = $"Неизвестный тэг элемента: '{tag}'",
-                    Line = Math.Max(1, (int)node.Start.Line),
-                    Column = Math.Max(1, (int)node.Start.Column),
-                    Length = Math.Max(1, tag.Length)
-                });
-            }
-
-            return errors.Count == 0;
-        }
-        catch (YamlException ex)
-        {
-            errors.Add(new EditorError
-            {
-                Message = $"Синтаксическая ошибка YAML: {ex.InnerException?.Message ?? ex.Message}",
-                Line = Math.Max(1, (int)ex.Start.Line),
-                Column = Math.Max(1, (int)ex.Start.Column),
-                Length = 1
-            });
-
-            return false;
-        }
-    }
-
-    private static string NormalizeEmptyTaggedObjects(string yamlText)
-    {
-        var lines = yamlText.Split('\n');
-        var result = new List<string>(lines.Length);
-
-        for (int i = 0; i < lines.Length; i++)
-        {
-            string currentLine = lines[i];
-            string trimmed = currentLine.Trim();
-
-            if (trimmed.Length == 0 || trimmed.StartsWith("#"))
-            {
-                result.Add(currentLine);
-                continue;
-            }
-
-            int currentIndent = GetIndentation(currentLine);
-            string? tag = GetEmptyObjectTag(trimmed);
-
-            if (tag == null)
-            {
-                result.Add(currentLine);
-                continue;
-            }
-
-            int nextIndex = i + 1;
-            while (nextIndex < lines.Length)
-            {
-                string nextLine = lines[nextIndex];
-                if (!string.IsNullOrWhiteSpace(nextLine) && !nextLine.TrimStart().StartsWith("#"))
-                {
-                    break;
-                }
-
-                nextIndex++;
-            }
-
-            bool hasNestedContent = false;
-            if (nextIndex < lines.Length)
-            {
-                int nextIndent = GetIndentation(lines[nextIndex]);
-                hasNestedContent = nextIndent > currentIndent;
-            }
-
-            if (!hasNestedContent)
-            {
-                result.Add(currentLine + " {}");
-            }
-            else
-            {
-                result.Add(currentLine);
-            }
-        }
-
-        return string.Join('\n', result);
-    }
-
-    private static string? GetEmptyObjectTag(string trimmedLine)
-    {
-        foreach (string tag in YamlTagRegistry.BoardTags)
-        {
-            if (!trimmedLine.EndsWith(tag, StringComparison.Ordinal))
-                continue;
-
-            int tagStart = trimmedLine.Length - tag.Length;
-
-            if (tagStart > 0)
-            {
-                char previous = trimmedLine[tagStart - 1];
-                if (!char.IsWhiteSpace(previous) && previous != ':' && previous != '-')
-                    continue;
-            }
-
-            return tag;
-        }
-
-        return null;
-    }
-
-    private static int GetIndentation(string line)
-    {
-        int count = 0;
-        foreach (char c in line)
-        {
-            if (c is ' ' or '\t')
-            {
-                count++;
-                continue;
-            }
-
-            break;
-        }
-
-        return count;
     }
 }

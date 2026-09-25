@@ -32,7 +32,6 @@ public static class YamlTagRegistry
         { "!connector-style", typeof(ConnectorStyleDto) },
         { "!pad-style", typeof(PadStyleDto) },
         { "!pin-style", typeof(PinStyleDto) },
-        { "!via-style", typeof(ViaStyleDto) },
         { "!footprint-style", typeof(FootprintStyleDto) },
         { "!name-settings-style", typeof(NameSettingsStyleDto) }, 
         { "!path-style", typeof(PathShapeStyleDto) },
@@ -46,13 +45,39 @@ public static class YamlTagRegistry
         { "!path", typeof(PathShapeDto) },
         { "!line", typeof(LineSegmentDto) },
         { "!arc", typeof(ArcSegmentDto) },
-        { "!via", typeof(ViaEndpointDto) },
 
         // стили плат
         { "!via-style", typeof(ViaStyleDto) },
         { "!name-settings-style", typeof(NameSettingsStyleDto) },
         { "!path-style", typeof(PathShapeStyleDto) },
         { "!rect-style", typeof(RectShapeStyleDto) }
+    };
+
+    public static readonly Dictionary<string, Type> StylesTagsMap = new(StringComparer.OrdinalIgnoreCase)
+    {
+        { "!rect", typeof(RectShapeDto) },
+        { "!path", typeof(PathShapeDto) },
+        { "!line", typeof(LineSegmentDto) },
+        { "!arc", typeof(ArcSegmentDto) },
+        { "!via", typeof(ViaEndpointDto) },
+        { "!pad", typeof(PadEndpointDto) },
+
+        // стили
+        { "!resistor-style", typeof(ResistorStyleDto) },
+        { "!capacitor-style", typeof(CapacitorStyleDto) },
+        { "!transistor-style", typeof(TransistorStyleDto) },
+        { "!diode-style", typeof(DiodeStyleDto) },
+        { "!inductor-style", typeof(InductorStyleDto) },
+        { "!ic-style", typeof(IntegratedCircuitStyleDto) },
+        { "!connector-style", typeof(ConnectorStyleDto) },
+        { "!pad-style", typeof(PadStyleDto) },
+        { "!pin-style", typeof(PinStyleDto) },
+        { "!footprint-style", typeof(FootprintStyleDto) },
+        { "!name-settings-style", typeof(NameSettingsStyleDto) },
+        { "!path-style", typeof(PathShapeStyleDto) },
+        { "!rect-style", typeof(RectShapeStyleDto) },
+        { "!trace-style", typeof(TraceStyleDto) },
+        { "!via-style", typeof(ViaStyleDto) }
     };
 
     // Кешированный список поддерживаемых тегов (для LayerDomainParser)

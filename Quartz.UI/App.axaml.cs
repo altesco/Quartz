@@ -47,6 +47,7 @@ public class App : Avalonia.Application
         services.AddSingleton<IYamlSchemaValidator, YamlSchemaValidator>();
         services.AddSingleton<ILayerDomainParser, LayerDomainParser>();
         services.AddSingleton<IBoardDomainParser, BoardDomainParser>();
+        services.AddSingleton<IStylesDomainParser, StylesDomainParser>();
 
         // 2. Application Services
         services.AddSingleton<ILogicValidationService, LogicValidationService>();

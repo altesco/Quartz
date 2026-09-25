@@ -1,5 +1,7 @@
 using System;
 using System.Collections.ObjectModel;
+using System.IO;
+using System.Threading.Tasks;
 using System.Timers;
 using Avalonia.Threading;
 using AvaloniaEdit.Document;
@@ -76,8 +78,26 @@ public abstract partial class EditorVM : FileVM
         if (string.IsNullOrEmpty(text))
             return;
 
-        ProcessDocument(text);
+        _ = ProcessDocument(text);
     }
 
-    protected abstract void ProcessDocument(string text);
+    protected abstract Task ProcessDocument(string text);
+
+    /// <summary>
+    /// Возвращает измененный текст из открытого документа или считывает с диска
+    /// </summary>
+    public string GetActualText()
+    {
+        if (Document != null && !string.IsNullOrEmpty(Document.Text))
+            return Document.Text;
+
+        try
+        {
+            return File.ReadAllText(FilePath);
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
 }
