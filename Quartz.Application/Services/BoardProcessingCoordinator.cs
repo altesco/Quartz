@@ -117,8 +117,7 @@ public class BoardProcessingCoordinator : IBoardProcessingCoordinator
                     {
                         GetOrCreateExtraErrors(path).Add(new EditorError
                         {
-                            Message =
-                                $"Дубликат имени слоя '{layerName}' (слой с таким именем уже объявлен в '{existingPath}')"
+                            Message = $"Дубликат имени слоя '{layerName}' (слой с таким именем уже объявлен в '{existingPath}')"
                         });
                         GetOrCreateExtraErrors(existingPath).Add(new EditorError
                         {

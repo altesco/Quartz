@@ -23,7 +23,14 @@ public abstract partial class EditorVM : FileVM
 
     [ObservableProperty] private double _scrollX;
     [ObservableProperty] private double _scrollY;
-    [ObservableProperty] private double _fontSize = 14;
+
+    private double _fontSize = 14;
+
+    public double FontSize
+    {
+        get => _fontSize;
+        set => SetProperty(ref _fontSize, value);
+    }
 
     public EditorVM(MainVM mainVM, string filePath, DirectoryVM? parent, IBoardProcessingCoordinator coordinator)
         : base(mainVM, filePath, parent)

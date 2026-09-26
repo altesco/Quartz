@@ -337,6 +337,18 @@
                         </StackPanel>
                     </Grid>
                 </DataTemplate>
+
+                <DataTemplate DataType="{x:Type vm:StylesFileVM}">
+                    <Grid>
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock VerticalAlignment="Center" Text="📝" />
+                            <TextBlock
+                                VerticalAlignment="Center"
+                                Foreground="LightBlue"
+                                Text="{Binding Header}" />
+                        </StackPanel>
+                    </Grid>
+                </DataTemplate>
             </TreeView.DataTemplates>
         </TreeView>
 

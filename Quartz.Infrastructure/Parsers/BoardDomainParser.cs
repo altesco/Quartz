@@ -83,16 +83,8 @@ public class BoardDomainParser : IBoardDomainParser
             var localStyles = YamlParserHelpers.ParseLocalStyles(dto.Styles, dto.Unit, out var styleErrors);
             errors.AddRange(styleErrors);
 
-            var mergedStyles = new Dictionary<string, Style>(StringComparer.OrdinalIgnoreCase);
-            if (externalStyles != null)
-            {
-                foreach (var (k, v) in externalStyles) mergedStyles[k] = v;
-            }
-
-            foreach (var (k, v) in localStyles)
-            {
-                mergedStyles[k] = v;
-            }
+            var mergedStyles = YamlParserHelpers.MergeStyles(externalStyles, localStyles, out var mergeErrors);
+            errors.AddRange(mergeErrors);
 
             var board = dto.ToDomain(
                 componentsMap,

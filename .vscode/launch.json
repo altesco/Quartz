@@ -6,9 +6,12 @@
     "configurations": [
         {
             "name": "C#: Quartz.UI Debug",
-            "type": "dotnet",
+            "type": "coreclr",
             "request": "launch",
-            "projectPath": "${workspaceFolder}/Quartz.UI/Quartz.UI.csproj"
+            "preLaunchTask": "build",
+            "program": "${workspaceFolder}/Quartz.UI/bin/Debug/net10.0/Quartz.UI.dll",
+            "cwd": "${workspaceFolder}/Quartz.UI",
+            "console": "internalConsole"
         },
         {
             "name": "ReSharper: Launch .NET Project",

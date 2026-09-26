@@ -108,7 +108,7 @@ public abstract partial class FileStructVM : ObservableObject
                         File.Move(oldPath, newPath);
                         file.FilePath = newPath;
                     }
-                    catch (Exception ex)
+                    catch (Exception)
                     {
                         //ShowFileMoveError("переместить файл", oldPath, newPath, ex);
                         MainVM.ResetDragStatus();
@@ -131,7 +131,7 @@ public abstract partial class FileStructVM : ObservableObject
                         Directory.Move(oldPath, newPath);
                         sourceDir.UpdatePathRecursive(oldPath, newPath);
                     }
-                    catch (Exception ex)
+                    catch (Exception)
                     {
                         //ShowFileMoveError("переместить папку", oldPath, newPath, ex);
                         MainVM.ResetDragStatus();

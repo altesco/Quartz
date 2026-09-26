@@ -20,4 +20,14 @@ public abstract class Component : BoardEntity
 
     public NameSettings NameSettings { get; set; } = new();
     public IReadOnlyDictionary<string, Pin> Pins { get; set; } = FrozenDictionary<string, Pin>.Empty;
+
+    public override abstract Component Clone();
+
+    protected void CopyComponentPropertiesTo(Component target)
+    {
+        target.Shape = Shape.Clone();
+        target.Footprint = Footprint.Clone();
+        target.NameSettings = NameSettings.Clone();
+        target.Pins = Pins.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Clone()).ToFrozenDictionary();
+    }
 }

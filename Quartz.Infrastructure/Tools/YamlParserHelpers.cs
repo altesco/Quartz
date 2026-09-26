@@ -1,7 +1,9 @@
+using System.Reflection;
 using Quartz.Core.Enums;
 using Quartz.Core.Models.BoardEntities.Styles;
 using Quartz.Infrastructure.Dtos.Styles;
 using Quartz.Core.Models;
+using Quartz.Core.Models.BoardEntities;
 
 namespace Quartz.Infrastructure.Tools;
 
@@ -163,5 +165,101 @@ public static class YamlParserHelpers
         }
 
         return count;
+    }
+
+    public static Dictionary<string, Style> MergeStyles(
+        IReadOnlyDictionary<string, Style>? externalStyles,
+        Dictionary<string, Style> localStyles,
+        out List<EditorError> errors)
+    {
+        errors = [];
+        var merged = new Dictionary<string, Style>(StringComparer.OrdinalIgnoreCase);
+
+        // 1. Клонируем глобальные стили, чтобы случайно не испачкать их в памяти
+        if (externalStyles != null)
+        {
+            foreach (var (key, style) in externalStyles)
+            {
+                merged[key] = style.Clone();
+            }
+        }
+
+        // 2. Накладываем локальные стили поверх
+        foreach (var (key, localStyle) in localStyles)
+        {
+            if (merged.TryGetValue(key, out var globalStyle))
+            {
+                // Проверяем совпадение типов (тегов)
+                if (globalStyle.GetType() != localStyle.GetType())
+                {
+                    errors.Add(new EditorError
+                    {
+                        Message =
+                            $"Локальный стиль '{key}' типа '{localStyle.GetType().Name}' не совпадает с типом глобального стиля '{globalStyle.GetType().Name}'.",
+                        Line = localStyle.Line,
+                        Column = localStyle.Column,
+                        Length = localStyle.Length
+                    });
+                    continue;
+                }
+
+                // Переопределяем только явно переданные (не-null) свойства
+                ApplyStyleOverrides(globalStyle, localStyle);
+            }
+            else
+            {
+                // Если стиля с таким именем еще нет — заносим его клон
+                merged[key] = localStyle.Clone();
+            }
+        }
+
+        return merged;
+    }
+
+    private static void ApplyStyleOverrides(Style target, Style source)
+    {
+        var properties = target.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance);
+
+        foreach (var prop in properties)
+        {
+            if (!prop.CanRead || !prop.CanWrite) continue;
+
+            var sourceValue = prop.GetValue(source);
+            if (sourceValue == null) 
+                continue; // Пропускаем незаданные (null) свойства в локальном стиле
+
+            // Если свойство — ссылочный клонируемый объект (Shape, NameSettings и т.д.)
+            if (sourceValue is BoardEntity boardEntity)
+            {
+                prop.SetValue(target, boardEntity.Clone());
+            }
+            else if (sourceValue is System.Collections.IEnumerable enumerable && sourceValue is not string)
+            {
+                // Если это список элементов (например, Pins)
+                if (prop.PropertyType.IsGenericType && prop.PropertyType.GetGenericTypeDefinition() == typeof(List<>))
+                {
+                    var list = (System.Collections.IList)Activator.CreateInstance(prop.PropertyType)!;
+
+                    foreach (var item in enumerable)
+                    {
+                        if (item is BoardEntity entityItem)
+                        {
+                            list.Add(entityItem.Clone());
+                        }
+                        else
+                        {
+                            list.Add(item);
+                        }
+                    }
+
+                    prop.SetValue(target, list);
+                }
+            }
+            else
+            {
+                // Для обычных значений (примитивы, nullable double, string, enum)
+                prop.SetValue(target, sourceValue);
+            }
+        }
     }
 }

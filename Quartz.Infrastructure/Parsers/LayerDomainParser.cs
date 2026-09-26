@@ -109,16 +109,8 @@ public class LayerDomainParser : ILayerDomainParser
             var localStyles = YamlParserHelpers.ParseLocalStyles(dto.Styles, dto.Unit, out var stylesErrors);
             errors.AddRange(stylesErrors);
 
-            var mergedStyles = new Dictionary<string, Style>(StringComparer.OrdinalIgnoreCase);
-            if (externalStyles != null)
-            {
-                foreach (var (k, v) in externalStyles) mergedStyles[k] = v;
-            }
-
-            foreach (var (k, v) in localStyles)
-            {
-                mergedStyles[k] = v;
-            }
+            var mergedStyles = YamlParserHelpers.MergeStyles(externalStyles, localStyles, out var mergeErrors);
+            errors.AddRange(mergeErrors);
 
             var layerDomain = dto.ToDomain(componentsMap, netsMap, mergedStyles, out var layerErrors, viasMap);
             errors.AddRange(layerErrors);

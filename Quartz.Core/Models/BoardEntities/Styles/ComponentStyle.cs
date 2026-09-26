@@ -1,6 +1,5 @@
 using Quartz.Core.Enums;
 
-
 namespace Quartz.Core.Models.BoardEntities.Styles;
 
 public abstract class ComponentStyle : Style
@@ -12,4 +11,13 @@ public abstract class ComponentStyle : Style
     public NameSettings? NameSettings { get; set; }
     public LengthUnit? Unit { get; set; }
     public List<Pin>? Pins { get; set; }
+
+    public override abstract ComponentStyle Clone();
+
+    protected void CopyComponentStylePropertiesTo(ComponentStyle target)
+    {
+        target.Shape = Shape?.Clone();
+        target.NameSettings = NameSettings?.Clone();
+        target.Pins = Pins?.Select(p => p.Clone()).ToList();
+    }
 }

@@ -43,6 +43,15 @@ public partial class MainVM : ObservableObject
 
     private string? _projectRootDir;
 
+    public MainVM()
+    {
+        _rootNode = new PanelVM(mainVM: this)
+        {
+            Size = "1*"
+        };
+        _activePanel = (PanelVM)_rootNode;
+    }
+
     public MainVM(IBoardProcessingCoordinator boardProcessingCoordinator)
     {
         _boardProcessingCoordinator = boardProcessingCoordinator;

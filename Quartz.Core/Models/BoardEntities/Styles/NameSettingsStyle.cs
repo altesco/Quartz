@@ -1,5 +1,3 @@
-
-
 namespace Quartz.Core.Models.BoardEntities.Styles;
 
 public class NameSettingsStyle : Style
@@ -9,4 +7,6 @@ public class NameSettingsStyle : Style
     public double? FontSize { get; set; }
     public string? Color { get; set; }
     public bool? IsVisible { get; set; }
+
+    public override NameSettingsStyle Clone() => (NameSettingsStyle)MemberwiseClone();
 }
