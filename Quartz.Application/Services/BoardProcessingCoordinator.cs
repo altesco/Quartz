@@ -10,6 +10,7 @@ namespace Quartz.Application.Services;
 public class BoardProcessingCoordinator : IBoardProcessingCoordinator
 {
     private readonly IYamlParser _syntaxParser;
+    private readonly IYamlMetadataExtractor _metadataExtractor;
     private readonly IYamlSchemaValidator _schemaValidator;
     private readonly ILayerDomainParser _layerDomainParser;
     private readonly IBoardDomainParser _boardDomainParser;
@@ -19,6 +20,7 @@ public class BoardProcessingCoordinator : IBoardProcessingCoordinator
 
     public BoardProcessingCoordinator(
         IYamlParser syntaxParser,
+        IYamlMetadataExtractor metadataExtractor,
         IYamlSchemaValidator schemaValidator,
         ILayerDomainParser layerDomainParser,
         IBoardDomainParser boardDomainParser,
@@ -27,6 +29,7 @@ public class BoardProcessingCoordinator : IBoardProcessingCoordinator
         IDrawingGenerationService drawingGenerator)
     {
         _syntaxParser = syntaxParser;
+        _metadataExtractor = metadataExtractor;
         _schemaValidator = schemaValidator;
         _layerDomainParser = layerDomainParser;
         _boardDomainParser = boardDomainParser;
@@ -54,6 +57,9 @@ public class BoardProcessingCoordinator : IBoardProcessingCoordinator
             return errors;
         }
 
+        var availableLayerPaths = layerTexts.Keys.ToList();
+        var availableStylePaths = styleTexts.Keys.ToList();
+
         // =========================================================================
         // 1. ЭТАП 1: Валидация и парсинг файлов стилей (.stly)
         // =========================================================================
@@ -63,23 +69,10 @@ public class BoardProcessingCoordinator : IBoardProcessingCoordinator
             stylesResults[path] = ProcessStyles(styleText);
         }
 
-        var globalStyles = new Dictionary<string, Style>(StringComparer.OrdinalIgnoreCase);
-        foreach (var result in stylesResults.Values)
-        {
-            if (result.Model != null)
-            {
-                foreach (var style in result.Model)
-                {
-                    if (style.Name != null)
-                        globalStyles[style.Name] = style;
-                }
-            }
-        }
-
         // =========================================================================
         // 2. ЭТАП 2: Предварительный сбор компонентов и карты индексов слоев
         // =========================================================================
-        var activeLayerPaths = _boardDomainParser.ExtractLayerPaths(boardText);
+        var activeLayerPaths = _metadataExtractor.ExtractBoardLayerPaths(boardText);
         var compsByFile = new Dictionary<string, Dictionary<string, Component>>(StringComparer.OrdinalIgnoreCase);
         var layersMap = new Dictionary<string, LayerModel>(StringComparer.OrdinalIgnoreCase);
         var layerPathByName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -89,13 +82,12 @@ public class BoardProcessingCoordinator : IBoardProcessingCoordinator
         var layerIndex = 0;
         foreach (var path in activeLayerPaths)
         {
-            if (!layerTexts.TryGetValue(path, out var layerText)) 
+            if (!layerTexts.TryGetValue(path, out var layerText))
                 continue;
-            
+
             var layerSyntaxErrors = _syntaxParser.ValidateSyntax(layerText);
             if (layerSyntaxErrors.Count > 0)
             {
-                // Записываем критические ошибки и ПРОПУСКАЕМ этот сломанный файл!
                 GetOrCreateExtraErrors(path).AddRange(layerSyntaxErrors);
                 continue;
             }
@@ -103,7 +95,7 @@ public class BoardProcessingCoordinator : IBoardProcessingCoordinator
             var comps = _layerDomainParser.ParseComponents(layerText, out _);
             compsByFile[path] = comps;
 
-            string? layerName = _layerDomainParser.ExtractLayerName(layerText);
+            string? layerName = _metadataExtractor.ExtractLayerName(layerText);
 
             if (!string.IsNullOrWhiteSpace(layerName))
             {
@@ -153,12 +145,16 @@ public class BoardProcessingCoordinator : IBoardProcessingCoordinator
         BoardModel? boardModel = null;
         if (syntaxErrors.Count == 0)
         {
+            var boardStyleImports = _metadataExtractor.ExtractBoardStylePaths(boardText);
+            var boardStyles = ResolveStylesForImports(boardStyleImports, stylesResults);
+
             boardModel = _boardDomainParser.ParseBoard(
                 boardText,
                 globalComponents,
                 layersMap,
-                layerTexts.Keys.ToList(),
-                globalStyles,
+                availableLayerPaths,
+                availableStylePaths,
+                boardStyles,
                 out var parseErrors);
 
             boardErrors.AddRange(parseErrors);
@@ -186,12 +182,17 @@ public class BoardProcessingCoordinator : IBoardProcessingCoordinator
             }
 
             preExtractedNamesByPath.TryGetValue(path, out var preExtractedName);
+
+            var layerStyleImports = _metadataExtractor.ExtractLayerStylePaths(layerText);
+            var layerStyles = ResolveStylesForImports(layerStyleImports, stylesResults);
+
             var layerResult = ProcessLayerInternal(
                 layerText,
                 otherLayersComponents,
                 netsForLayer,
                 boardModel?.Vias,
-                globalStyles,
+                availableStylePaths,
+                layerStyles,
                 preExtractedName);
 
             if (extraLayerErrors.TryGetValue(path, out var extraErrs) && extraErrs.Count > 0)
@@ -247,6 +248,42 @@ public class BoardProcessingCoordinator : IBoardProcessingCoordinator
             new ProcessResult<BoardModel>(boardErrors, boardPrimitives, boardModel),
             layerResults,
             stylesResults);
+    }
+
+    private static string NormalizePath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return string.Empty;
+        return path.Replace('\\', '/').TrimStart('.', '/');
+    }
+
+    private static Dictionary<string, Style> ResolveStylesForImports(
+        IEnumerable<string>? imports,
+        IReadOnlyDictionary<string, ProcessResult<List<Style>>> stylesResults)
+    {
+        var resolvedStyles = new Dictionary<string, Style>(StringComparer.OrdinalIgnoreCase);
+        if (imports == null) return resolvedStyles;
+
+        foreach (var importPath in imports)
+        {
+            if (string.IsNullOrWhiteSpace(importPath)) continue;
+
+            var normalizedImport = NormalizePath(importPath);
+            var match = stylesResults.FirstOrDefault(kvp =>
+                string.Equals(NormalizePath(kvp.Key), normalizedImport, StringComparison.OrdinalIgnoreCase));
+
+            if (match.Value != null && match.Value.Model != null)
+            {
+                foreach (var style in match.Value.Model)
+                {
+                    if (!string.IsNullOrEmpty(style.Name))
+                    {
+                        resolvedStyles[style.Name] = style;
+                    }
+                }
+            }
+        }
+
+        return resolvedStyles;
     }
 
     private static void PopulateNearestVias(BoardModel board)
@@ -351,7 +388,8 @@ public class BoardProcessingCoordinator : IBoardProcessingCoordinator
         Dictionary<string, Component> components,
         IReadOnlyDictionary<string, Net> nets,
         IReadOnlyDictionary<string, Via>? allVias,
-        IReadOnlyDictionary<string, Style>? globalStyles = null,
+        IReadOnlyCollection<string>? availableStylePaths = null,
+        IReadOnlyDictionary<string, Style>? layerStyles = null,
         string? preExtractedLayerName = null)
     {
         var allErrors = new List<EditorError>();
@@ -363,7 +401,7 @@ public class BoardProcessingCoordinator : IBoardProcessingCoordinator
         var schemaErrors = _schemaValidator.ValidateSchemaAndTags(text, typeof(LayerModel));
         allErrors.AddRange(schemaErrors);
 
-        string? currentLayerName = preExtractedLayerName ?? _layerDomainParser.ExtractLayerName(text);
+        string? currentLayerName = preExtractedLayerName ?? _metadataExtractor.ExtractLayerName(text);
 
         var layerVias = new Dictionary<string, Via>(StringComparer.OrdinalIgnoreCase);
 
@@ -378,7 +416,15 @@ public class BoardProcessingCoordinator : IBoardProcessingCoordinator
             }
         }
 
-        var layerModel = _layerDomainParser.ParseLayer(text, components, nets, layerVias, globalStyles, out var domainErrors);
+        var layerModel = _layerDomainParser.ParseLayer(
+            text,
+            components,
+            nets,
+            layerVias,
+            availableStylePaths,
+            layerStyles,
+            out var domainErrors);
+
         allErrors.AddRange(domainErrors);
 
         if (layerModel != null)
@@ -394,16 +440,25 @@ public class BoardProcessingCoordinator : IBoardProcessingCoordinator
         return new ProcessResult<LayerModel>(allErrors, primitives, layerModel);
     }
 
-    public ProcessResult<LayerModel> ProcessLayer(string text, BoardModel? boardModel)
+    // ТЕПЕРЬ ТУТ МОЖНО ПЕРЕДАТЬ РЕЗУЛЬТАТЫ ПАРСИНГА СТИЛЕЙ!
+    public ProcessResult<LayerModel> ProcessLayer(
+        string text,
+        BoardModel? boardModel,
+        IReadOnlyDictionary<string, ProcessResult<List<Style>>>? stylesResults = null)
     {
         var components = boardModel?.GetAllComponents() ??
                          new Dictionary<string, Component>(StringComparer.OrdinalIgnoreCase);
         var nets = boardModel?.Nets ?? new Dictionary<string, Net>(StringComparer.OrdinalIgnoreCase);
         var vias = boardModel?.Vias ?? new Dictionary<string, Via>(StringComparer.OrdinalIgnoreCase);
 
-        // Для одиночного слоя стили платы недоступны в этом контексте без изменения сигнатуры, 
-        // поэтому передаем null, он будет использовать только свои внутренние.
-        return ProcessLayerInternal(text, components, nets, vias);
+        var availableStylePaths = stylesResults?.Keys.ToList();
+        var layerStyleImports = _metadataExtractor.ExtractLayerStylePaths(text);
+
+        var layerStyles = stylesResults != null
+            ? ResolveStylesForImports(layerStyleImports, stylesResults)
+            : null;
+
+        return ProcessLayerInternal(text, components, nets, vias, availableStylePaths, layerStyles);
     }
 
     public ProcessResult<List<Style>> ProcessStyles(string text)

@@ -159,24 +159,23 @@ public static class YamlMapperExtensions
         if (styleErrors.Count > 0)
         {
             errors.AddRange(styleErrors);
-            return null;
         }
 
         Component? comp = dto switch
         {
             ResistorDto r => new Resistor
-                { PowerRating = r.PowerRating ?? (style as ResistorStyle)?.PowerRating ?? "0" },
+            { PowerRating = r.PowerRating ?? (style as ResistorStyle)?.PowerRating ?? "0" },
             CapacitorDto c => new Capacitor
             {
                 VoltageMax = c.VoltageMax ?? (style as CapacitorStyle)?.VoltageMax ?? 0,
                 IsPolar = c.IsPolar ?? (style as CapacitorStyle)?.IsPolar ?? false
             },
             TransistorDto t => new Transistor
-                { TransistorType = t.TransistorType ?? (style as TransistorStyle)?.TransistorType ?? "" },
+            { TransistorType = t.TransistorType ?? (style as TransistorStyle)?.TransistorType ?? "" },
             DiodeDto d => new Diode { ForwardVoltage = d.ForwardVoltage ?? (style as DiodeStyle)?.ForwardVoltage ?? 0 },
             InductorDto i => new Inductor { MaxCurrent = i.MaxCurrent ?? (style as InductorStyle)?.MaxCurrent ?? 0 },
             IntegratedCircuitDto ic => new IntegratedCircuit
-                { GateCount = ic.GateCount ?? (style as IntegratedCircuitStyle)?.GateCount ?? 0 },
+            { GateCount = ic.GateCount ?? (style as IntegratedCircuitStyle)?.GateCount ?? 0 },
             ConnectorDto => new Connector(),
             _ => null
         };
@@ -270,7 +269,6 @@ public static class YamlMapperExtensions
         if (styleErrors.Count > 0)
         {
             errors.AddRange(styleErrors);
-            return null;
         }
 
         var footprintUnit = dto.Unit ?? style?.Unit ?? layerUnit;
@@ -339,7 +337,6 @@ public static class YamlMapperExtensions
         if (styleErrors.Count > 0)
         {
             errors.AddRange(styleErrors);
-            return null;
         }
 
         Connection? connection = dto switch
@@ -473,104 +470,103 @@ public static class YamlMapperExtensions
         if (styleErrors.Count > 0)
         {
             errors.AddRange(styleErrors);
-            return null;
         }
 
         switch (dto)
         {
             case RectShapeDto r:
-            {
-                var width = r.Width?.ToMillimeters(unit) ?? (style as RectShapeStyle)?.Width ?? 0;
-                var height = r.Height?.ToMillimeters(unit) ?? (style as RectShapeStyle)?.Height ?? 0;
-                var cornerRadius = r.CornerRadius?.ToMillimeters(unit) ?? (style as RectShapeStyle)?.CornerRadius ?? 0;
+                {
+                    var width = r.Width?.ToMillimeters(unit) ?? (style as RectShapeStyle)?.Width ?? 0;
+                    var height = r.Height?.ToMillimeters(unit) ?? (style as RectShapeStyle)?.Height ?? 0;
+                    var cornerRadius = r.CornerRadius?.ToMillimeters(unit) ?? (style as RectShapeStyle)?.CornerRadius ?? 0;
 
-                if (width <= 0)
-                    errors.AddError("Свойство width должно иметь значение больше 0", r.Line, r.Column, r.Length);
-                if (height <= 0)
-                    errors.AddError("Свойство height должно иметь значение больше 0", r.Line, r.Column, r.Length);
-                if (cornerRadius < 0)
-                    errors.AddError("Свойство corner-radius должно иметь значение не меньше 0", r.Line, r.Column,
-                        r.Length);
+                    if (width <= 0)
+                        errors.AddError("Свойство width должно иметь значение больше 0", r.Line, r.Column, r.Length);
+                    if (height <= 0)
+                        errors.AddError("Свойство height должно иметь значение больше 0", r.Line, r.Column, r.Length);
+                    if (cornerRadius < 0)
+                        errors.AddError("Свойство corner-radius должно иметь значение не меньше 0", r.Line, r.Column,
+                            r.Length);
 
-                return errors.Count > 0
-                    ? null
-                    : new RectShape
-                    {
-                        Width = width,
-                        Height = height,
-                        CornerRadius = cornerRadius
-                    };
-            }
+                    return errors.Count > 0
+                        ? null
+                        : new RectShape
+                        {
+                            Width = width,
+                            Height = height,
+                            CornerRadius = cornerRadius
+                        };
+                }
 
             case PathShapeDto p:
-            {
-                var start = p.StartPoint?.ToDomain(unit) ?? (style as PathShapeStyle)?.StartPoint ?? new();
-
-                List<Segment> segments;
-                if (p.Segments != null)
                 {
-                    segments = p.Segments.MapToList(
-                        "Segments",
-                        (seg, errs) =>
-                        {
-                            var s = seg.ToDomain(start, unit, out var e);
-                            errs.AddRange(e);
-                            return s;
-                        },
-                        errors
-                    );
-                }
-                else if (style is PathShapeStyle { Segments: not null } path)
-                {
-                    segments = path.Segments;
-                }
-                else
-                {
-                    segments = [];
-                }
+                    var start = p.StartPoint?.ToDomain(unit) ?? (style as PathShapeStyle)?.StartPoint ?? new();
 
-                const double tolerance = 0.0001;
-
-                if (segments.Count > 0 && p.Segments?.Count > 0)
-                {
-                    var lastDto = p.Segments.Last();
-                    var lastDomain = segments.Last();
-
-                    if (lastDto != null &&
-                        (Math.Abs(lastDomain.Point.X - start.X) > tolerance ||
-                         Math.Abs(lastDomain.Point.Y - start.Y) > tolerance))
+                    List<Segment> segments;
+                    if (p.Segments != null)
                     {
-                        errors.AddError("Координаты последнего сегмента должны совпадать с координатами start-point",
-                            lastDto.Line, lastDto.Column, lastDto.Length);
+                        segments = p.Segments.MapToList(
+                            "Segments",
+                            (seg, errs) =>
+                            {
+                                var s = seg.ToDomain(start, unit, out var e);
+                                errs.AddRange(e);
+                                return s;
+                            },
+                            errors
+                        );
                     }
-                }
-
-                if (segments.Count <= 0)
-                {
-                    errors.AddError("В свойстве Shape не указан ни один сегмент", dto.Line, dto.Column, dto.Length);
-                }
-                else if (segments.Count < 3 && !segments.Any(s => s is ArcSegment))
-                {
-                    errors.AddError(
-                        "Shape типа !path должна иметь хотя бы 3 сегмента типа !line или содержать хотя бы 1 сегмент типа !arc",
-                        dto.Line, dto.Column, dto.Length);
-                }
-                else if (segments is [ArcSegment { IsLargeArc: false }])
-                {
-                    var seg = p.Segments![0]!;
-                    errors.AddError(
-                        "В сегменте типа !arc свойство large-arc должно быть true, если он является единственным сегментом",
-                        seg.Line, seg.Column, seg.Length);
-                }
-
-                return errors.Count > 0
-                    ? null
-                    : new PathShape
+                    else if (style is PathShapeStyle { Segments: not null } path)
                     {
-                        StartPoint = start,
-                        Segments = segments
-                    };
-            }
+                        segments = path.Segments;
+                    }
+                    else
+                    {
+                        segments = [];
+                    }
+
+                    const double tolerance = 0.0001;
+
+                    if (segments.Count > 0 && p.Segments?.Count > 0)
+                    {
+                        var lastDto = p.Segments.Last();
+                        var lastDomain = segments.Last();
+
+                        if (lastDto != null &&
+                            (Math.Abs(lastDomain.Point.X - start.X) > tolerance ||
+                             Math.Abs(lastDomain.Point.Y - start.Y) > tolerance))
+                        {
+                            errors.AddError("Координаты последнего сегмента должны совпадать с координатами start-point",
+                                lastDto.Line, lastDto.Column, lastDto.Length);
+                        }
+                    }
+
+                    if (segments.Count <= 0)
+                    {
+                        errors.AddError("В свойстве Shape не указан ни один сегмент", dto.Line, dto.Column, dto.Length);
+                    }
+                    else if (segments.Count < 3 && !segments.Any(s => s is ArcSegment))
+                    {
+                        errors.AddError(
+                            "Shape типа !path должна иметь хотя бы 3 сегмента типа !line или содержать хотя бы 1 сегмент типа !arc",
+                            dto.Line, dto.Column, dto.Length);
+                    }
+                    else if (segments is [ArcSegment { IsLargeArc: false }])
+                    {
+                        var seg = p.Segments![0]!;
+                        errors.AddError(
+                            "В сегменте типа !arc свойство large-arc должно быть true, если он является единственным сегментом",
+                            seg.Line, seg.Column, seg.Length);
+                    }
+
+                    return errors.Count > 0
+                        ? null
+                        : new PathShape
+                        {
+                            StartPoint = start,
+                            Segments = segments
+                        };
+                }
 
             default:
                 errors.AddError("Неверное значение свойства shape", dto.Line, dto.Column, dto.Length);
@@ -617,7 +613,6 @@ public static class YamlMapperExtensions
     public static EndpointBase? ToDomain(
         this EndpointBaseDto? dto,
         string targetLabel,
-        BoardEntityDto host,
         IReadOnlyDictionary<string, Component> componentsMap,
         IReadOnlyDictionary<string, Via>? viasMap,
         out List<EditorError> errors)
@@ -630,55 +625,55 @@ public static class YamlMapperExtensions
         switch (dto)
         {
             case PadEndpointDto padDto:
-            {
-                if (padDto.Comp != null)
                 {
-                    if (!componentsMap.TryGetValue(padDto.Comp, out var comp))
+                    if (padDto.Comp != null)
                     {
-                        errors.AddError(
-                            $"{targetLabel}: компонент '{padDto.Comp}' не найден или недоступен в текущем контексте",
-                            padDto.Line, padDto.Column, padDto.Length);
-                        return null;
-                    }
-
-                    if (padDto.Pad != null)
-                    {
-                        if (!comp.Footprint.Pads.TryGetValue(padDto.Pad, out var pad))
+                        if (!componentsMap.TryGetValue(padDto.Comp, out var comp))
                         {
                             errors.AddError(
-                                $"{targetLabel}: контакт '{padDto.Pad}' не найден на компоненте '{padDto.Comp}'",
+                                $"{targetLabel}: компонент '{padDto.Comp}' не найден или недоступен в текущем контексте",
                                 padDto.Line, padDto.Column, padDto.Length);
                             return null;
                         }
 
-                        return new PadEndpoint
+                        if (padDto.Pad != null)
                         {
-                            Comp = comp,
-                            Pad = pad
-                        };
-                    }
-                }
+                            if (!comp.Footprint.Pads.TryGetValue(padDto.Pad, out var pad))
+                            {
+                                errors.AddError(
+                                    $"{targetLabel}: контакт '{padDto.Pad}' не найден на компоненте '{padDto.Comp}'",
+                                    padDto.Line, padDto.Column, padDto.Length);
+                                return null;
+                            }
 
-                return null;
-            }
+                            return new PadEndpoint
+                            {
+                                Comp = comp,
+                                Pad = pad
+                            };
+                        }
+                    }
+
+                    return null;
+                }
 
             case ViaEndpointDto viaDto:
-            {
-                if (viaDto.Name != null)
                 {
-                    if (viasMap == null || !viasMap.TryGetValue(viaDto.Name, out var via))
+                    if (viaDto.Name != null)
                     {
-                        errors.AddError(
-                            $"{targetLabel}: переходное отверстие '{viaDto.Name}' не найдено на слое",
-                            viaDto.Line, viaDto.Column, viaDto.Length);
-                        return null;
+                        if (viasMap == null || !viasMap.TryGetValue(viaDto.Name, out var via))
+                        {
+                            errors.AddError(
+                                $"{targetLabel}: переходное отверстие '{viaDto.Name}' не найдено на слое",
+                                viaDto.Line, viaDto.Column, viaDto.Length);
+                            return null;
+                        }
+
+                        return new ViaEndpoint { Via = via };
                     }
 
-                    return new ViaEndpoint { Via = via };
+                    return null;
                 }
-
-                return null;
-            }
 
             default:
                 errors.AddError($"{targetLabel}: неизвестный тип точки подключения '{dto.GetType().Name}'",
@@ -702,11 +697,10 @@ public static class YamlMapperExtensions
         if (styleErrors.Count > 0)
         {
             errors.AddRange(styleErrors);
-            return null;
         }
 
-        var from = dto.From.ToDomain("Трасса (From)", dto, componentsMap, viasMap, out var fromErrors);
-        var to = dto.To.ToDomain("Трасса (To)", dto, componentsMap, viasMap, out var toErrors);
+        var from = dto.From.ToDomain("Трасса (From)", componentsMap, viasMap, out var fromErrors);
+        var to = dto.To.ToDomain("Трасса (To)", componentsMap, viasMap, out var toErrors);
 
         errors.AddRange(fromErrors);
         errors.AddRange(toErrors);
@@ -755,12 +749,13 @@ public static class YamlMapperExtensions
     // --- HIGH-LEVEL BOARD & LAYER MODELS ---
 
     public static LayerModel ToDomain(
-        this LayerModelDto dto,
-        Dictionary<string, Component> componentsMap,
-        IReadOnlyDictionary<string, Net> netsMap,
-        IReadOnlyDictionary<string, Style> stylesMap,
-        out List<EditorError> errors,
-        IReadOnlyDictionary<string, Via>? viasMap = null)
+    this LayerModelDto dto,
+    Dictionary<string, Component> componentsMap,
+    IReadOnlyDictionary<string, Net> netsMap,
+    IReadOnlyDictionary<string, Style> stylesMap,
+    out List<EditorError> errors,
+    IReadOnlyDictionary<string, Via>? viasMap = null,
+    IReadOnlyCollection<string>? availableStylePaths = null)
     {
         var localErrors = new List<EditorError>();
 
@@ -770,6 +765,20 @@ public static class YamlMapperExtensions
         };
 
         if (dto.Name != null) layerModel.Name = dto.Name;
+
+        if (dto.Imports != null)
+        {
+            foreach (var importPath in dto.Imports)
+            {
+                if (string.IsNullOrWhiteSpace(importPath)) continue;
+
+                if (availableStylePaths != null &&
+                    !availableStylePaths.Contains(importPath, StringComparer.OrdinalIgnoreCase))
+                {
+                    localErrors.AddError($"Файл стилей '{importPath}' не найден в проекте");
+                }
+            }
+        }
 
         var parsedComponents = dto.Components.MapToDictionary(
             "Components",
@@ -832,7 +841,7 @@ public static class YamlMapperExtensions
             "Nodes",
             (nodeDto, errs) =>
             {
-                var n = nodeDto.ToDomain($"Net '{dto.Name}'", dto, componentsMap, null, out var e);
+                var n = nodeDto.ToDomain($"Net '{dto.Name}'", componentsMap, null, out var e);
                 errs.AddRange(e);
 
                 if (n == null) return null;
@@ -863,16 +872,18 @@ public static class YamlMapperExtensions
     }
 
     public static BoardModel ToDomain(
-        this BoardModelDto dto,
-        Dictionary<string, Component> componentsMap,
-        out List<EditorError> errors,
-        IReadOnlyDictionary<string, LayerModel>? layersMap,
-        IReadOnlyCollection<string>? availableLayerPaths = null,
-        IReadOnlyDictionary<string, Style>? stylesMap = null)
+    this BoardModelDto dto,
+    Dictionary<string, Component> componentsMap,
+    out List<EditorError> errors,
+    IReadOnlyDictionary<string, LayerModel>? layersMap,
+    IReadOnlyCollection<string>? availableLayerPaths = null,
+    IReadOnlyCollection<string>? availableStylePaths = null,
+    IReadOnlyDictionary<string, Style>? stylesMap = null)
     {
         var localErrors = new List<EditorError>();
         stylesMap ??= new Dictionary<string, Style>();
 
+        // 1. Валидация существования файлов слоев
         if (dto.Layers != null)
         {
             foreach (var layerPath in dto.Layers)
@@ -883,6 +894,21 @@ public static class YamlMapperExtensions
                     !availableLayerPaths.Contains(layerPath, StringComparer.OrdinalIgnoreCase))
                 {
                     localErrors.AddError($"Файл слоя '{layerPath}' не найден в проекте");
+                }
+            }
+        }
+
+        // 2. Валидация существования импортируемых файлов стилей
+        if (dto.Imports != null)
+        {
+            foreach (var importPath in dto.Imports)
+            {
+                if (string.IsNullOrWhiteSpace(importPath)) continue;
+
+                if (availableStylePaths != null &&
+                    !availableStylePaths.Contains(importPath, StringComparer.OrdinalIgnoreCase))
+                {
+                    localErrors.AddError($"Файл стилей '{importPath}' не найден в проекте");
                 }
             }
         }

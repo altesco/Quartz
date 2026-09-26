@@ -6,6 +6,8 @@ using Quartz.Application.Interfaces;
 using Quartz.Application.Services;
 using Quartz.Core.Interfaces;
 using Quartz.Infrastructure.Parsers;
+using Quartz.Infrastructure.Services;
+using Quartz.Infrastructure.Tools;
 using Quartz.UI.ViewModels;
 using Quartz.UI.Views;
 
@@ -44,6 +46,7 @@ public class App : Avalonia.Application
     {
         // 1. Infrastructure Services
         services.AddSingleton<IYamlParser, ClearScriptYamlParser>();
+        services.AddSingleton<IYamlMetadataExtractor, YamlMetadataExtractor>();
         services.AddSingleton<IYamlSchemaValidator, YamlSchemaValidator>();
         services.AddSingleton<ILayerDomainParser, LayerDomainParser>();
         services.AddSingleton<IBoardDomainParser, BoardDomainParser>();

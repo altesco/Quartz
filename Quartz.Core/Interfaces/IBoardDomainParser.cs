@@ -6,13 +6,12 @@ namespace Quartz.Core.Interfaces;
 
 public interface IBoardDomainParser
 {
-    List<string> ExtractLayerPaths(string yamlText);
-
     BoardModel? ParseBoard(
         string yamlText,
         Dictionary<string, Component> componentsMap,
         IReadOnlyDictionary<string, LayerModel>? layersMap,
         IReadOnlyCollection<string>? availableLayerPaths,
+        IReadOnlyCollection<string>? availableStylePaths,
         IReadOnlyDictionary<string, Style> stylesMap,
         out List<EditorError> errors);
 

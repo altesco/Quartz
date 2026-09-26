@@ -81,6 +81,7 @@ public class LayerDomainParser : ILayerDomainParser
         Dictionary<string, Component> componentsMap,
         IReadOnlyDictionary<string, Net> netsMap,
         IReadOnlyDictionary<string, Via>? viasMap,
+        IReadOnlyCollection<string>? availableStylePaths,
         IReadOnlyDictionary<string, Style>? externalStyles,
         out List<EditorError> errors)
     {
@@ -101,7 +102,9 @@ public class LayerDomainParser : ILayerDomainParser
                 errors.Add(new EditorError
                 {
                     Message = "Не удалось создать модель документа",
-                    Line = 1, Column = 1, Length = 1
+                    Line = 1,
+                    Column = 1,
+                    Length = 1
                 });
                 return null;
             }
@@ -112,7 +115,8 @@ public class LayerDomainParser : ILayerDomainParser
             var mergedStyles = YamlParserHelpers.MergeStyles(externalStyles, localStyles, out var mergeErrors);
             errors.AddRange(mergeErrors);
 
-            var layerDomain = dto.ToDomain(componentsMap, netsMap, mergedStyles, out var layerErrors, viasMap);
+            // Передаем availableStylePaths последним аргументом:
+            var layerDomain = dto.ToDomain(componentsMap, netsMap, mergedStyles, out var layerErrors, viasMap, availableStylePaths);
             errors.AddRange(layerErrors);
 
             return layerDomain;
@@ -127,24 +131,6 @@ public class LayerDomainParser : ILayerDomainParser
                 Length = 1
             });
 
-            return null;
-        }
-    }
-
-    public string? ExtractLayerName(string yamlText)
-    {
-        if (string.IsNullOrWhiteSpace(yamlText))
-            return null;
-
-        string normalizedYaml = YamlParserHelpers.NormalizeEmptyTaggedObjects(yamlText, YamlTagRegistry.LayerTags);
-
-        try
-        {
-            var dto = _deserializer.Deserialize<LayerModelDto?>(normalizedYaml);
-            return dto?.Name;
-        }
-        catch
-        {
             return null;
         }
     }

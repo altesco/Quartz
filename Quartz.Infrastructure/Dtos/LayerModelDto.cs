@@ -22,6 +22,9 @@ public record LayerModelDto
     [YamlMember(Alias = "styles")]
     public List<StyleDto?>? Styles { get; set; }
 
+    [YamlMember(Alias = "imports")]
+    public List<string?>? Imports { get; set; }
+
     [Required]
     [YamlMember(Alias = "name")]
     public string? Name { get; init; }

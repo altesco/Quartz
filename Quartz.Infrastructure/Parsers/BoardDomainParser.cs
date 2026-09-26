@@ -32,28 +32,12 @@ public class BoardDomainParser : IBoardDomainParser
         _deserializer = builder.Build();
     }
 
-    public List<string> ExtractLayerPaths(string yamlText)
-    {
-        if (string.IsNullOrWhiteSpace(yamlText)) return [];
-
-        try
-        {
-            string normalizedYaml = YamlParserHelpers.NormalizeEmptyTaggedObjects(yamlText, YamlTagRegistry.BoardTags);
-            var dto = _deserializer.Deserialize<BoardModelDto?>(normalizedYaml);
-
-            return (dto?.Layers ?? []).OfType<string>().ToList();
-        }
-        catch
-        {
-            return [];
-        }
-    }
-
     public BoardModel? ParseBoard(
         string yamlText,
         Dictionary<string, Component> componentsMap,
         IReadOnlyDictionary<string, LayerModel>? layersMap,
         IReadOnlyCollection<string>? availableLayerPaths,
+        IReadOnlyCollection<string>? availableStylePaths,
         IReadOnlyDictionary<string, Style>? externalStyles,
         out List<EditorError> errors)
     {
@@ -75,7 +59,9 @@ public class BoardDomainParser : IBoardDomainParser
                 errors.Add(new EditorError
                 {
                     Message = "Не удалось создать модель документа",
-                    Line = 1, Column = 1, Length = 1
+                    Line = 1,
+                    Column = 1,
+                    Length = 1
                 });
                 return null;
             }
@@ -133,26 +119,24 @@ public class BoardDomainParser : IBoardDomainParser
 
                 if (!compToLayer.TryGetValue(nodeA.Comp.Name, out var layerA) ||
                     !compToLayer.TryGetValue(nodeB.Comp.Name, out var layerB))
-                {
                     continue;
-                }
 
-                if (!string.Equals(layerA, layerB, StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(layerA, layerB, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                var keyA = new NodeViaKey(nodeA.Comp.Name, nodeA.Pad.Name, layerA, layerB);
+
+                if (board.NearestVias.ContainsKey(keyA))
+                    continue;
+
+                errors.Add(new EditorError
                 {
-                    var keyA = new NodeViaKey(nodeA.Comp.Name, nodeA.Pad.Name, layerA, layerB);
-
-                    if (!board.NearestVias.ContainsKey(keyA))
-                    {
-                        errors.Add(new EditorError
-                        {
-                            Message =
-                                $"В сети '{net.Name}' отсутствует переходное отверстие (Via) между слоями '{layerA}' (компонент '{nodeA.Comp.Name}') и '{layerB}' (компонент '{nodeB.Comp.Name}').",
-                            Line = net.Line,
-                            Column = net.Column,
-                            Length = net.Length
-                        });
-                    }
-                }
+                    Message =
+                        $"В сети '{net.Name}' отсутствует переходное отверстие (Via) между слоями '{layerA}' (компонент '{nodeA.Comp.Name}') и '{layerB}' (компонент '{nodeB.Comp.Name}').",
+                    Line = net.Line,
+                    Column = net.Column,
+                    Length = net.Length
+                });
             }
         }
     }

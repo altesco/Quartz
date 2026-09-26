@@ -9,6 +9,9 @@ public record BoardModelDto
     [YamlMember(Alias = "layers")]
     public List<string?>? Layers { get; init; }
 
+    [YamlMember(Alias = "imports")]
+    public List<string?>? Imports { get; set; }
+
     [YamlMember(Alias = "nets")]
     public List<NetDto?>? Nets { get; init; }
 

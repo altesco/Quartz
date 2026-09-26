@@ -1,6 +1,7 @@
 using System.Collections.Frozen;
 using Quartz.Core.Enums;
 using Quartz.Core.Models.BoardEntities;
+using Quartz.Core.Models.BoardEntities.Styles;
 
 namespace Quartz.Core.Models;
 
