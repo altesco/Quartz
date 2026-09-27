@@ -43,10 +43,12 @@ public class StylesDomainParser : IStylesDomainParser
         if (string.IsNullOrWhiteSpace(yamlText))
             return [];
 
+        string normalizedYaml = YamlParserHelpers.NormalizeEmptyTaggedObjects(yamlText, YamlTagRegistry.StylesTags);
+
         try
         {
             // Парсим сразу как список DTO
-            var dtos = _deserializer.Deserialize<List<StyleDto>?>(yamlText);
+            var dtos = _deserializer.Deserialize<List<StyleDto>?>(normalizedYaml);
             if (dtos == null || dtos.Count == 0) return [];
 
             var stylesMap = new Dictionary<string, Style>(StringComparer.OrdinalIgnoreCase);

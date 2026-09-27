@@ -1,4 +1,5 @@
 using Quartz.Core.Models;
+using Quartz.Core.Models.BoardEntities.Styles;
 
 namespace Quartz.Application.Interfaces;
 

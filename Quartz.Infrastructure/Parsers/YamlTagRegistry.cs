@@ -84,4 +84,6 @@ public static class YamlTagRegistry
     public static readonly HashSet<string> LayerTags = new(LayerTagsMap.Keys, StringComparer.OrdinalIgnoreCase);
 
     public static readonly HashSet<string> BoardTags = new(BoardTagsMap.Keys, StringComparer.OrdinalIgnoreCase);
+
+    public static readonly HashSet<string> StylesTags = new(StylesTagsMap.Keys, StringComparer.OrdinalIgnoreCase);
 }
