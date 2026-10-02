@@ -22,7 +22,12 @@ public abstract partial class EditorVM : FileVM
     public ObservableCollection<EditorError> Errors { get; } = [];
 
     [ObservableProperty] private double _scrollX;
-    [ObservableProperty] private double _scrollY;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasTitleBarShadow))]
+    private double _scrollY;
+
+    public bool HasTitleBarShadow => ScrollY > 1;
 
     private double _fontSize = 14;
 

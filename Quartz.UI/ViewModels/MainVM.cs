@@ -20,7 +20,7 @@ namespace Quartz.UI.ViewModels;
 
 public partial class MainVM : ObservableObject
 {
-    [ObservableProperty] private LayoutRootVM _rootNode;
+    [ObservableProperty] private LayoutRootVM? _rootNode;
 
     [ObservableProperty] private bool _isTabReplacing;
     [ObservableProperty] private bool _isFileReplacing;
@@ -30,7 +30,7 @@ public partial class MainVM : ObservableObject
     public FileStructVM? TappedFile { get; set; }
     [ObservableProperty] private FileStructVM? _draggedFile;
 
-    [ObservableProperty] private PanelVM _activePanel;
+    [ObservableProperty] private PanelVM? _activePanel;
 
     public bool IsReadyToDrag { get; set; }
     public double DragStartX { get; set; }
@@ -43,25 +43,11 @@ public partial class MainVM : ObservableObject
 
     private string? _projectRootDir;
 
-    public MainVM()
-    {
-        _rootNode = new PanelVM(mainVM: this)
-        {
-            Size = "1*"
-        };
-        _activePanel = (PanelVM)_rootNode;
-    }
+    public ObservableCollection<FileErrorGroupVM> ProjectErrors { get; } = [];
 
     public MainVM(IBoardProcessingCoordinator boardProcessingCoordinator)
     {
         _boardProcessingCoordinator = boardProcessingCoordinator;
-
-        _rootNode = new PanelVM(mainVM: this)
-        {
-            Size = "1*"
-        };
-
-        _activePanel = (PanelVM)_rootNode;
 
         _projectLayers.Clear();
         _projectStyles.Clear();
@@ -85,6 +71,9 @@ public partial class MainVM : ObservableObject
     /// </summary>
     public void SplitPanel(PanelVM targetPanel, PanelVM newPanel, Side side)
     {
+        if (RootNode == null)
+            return;
+
         if (RootNode == targetPanel)
         {
             var newRoot = CreateSplitContainer(targetPanel, newPanel, side);
@@ -191,8 +180,12 @@ public partial class MainVM : ObservableObject
     /// </summary>
     public void RemoveEmptyPanel(PanelVM emptyPanel)
     {
-        if (RootNode == emptyPanel)
+        if (RootNode == null || RootNode == emptyPanel)
+        {
+            RootNode = null;
+            ActivePanel = null;
             return;
+        }
 
         var parent = FindParentContainer(RootNode, emptyPanel);
         if (parent != null)
@@ -258,10 +251,35 @@ public partial class MainVM : ObservableObject
         return null;
     }
 
+    public void OpenFileTab(FileVM file)
+    {
+        if (file.Panel != null)
+        {
+            ActivePanel = file.Panel;
+            file.Panel.SelectedTab = file;
+            return;
+        }
+
+        if (ActivePanel is null || RootNode is null)
+        {
+            var initialPanel = new PanelVM(this) { Size = "1*" };
+            RootNode = initialPanel;
+            ActivePanel = initialPanel;
+        }
+
+        ActivePanel.Tabs.Add(file);
+        ActivePanel.SelectedTab = file;
+        file.Panel = ActivePanel;
+    }
+
     /// <summary>
     /// Публичный метод для запуска сброса подсветок со всей разметки
     /// </summary>
-    public void ResetAllPanelSides() => ResetSidesRecursive(RootNode);
+    public void ResetAllPanelSides()
+    {
+        if (RootNode != null)
+            ResetSidesRecursive(RootNode);
+    }
 
     /// <summary>
     /// Рекурсивный обход дерева панелей для обнуления NewNodeSide
@@ -471,7 +489,7 @@ public partial class MainVM : ObservableObject
     /// </summary>
     public void ReloadCurrentProject()
     {
-        CurrentBoard?.ProcessBoardProject();
+        _ = CurrentBoard?.ProcessBoardProject();
     }
 
     /// <summary>
@@ -487,6 +505,8 @@ public partial class MainVM : ObservableObject
             {
                 // Отдаем слою его результат — пусть сам решает, как себя обновить
                 layerVM.ApplyProjectResult(layerResult, boardOverlayPrimitives);
+
+                UpdateFileErrors(relPath, layerResult.Errors);
             }
         }
     }
@@ -498,6 +518,40 @@ public partial class MainVM : ObservableObject
             if (styleResults.TryGetValue(relPath, out var styleResult))
             {
                 styleVM.ApplyProjectResult(styleResult);
+
+                UpdateFileErrors(relPath, styleResult.Errors);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Обновляет ошибки для конкретного файла в общем дереве ошибок
+    /// </summary>
+    public void UpdateFileErrors(string relativeOrFullPath, IEnumerable<EditorError> errors)
+    {
+        var errList = errors.ToList();
+        var existingGroup = ProjectErrors.FirstOrDefault(x =>
+            string.Equals(x.FilePath, relativeOrFullPath, StringComparison.OrdinalIgnoreCase));
+
+        if (errList.Count == 0)
+        {
+            // Если ошибок нет — удаляем файл из списка TreeView
+            if (existingGroup != null)
+                ProjectErrors.Remove(existingGroup);
+        }
+        else
+        {
+            if (existingGroup == null)
+            {
+                // Если файла еще нет в дереве — добавляем
+                ProjectErrors.Add(new FileErrorGroupVM(relativeOrFullPath, errList));
+            }
+            else
+            {
+                // Если есть — обновляем список его ошибок
+                existingGroup.Errors.Clear();
+                foreach (var err in errList)
+                    existingGroup.Errors.Add(err);
             }
         }
     }

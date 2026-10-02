@@ -59,17 +59,7 @@ public abstract partial class FileStructVM : ObservableObject
                 case DirectoryVM:
                     break;
                 case FileVM file:
-                    if (file.Panel != null)
-                    {
-                        MainVM.ActivePanel = file.Panel;
-                        file.Panel.SelectedTab = file;
-                    }
-                    else
-                    {
-                        MainVM.ActivePanel.Tabs.Add(file);
-                        MainVM.ActivePanel.SelectedTab = file;
-                        file.Panel = MainVM.ActivePanel;
-                    }
+                    MainVM.OpenFileTab(file);
                     break;
             }
         }

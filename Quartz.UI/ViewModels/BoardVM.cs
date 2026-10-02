@@ -47,6 +47,9 @@ public class BoardVM : EditorVM
             BoardModel = boardResult.Model;
         }
 
+        string relPath = MainVM.GetRelativePath(FilePath);
+        MainVM.UpdateFileErrors(relPath, boardResult.Errors);
+
         // 4. Отдаем результат в MainVM для рассылки по слоям
         MainVM.NotifyStylesUpdated(stylesResults);
         MainVM.NotifyLayersBoardUpdated(boardResult.Primitives, layerResults);

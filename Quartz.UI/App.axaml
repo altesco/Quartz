@@ -3,11 +3,87 @@
              x:Class="Quartz.UI.App"
              xmlns:themes="clr-namespace:ShadUI;assembly=ShadUI"
              RequestedThemeVariant="Default">
-             <!-- "Default" ThemeVariant follows system theme variant. "Dark" or "Light" are other available options. -->
-  
+
+    <!-- 1. СНАЧАЛА ОБЪЯВЛЯЕМ РЕСУРСЫ! -->
+    <Application.Resources>
+        <ResourceDictionary>
+            <!-- Сохраняем тему MenuItem от ShadUI -->
+            <ControlTheme x:Key="ShadMenuItemTheme"
+                          TargetType="MenuItem"
+                          BasedOn="{StaticResource {x:Type MenuItem}}" />
+
+            <!-- Сохраняем тему самого MenuFlyoutPresenter от ShadUI -->
+            <ControlTheme x:Key="ShadFlyoutPresenterTheme"
+                          TargetType="MenuFlyoutPresenter"
+                          BasedOn="{StaticResource {x:Type MenuFlyoutPresenter}}" />
+
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceInclude Source="avares://Quartz.UI/Views/Themes/Catppuccin.axaml" />
+            </ResourceDictionary.MergedDictionaries>
+
+        </ResourceDictionary>
+    </Application.Resources>
+
+    <!-- 2. И ТОЛЬКО ПОТОМ СТИЛИ! -->
     <Application.Styles>
+
         <FluentTheme/>
+
         <themes:ShadTheme />
+
         <StyleInclude Source="avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml" />
+
+        <!-- Используем DYNAMICRESOURCE, чтобы он находился во время работы программы! -->
+        <Style Selector="MenuFlyoutPresenter MenuItem">
+            <Setter Property="Theme" Value="{DynamicResource ShadMenuItemTheme}" />
+        </Style>
+
+        <Style Selector="Button.Icon">
+            <Setter Property="Width" Value="28"/>
+            <Setter Property="Height" Value="28"/>
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+
+        <Style Selector="TreeView">
+            <Setter Property="SelectionMode" Value="Multiple" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderColor30}" />
+        </Style>
+        <Style Selector="TreeViewItem">
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="MinHeight" Value="24" />
+            <Setter Property="FontSize" Value="14" /> 
+        </Style>
+
+        <!-- Наведение курсора (:pointerover) -->
+        <Style Selector="TreeViewItem:pointerover /template/ Border#PART_LayoutRoot">
+            <Setter Property="Background" Value="{DynamicResource GhostHoverColor}" />
+        </Style>
+
+        <!-- Выбранный элемент (:selected) -->
+        <Style Selector="TreeViewItem:selected /template/ Border#PART_LayoutRoot">
+            <Setter Property="Background" Value="{DynamicResource GhostColor}" />
+        </Style>
+
+        <!-- Выбранный элемент при наведении (:selected:pointerover) -->
+        <Style Selector="TreeViewItem:selected:pointerover /template/ Border#PART_LayoutRoot">
+            <Setter Property="Background" Value="{DynamicResource GhostHoverColor}" />
+        </Style>
+
+        <!-- Цвет текста и стрелочки при выборе -->
+        <Style Selector="TreeViewItem:selected /template/ ContentPresenter#PART_HeaderPresenter">
+            <Setter Property="Foreground" Value="{DynamicResource ForegroundColor}" />
+        </Style>
+        <Style Selector="TreeViewItem:selected /template/ ToggleButton#PART_ExpandCollapseChevron">
+            <Setter Property="Foreground" Value="{DynamicResource ForegroundColor}" />
+        </Style>
+
+        <Style Selector="MenuItem">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+
     </Application.Styles>
+
 </Application>

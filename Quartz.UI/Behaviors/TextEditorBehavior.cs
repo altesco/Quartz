@@ -1,8 +1,11 @@
 using System;
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Media;
-using Avalonia.Interactivity; // Важно: для RoutingStrategies
+using Avalonia.Styling;
+using Avalonia.VisualTree;
 using Avalonia.Xaml.Interactivity;
 using AvaloniaEdit;
 using AvaloniaEdit.Document;
@@ -14,10 +17,10 @@ namespace Quartz.UI.Behaviors
 {
     public class TextEditorBehavior : Behavior<TextEditor>
     {
+        private RegistryOptions? _registryOptions;
         private TextMate.Installation? _textMateInstallation;
-        private IBackgroundRenderer? _indentationRenderer;
+        private YamlIndentationRenderer? _indentationRenderer;
 
-        // Константы для масштабирования
         private const double MinFontSize = 6;
         private const double MaxFontSize = 72;
         private const double ZoomStep = 1.0;
@@ -28,14 +31,26 @@ namespace Quartz.UI.Behaviors
 
             if (AssociatedObject is null) return;
 
-            // ИСПРАВЛЕНО: Перехватываем событие колесика на стадии ТУННЕЛИРОВАНИЯ (Tunnel).
-            // Это аналог Preview-событий. Мы заберем ввод до того, как его поглотит встроенный скролл.
-            AssociatedObject.AddHandler(
-                InputElement.PointerWheelChangedEvent,
-                OnPointerWheelChanged,
-                RoutingStrategies.Tunnel);
+            try
+            {
+                // Берем тему строго из приложения, так как DataTemplate может врать
+                var isLight = Avalonia.Application.Current?.ActualThemeVariant == ThemeVariant.Light;
+                var initialTheme = isLight ? ThemeName.LightPlus : ThemeName.DarkPlus;
 
-            // Подключаем кастомный рендерер линий отступа
+                _registryOptions = new RegistryOptions(initialTheme);
+                _textMateInstallation = AssociatedObject.InstallTextMate(_registryOptions);
+
+                string scopeName = _registryOptions.GetScopeByExtension(".yaml");
+                if (!string.IsNullOrEmpty(scopeName))
+                {
+                    _textMateInstallation.SetGrammar(scopeName);
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"TextMate init failed: {ex.Message}");
+            }
+
             try
             {
                 if (AssociatedObject.TextArea?.TextView != null)
@@ -49,42 +64,133 @@ namespace Quartz.UI.Behaviors
                 System.Diagnostics.Debug.WriteLine($"Indentation renderer failed: {ex.Message}");
             }
 
-            // Инициализация TextMate для подсветки синтаксиса YAML
-            try
-            {
-                var registryOptions = new RegistryOptions(ThemeName.DarkPlus);
-                _textMateInstallation = AssociatedObject.InstallTextMate(registryOptions);
+            // Подписки
+            AssociatedObject.Loaded += OnEditorLoaded;
+            AssociatedObject.ActualThemeVariantChanged += OnActualThemeVariantChanged;
 
-                string scopeName = registryOptions.GetScopeByExtension(".yaml");
-                if (!string.IsNullOrEmpty(scopeName))
-                {
-                    _textMateInstallation.SetGrammar(scopeName);
-                }
-            }
-            catch (Exception ex)
+            if (Avalonia.Application.Current != null)
             {
-                System.Diagnostics.Debug.WriteLine($"TextMate init failed: {ex.Message}");
+                Avalonia.Application.Current.ActualThemeVariantChanged += OnGlobalThemeChanged;
             }
+
+            UpdateThemeColors();
+
+            AssociatedObject.AddHandler(
+                InputElement.PointerWheelChangedEvent,
+                OnPointerWheelChanged,
+                RoutingStrategies.Tunnel);
         }
 
-        // ОБРАБОТЧИК МАСШТАБИРОВАНИЯ ТЕКСТА
+        private void OnEditorLoaded(object? sender, RoutedEventArgs e) => UpdateThemeColors();
+
+        private void OnActualThemeVariantChanged(object? sender, EventArgs e) => UpdateThemeColors();
+
+        private void OnGlobalThemeChanged(object? sender, EventArgs e) => UpdateThemeColors();
+
+        private void UpdateThemeColors()
+        {
+            if (AssociatedObject?.TextArea?.TextView == null) return;
+
+            var editor = AssociatedObject;
+            var textArea = editor.TextArea;
+            var textView = textArea.TextView;
+
+            // 0. ОРИЕНТИРУЕМСЯ ТОЛЬКО НА ГЛОБАЛЬНУЮ ТЕМУ
+            var targetTheme = Avalonia.Application.Current?.ActualThemeVariant ?? ThemeVariant.Dark;
+            var isLight = targetTheme == ThemeVariant.Light;
+
+            if (_textMateInstallation != null && _registryOptions != null)
+            {
+                var tmTheme = isLight ? ThemeName.LightPlus : ThemeName.DarkPlus;
+                _textMateInstallation.SetTheme(_registryOptions.LoadTheme(tmTheme));
+            }
+
+            // 1. Вытягиваем цвета НАСИЛЬНО для нужной темы, обходя баги DataTemplate
+            if (TryGetThemeColor("BackgroundColor", targetTheme, out var bgColor))
+            {
+                editor.Background = new SolidColorBrush(bgColor);
+            }
+
+            if (TryGetThemeColor("ForegroundColor", targetTheme, out var fgColor))
+            {
+                editor.Foreground = new SolidColorBrush(fgColor);
+            }
+
+            if (TryGetThemeColor("MutedColor", targetTheme, out var mutedColor))
+            {
+                editor.LineNumbersForeground = new SolidColorBrush(mutedColor);
+            }
+
+            // 2. Выделение текста
+            textArea.SelectionCornerRadius = 4.0;
+            textArea.SelectionBorder = null;
+
+            if (TryGetThemeColor("SelectionColor", targetTheme, out var selColor))
+            {
+                textArea.SelectionBrush = new SolidColorBrush(selColor);
+            }
+            else if (TryGetThemeColor("PrimaryColor20", targetTheme, out var fallbackSelColor))
+            {
+                textArea.SelectionBrush = new SolidColorBrush(fallbackSelColor);
+            }
+
+            // 3. Подсветка строки
+            if (TryGetThemeColor("GhostColor", targetTheme, out var ghostColor))
+            {
+                textView.CurrentLineBackground = new SolidColorBrush(ghostColor);
+            }
+            textView.CurrentLineBorder = new Pen(Brushes.Transparent, 0);
+
+            // 4. Линии YAML
+            if (_indentationRenderer != null && TryGetThemeColor("BorderColor60", targetTheme, out var borderColor))
+            {
+                _indentationRenderer.UpdateLineColor(borderColor);
+            }
+
+            textView.Redraw();
+        }
+
+        // --- МОЙ СОБСТВЕННЫЙ ПОИСКОВИК РЕСУРСОВ ---
+        private bool TryGetThemeColor(string key, ThemeVariant targetTheme, out Color color)
+        {
+            // Ручками идем вверх по визуальному дереву и заставляем каждый узел искать ресурс 
+            // ИМЕННО ДЛЯ ТОЙ ТЕМЫ, которая нам нужна, а не для той, в которой он застрял!
+            Visual? current = AssociatedObject;
+
+            while (current != null)
+            {
+                if (current is IResourceNode node && node.TryGetResource(key, targetTheme, out var res))
+                {
+                    if (res is Color c) { color = c; return true; }
+                    if (res is ISolidColorBrush b) { color = b.Color; return true; }
+                }
+                current = current.GetVisualParent();
+            }
+
+            // На крайний случай дергаем приложение напрямую
+            if (Avalonia.Application.Current is IResourceNode appNode &&
+                appNode.TryGetResource(key, targetTheme, out var appRes))
+            {
+                if (appRes is Color c) { color = c; return true; }
+                if (appRes is ISolidColorBrush b) { color = b.Color; return true; }
+            }
+
+            color = default;
+            return false;
+        }
+
         private void OnPointerWheelChanged(object? sender, PointerWheelEventArgs e)
         {
-            // Проверяем, что зажат именно CTRL
             if (e.KeyModifiers.HasFlag(KeyModifiers.Control))
             {
-                // Сообщаем системе, что мы обработали событие. Внутренний скролл больше не сработает!
                 e.Handled = true;
 
                 if (Math.Abs(e.Delta.Y) < 0.001) return;
 
-                // Определяем направление: вверх (+1) или вниз (-1)
                 double direction = Math.Sign(e.Delta.Y);
-
                 double currentFontSize = AssociatedObject!.FontSize;
                 double newFontSize = currentFontSize + (direction * ZoomStep);
 
-                // Изменяем шрифт в рамках допустимого диапазона
                 if (newFontSize >= MinFontSize && newFontSize <= MaxFontSize)
                 {
                     AssociatedObject.FontSize = newFontSize;
@@ -94,35 +200,44 @@ namespace Quartz.UI.Behaviors
 
         protected override void OnDetaching()
         {
-            // ИСПРАВЛЕНО: Правильно удаляем хэндлер стадии туннелирования
             if (AssociatedObject != null)
             {
+                AssociatedObject.Loaded -= OnEditorLoaded;
+                AssociatedObject.ActualThemeVariantChanged -= OnActualThemeVariantChanged;
                 AssociatedObject.RemoveHandler(InputElement.PointerWheelChangedEvent, OnPointerWheelChanged);
+
+                if (AssociatedObject.TextArea?.TextView != null && _indentationRenderer != null)
+                {
+                    AssociatedObject.TextArea.TextView.BackgroundRenderers.Remove(_indentationRenderer);
+                    _indentationRenderer = null;
+                }
             }
 
-            if (AssociatedObject?.TextArea?.TextView != null && _indentationRenderer != null)
+            if (Avalonia.Application.Current != null)
             {
-                AssociatedObject.TextArea.TextView.BackgroundRenderers.Remove(_indentationRenderer);
-                _indentationRenderer = null;
+                Avalonia.Application.Current.ActualThemeVariantChanged -= OnGlobalThemeChanged;
             }
 
             _textMateInstallation?.Dispose();
             _textMateInstallation = null;
+            _registryOptions = null;
 
             base.OnDetaching();
         }
     }
 
-    /// <summary>
-    /// Кастомный высокопроизводительный рендерер вертикальных линий отступов для AvaloniaEdit
-    /// </summary>
     public class YamlIndentationRenderer : IBackgroundRenderer
     {
         private readonly TextEditor _editor;
-        private readonly Pen _linePen = new(new SolidColorBrush(Color.FromArgb(40, 128, 128, 128)), 1.0);
+        private Pen _linePen = new(Brushes.Transparent, 1.0);
 
         public YamlIndentationRenderer(TextEditor editor) => _editor = editor;
         public KnownLayer Layer => KnownLayer.Background;
+
+        public void UpdateLineColor(Color color)
+        {
+            _linePen = new Pen(new SolidColorBrush(color), 1.0);
+        }
 
         public void Draw(TextView textView, DrawingContext drawingContext)
         {
