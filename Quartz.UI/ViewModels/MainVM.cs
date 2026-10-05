@@ -405,8 +405,8 @@ public partial class MainVM : ObservableObject
 
         // апдейт координат для отрисовки перемещаемого файла
         var currentPos = e.GetPosition(null);
-        FakeFileX = currentPos.X;
-        FakeFileY = currentPos.Y;
+        FakeFileX = currentPos.X + 6;
+        FakeFileY = currentPos.Y + 6;
 
         if (TappedFile is null)
             return;

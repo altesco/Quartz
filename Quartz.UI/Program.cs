@@ -18,5 +18,15 @@ sealed class Program
             .UsePlatformDetect()
             .WithInterFont()
             .LogToTrace()
-            .UseSkia();
+            .UseSkia()
+            // Настройка для Linux (X11)
+            .With(new X11PlatformOptions
+            {
+                OverlayPopups = true // Заставляет поп-апы рендериться внутри окна
+            })
+            // На всякий случай для Windows, если тестируете там
+            .With(new Win32PlatformOptions
+            {
+                OverlayPopups = true
+            });
 }

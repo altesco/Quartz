@@ -2,20 +2,75 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="Quartz.UI.App"
              xmlns:themes="clr-namespace:ShadUI;assembly=ShadUI"
+             xmlns:local="clr-namespace:Quartz.UI.Behaviors"
              RequestedThemeVariant="Default">
 
-    <!-- 1. СНАЧАЛА ОБЪЯВЛЯЕМ РЕСУРСЫ! -->
     <Application.Resources>
         <ResourceDictionary>
-            <!-- Сохраняем тему MenuItem от ShadUI -->
-            <ControlTheme x:Key="ShadMenuItemTheme"
-                          TargetType="MenuItem"
-                          BasedOn="{StaticResource {x:Type MenuItem}}" />
+            <x:Double x:Key="TreeViewItemIndent">5</x:Double>
+            <CornerRadius x:Key="SmCornerRadius">4</CornerRadius>
 
-            <!-- Сохраняем тему самого MenuFlyoutPresenter от ShadUI -->
-            <ControlTheme x:Key="ShadFlyoutPresenterTheme"
-                          TargetType="MenuFlyoutPresenter"
-                          BasedOn="{StaticResource {x:Type MenuFlyoutPresenter}}" />
+            <ControlTheme x:Key="ShadMenuItemTheme" TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}" />
+            <ControlTheme x:Key="ShadFlyoutPresenterTheme" TargetType="MenuFlyoutPresenter" BasedOn="{StaticResource {x:Type MenuFlyoutPresenter}}" />
+
+            <!-- ДАЕМ УНИКАЛЬНЫЙ КЛЮЧ: QuartzFlyoutTheme -->
+            <ControlTheme x:Key="QuartzFlyoutTheme" TargetType="MenuFlyoutPresenter">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="Padding" Value="0,2" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Auto" />
+                <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto" />
+
+                <Setter Property="TextBlock.FontSize" Value="14" />
+                <Setter Property="TextBlock.FontWeight" Value="Medium" />
+
+                <!-- компенсация теней -->
+                <Setter Property="local:FlyoutAssist.HorizontalOffset" Value="-12" />
+                <Setter Property="local:FlyoutAssist.VerticalOffset" Value="-12" />
+
+                <Setter Property="Template">
+                    <ControlTemplate>
+                        <!-- Отступ 12 во все стороны для красивой тени -->
+                        <Border Name="LayoutRoot"
+                                Background="{DynamicResource CardBackgroundColor}"
+                                BorderBrush="{DynamicResource BorderColor60}"
+                                BorderThickness="1"
+                                CornerRadius="{DynamicResource SmCornerRadius}"
+                                Margin="12"
+                                BoxShadow="0 6 12 0 #40000000">
+
+                            <Border.Styles>
+                                <Style Selector="Border#LayoutRoot">
+                                    <Setter Property="RenderTransformOrigin" Value="50%, 0%" />
+                                    <Style.Animations>
+                                        <Animation Duration="0:0:0.18" Easing="CubicEaseOut" FillMode="Forward">
+                                            <KeyFrame Cue="0%">
+                                                <Setter Property="Opacity" Value="0" />
+                                                <Setter Property="ScaleTransform.ScaleY" Value="0.97" />
+                                                <Setter Property="ScaleTransform.ScaleX" Value="0.97" />
+                                            </KeyFrame>
+                                            <KeyFrame Cue="100%">
+                                                <Setter Property="Opacity" Value="1" />
+                                                <Setter Property="ScaleTransform.ScaleY" Value="1.0" />
+                                                <Setter Property="ScaleTransform.ScaleX" Value="1.0" />
+                                            </KeyFrame>
+                                        </Animation>
+                                    </Style.Animations>
+                                </Style>
+                            </Border.Styles>
+
+                            <ScrollViewer HorizontalScrollBarVisibility="{TemplateBinding ScrollViewer.HorizontalScrollBarVisibility}"
+                                          VerticalScrollBarVisibility="{TemplateBinding ScrollViewer.VerticalScrollBarVisibility}">
+                                <ItemsPresenter Name="PART_ItemsPresenter"
+                                                ItemsPanel="{TemplateBinding ItemsPanel}"
+                                                KeyboardNavigation.TabNavigation="Continue"
+                                                Grid.IsSharedSizeScope="True"
+                                                Margin="{TemplateBinding Padding}" />
+                            </ScrollViewer>
+                        </Border>
+                    </ControlTemplate>
+                </Setter>
+            </ControlTheme>
 
             <ResourceDictionary.MergedDictionaries>
                 <ResourceInclude Source="avares://Quartz.UI/Views/Themes/Catppuccin.axaml" />
@@ -24,20 +79,57 @@
         </ResourceDictionary>
     </Application.Resources>
 
-    <!-- 2. И ТОЛЬКО ПОТОМ СТИЛИ! -->
     <Application.Styles>
-
         <FluentTheme/>
-
         <themes:ShadTheme />
-
         <StyleInclude Source="avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml" />
 
-        <!-- Используем DYNAMICRESOURCE, чтобы он находился во время работы программы! -->
+        <!-- 1. ПРИБИВАЕМ ТЕМУ ГВОЗДЯМИ ДЛЯ ВСЕХ МЕНЮ, ЧТОБЫ SHADUI НЕ СМЕЛ ЕЕ СБИВАТЬ -->
+        <Style Selector="MenuFlyoutPresenter">
+            <Setter Property="Theme" Value="{DynamicResource QuartzFlyoutTheme}" />
+        </Style>
+
+        <!-- 2. Это тоже оставляем, чтобы внутренние пункты использовали стили ShadUI -->
         <Style Selector="MenuFlyoutPresenter MenuItem">
             <Setter Property="Theme" Value="{DynamicResource ShadMenuItemTheme}" />
         </Style>
 
+        <Style Selector="PopupRoot">
+            <Setter Property="TransparencyLevelHint" Value="Transparent" />
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+
+        <Style Selector="Separator">
+            <Setter Property="Background" Value="{DynamicResource BorderColor60}" />
+        </Style>
+
+
+        <Style Selector="MenuItem">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Height" Value="NaN" />
+            <Setter Property="MinHeight" Value="24" />
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="Padding" Value="10,0,10,1" />
+        </Style>
+
+        <!-- Заставляем текст пункта меню выравниваться по центру -->
+        <Style Selector="MenuItem /template/ ContentPresenter#HeaderPresenter">
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+
+        <!-- Сбрасываем кривую высоту иконок в меню от ShadUI (NaN = Auto) -->
+        <Style Selector="MenuItem /template/ ContentPresenter#Icon">
+            <Setter Property="Height" Value="NaN" />
+            <Setter Property="MinHeight" Value="20" />
+        </Style>
+
+        <!-- На всякий случай выравниваем саму иконку, если LucideIconContent чудит -->
+        <Style Selector="MenuItem /template/ ContentPresenter#Icon > LucideIcon">
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+        </Style>
+
+        
         <Style Selector="Button.Icon">
             <Setter Property="Width" Value="28"/>
             <Setter Property="Height" Value="28"/>
@@ -50,40 +142,58 @@
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
             <Setter Property="BorderBrush" Value="{DynamicResource BorderColor30}" />
+            <Setter Property="Padding" Value="8,4" />
         </Style>
+
         <Style Selector="TreeViewItem">
             <Setter Property="CornerRadius" Value="4" />
             <Setter Property="MinHeight" Value="24" />
-            <Setter Property="FontSize" Value="14" /> 
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="Foreground" Value="{DynamicResource ForegroundColor}" />
         </Style>
 
-        <!-- Наведение курсора (:pointerover) -->
-        <Style Selector="TreeViewItem:pointerover /template/ Border#PART_LayoutRoot">
+        <!-- Наведение курсора (проверяем наведение именно на строку LayoutRoot, а не на весь TreeViewItem) -->
+        <Style Selector="TreeViewItem /template/ Border#PART_LayoutRoot:pointerover">
             <Setter Property="Background" Value="{DynamicResource GhostHoverColor}" />
         </Style>
 
-        <!-- Выбранный элемент (:selected) -->
+        <!-- Выбранный элемент (:selected) оставляем как есть, так как выделение не наследуется -->
         <Style Selector="TreeViewItem:selected /template/ Border#PART_LayoutRoot">
             <Setter Property="Background" Value="{DynamicResource GhostColor}" />
         </Style>
 
-        <!-- Выбранный элемент при наведении (:selected:pointerover) -->
-        <Style Selector="TreeViewItem:selected:pointerover /template/ Border#PART_LayoutRoot">
+        <!-- Выбранный элемент при наведении -->
+        <Style Selector="TreeViewItem:selected /template/ Border#PART_LayoutRoot:pointerover">
             <Setter Property="Background" Value="{DynamicResource GhostHoverColor}" />
         </Style>
 
-        <!-- Цвет текста и стрелочки при выборе -->
-        <Style Selector="TreeViewItem:selected /template/ ContentPresenter#PART_HeaderPresenter">
-            <Setter Property="Foreground" Value="{DynamicResource ForegroundColor}" />
-        </Style>
-        <Style Selector="TreeViewItem:selected /template/ ToggleButton#PART_ExpandCollapseChevron">
-            <Setter Property="Foreground" Value="{DynamicResource ForegroundColor}" />
-        </Style>
+        <!-- Шаблон стрелочки: видимость иконок управляется напрямую через IsChecked кнопки -->
+        <Style Selector="TreeViewItem /template/ ToggleButton#PART_ExpandCollapseChevron">
+            <Setter Property="Width" Value="20" />
+            <Setter Property="Height" Value="20" />
+            <Setter Property="Margin" Value="0,0,-8,0" />
+            <Setter Property="Template">
+                <ControlTemplate TargetType="ToggleButton">
+                    <Panel Background="Transparent" x:CompileBindings="False">
 
-        <Style Selector="MenuItem">
-            <Setter Property="Background" Value="Transparent" />
+                        <!-- Закрыто: видно, пока IsChecked = False (!IsChecked) -->
+                        <LucideIcon HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    Kind="ChevronRight"
+                                    Size="20"
+                                    IsVisible="{Binding !IsChecked, RelativeSource={RelativeSource TemplatedParent}}" />
+
+                        <!-- Открыто: видно, когда IsChecked = True -->
+                        <LucideIcon HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    Kind="ChevronDown"
+                                    Size="20"
+                                    IsVisible="{Binding IsChecked, RelativeSource={RelativeSource TemplatedParent}}" />
+
+                    </Panel>
+                </ControlTemplate>
+            </Setter>
         </Style>
 
     </Application.Styles>
-
 </Application>

@@ -7,7 +7,6 @@ using Quartz.Application.Services;
 using Quartz.Core.Interfaces;
 using Quartz.Infrastructure.Parsers;
 using Quartz.Infrastructure.Services;
-using Quartz.Infrastructure.Tools;
 using Quartz.UI.ViewModels;
 using Quartz.UI.Views;
 

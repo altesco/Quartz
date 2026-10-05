@@ -75,9 +75,10 @@
                             <Setter Property="Height" Value="34" />
                             <Setter Property="FontSize" Value="14" />
                             <Setter Property="Background" Value="{DynamicResource SidebarBackgroundColor}" />
+                            <Setter Property="Foreground" Value="{DynamicResource MutedColor}" />
                             <Setter Property="BorderBrush" Value="{DynamicResource BorderColor30}" />
                             <Setter Property="BorderThickness" Value="0,0,1,1" />
-                            <Setter Property="Padding" Value="4,0,4,0" />
+                            <Setter Property="Padding" Value="6,0,4,0" />
                             <Setter Property="VerticalAlignment" Value="Center" />
                             <Setter Property="ClipToBounds" Value="False" />
                             <Setter Property="ZIndex" Value="1" />
@@ -114,18 +115,24 @@
                                                 Content="{TemplateBinding Header}"
                                                 ContentTemplate="{TemplateBinding HeaderTemplate}" />
                                             <Border
+                                                Height="1"
+                                                HorizontalAlignment="Stretch"
+                                                VerticalAlignment="Bottom"
+                                                Background="{DynamicResource PrimaryColor}"
+                                                IsVisible="{Binding $parent[TabItem].IsSelected}" />
+                                            <Border
                                                 x:Name="PART_RightLine"
                                                 Width="3"
                                                 Margin="1,-1,-1,0"
                                                 HorizontalAlignment="Right"
-                                                Background="{DynamicResource SystemAccentColor}"
+                                                Background="{DynamicResource PrimaryColor}"
                                                 IsVisible="{Binding $parent[TabItem].((vm:FileVM)DataContext).InsertSide, Converter={x:Static ObjectConverters.Equal}, ConverterParameter={x:Static enums:Side.Right}}" />
                                             <Border
                                                 x:Name="PART_LeftLine"
                                                 Width="3"
                                                 Margin="-3,-1,3,0"
                                                 HorizontalAlignment="Left"
-                                                Background="{DynamicResource SystemAccentColor}"
+                                                Background="{DynamicResource PrimaryColor}"
                                                 IsVisible="{Binding $parent[TabItem].((vm:FileVM)DataContext).InsertSide, Converter={x:Static ObjectConverters.Equal}, ConverterParameter={x:Static enums:Side.Left}}" />
                                         </Grid>
                                     </Border>
@@ -134,7 +141,7 @@
                         
                             <Setter Property="ContextFlyout" x:DataType="vm:File2D">
                                 <Setter.Value>
-                                    <MenuFlyout FlyoutPresenterTheme="{StaticResource ShadFlyoutPresenterTheme}">
+                                    <MenuFlyout>
 
                                         <!-- Контент твоего меню -->
                                         <MenuItem Header="Открыть холст" Command="{Binding OpenCanvasCommand}" />
@@ -145,33 +152,36 @@
                             <!-- Наведение курсора (:pointerover) -->
                             <Style Selector="^:pointerover">
                                 <Setter Property="Background" Value="{DynamicResource GhostHoverColor}" />
+                                <Setter Property="Foreground" Value="{DynamicResource ForegroundColor}" />
                             </Style>
 
                             <!-- Выбранный элемент (:selected) -->
                             <Style Selector="^:selected">
                                 <Setter Property="Background" Value="{DynamicResource GhostColor}" />
+                                <Setter Property="Foreground" Value="{DynamicResource PrimaryColor}" />
                                 <Setter Property="ZIndex" Value="100" />
                             </Style>
 
                             <!-- Выбранный элемент при наведении (:selected:pointerover) -->
                             <Style Selector="^:selected:pointerover">
                                 <Setter Property="Background" Value="{DynamicResource GhostHoverColor}" />
+                                <Setter Property="Foreground" Value="{DynamicResource PrimaryColor}" />
                                 <Setter Property="ZIndex" Value="100" />
                             </Style>
 
                         </Style>
 
-                        <Style Selector="TabItem Button.icon-button">
+                        <Style Selector="TabItem Button.Icon">
                             <Setter Property="Opacity" Value="0" />
                             <Setter Property="IsHitTestVisible" Value="False" />
                         </Style>
 
-                        <Style Selector="TabItem:selected Button.icon-button">
+                        <Style Selector="TabItem:selected Button.Icon">
                             <Setter Property="Opacity" Value="1" />
                             <Setter Property="IsHitTestVisible" Value="True" />
                         </Style>
 
-                        <Style Selector="TabItem:pointerover Button.icon-button">
+                        <Style Selector="TabItem:pointerover Button.Icon">
                             <Setter Property="Opacity" Value="1" />
                             <Setter Property="IsHitTestVisible" Value="True" />
                         </Style>
@@ -212,22 +222,66 @@
 
                     <TabControl.ItemTemplate>
                         <DataTemplate>
-                            <Grid ColumnDefinitions="*,Auto">
+                            <Grid ColumnDefinitions="Auto,*,Auto">
+                                <ContentControl 
+                                    Content="{Binding}" 
+                                    VerticalAlignment="Center">
+                                    <ContentControl.DataTemplates>
+                                        
+                                        <!-- Файл платы (.pcby) -->
+                                        <DataTemplate DataType="vm:BoardVM">
+                                            <LucideIcon Kind="Layers"
+                                                        Size="18"
+                                                        Foreground="{DynamicResource IconPcbyColor}" />
+                                        </DataTemplate>
+
+                                        <!-- Файл слоя (.layy) -->
+                                        <DataTemplate DataType="vm:LayerVM">
+                                            <LucideIcon Kind="CircuitBoard"
+                                                        Size="19"
+                                                        Foreground="{DynamicResource IconLayyColor}" />
+                                        </DataTemplate>
+
+                                        <!-- Файл стилей (.stly) -->
+                                        <DataTemplate DataType="vm:StylesFileVM">
+                                            <LucideIcon Kind="PencilSparkles"
+                                                        Size="18"
+                                                        Foreground="{DynamicResource IconStlyColor}" />
+                                        </DataTemplate>
+
+                                        <DataTemplate DataType="vm:CanvasVM">
+                                            <LucideIcon Kind="LayoutDashboard"
+                                                        Size="18"
+                                                        Foreground="{DynamicResource IconLayyColor}" />
+                                        </DataTemplate>
+
+                                        <!-- Дефолтная иконка на случай других файлов -->
+                                        <DataTemplate DataType="vm:FileVM">
+                                            <LucideIcon Kind="File"
+                                                        Size="18"
+                                                        Foreground="{DynamicResource MutedColor}" />
+                                        </DataTemplate>
+                                    </ContentControl.DataTemplates>
+                                </ContentControl>
                                 <TextBlock
+                                    Grid.Column="1"
                                     MinWidth="0"
-                                    Margin="0,0,4,0"
+                                    Margin="6,0,4,0"
                                     VerticalAlignment="Center"
                                     Text="{Binding Header}"
                                     TextTrimming="CharacterEllipsis" />
                                 <Button
-                                    Grid.Column="1"
+                                    Grid.Column="2"
+                                    Padding="0"
                                     Width="22"
                                     Height="22"
                                     VerticalAlignment="Center"
-                                    Classes="icon-button"
+                                    Classes="Icon"
                                     Command="{Binding RemoveTabCommand}"
-                                    Foreground="White">
-                                    <LucideIcon Kind="X" Size="16" />
+                                     HorizontalContentAlignment="Center"
+                                      VerticalContentAlignment="Center"
+                                    Foreground="{DynamicResource ForegroundColor}"
+                                    Content="{LucideIconContent X, Size=16}">
                                 </Button>
                             </Grid>
                         </DataTemplate>
@@ -251,22 +305,22 @@
                                 <Border
                                     Width="80"
                                     HorizontalAlignment="Right"
-                                    Background="Blue"
+                                    Background="{DynamicResource PrimaryColor}"
                                     IsVisible="{Binding $parent[TabControl].((vm:PanelVM)DataContext).NewNodeSide, Converter={x:Static ObjectConverters.Equal}, ConverterParameter={x:Static enums:Side.Right}}" />
                                 <Border
                                     Width="80"
                                     HorizontalAlignment="Left"
-                                    Background="Blue"
+                                    Background="{DynamicResource PrimaryColor}"
                                     IsVisible="{Binding $parent[TabControl].((vm:PanelVM)DataContext).NewNodeSide, Converter={x:Static ObjectConverters.Equal}, ConverterParameter={x:Static enums:Side.Left}}" />
                                 <Border
                                     Height="80"
                                     VerticalAlignment="Top"
-                                    Background="Blue"
+                                    Background="{DynamicResource PrimaryColor}"
                                     IsVisible="{Binding $parent[TabControl].((vm:PanelVM)DataContext).NewNodeSide, Converter={x:Static ObjectConverters.Equal}, ConverterParameter={x:Static enums:Side.Top}}" />
                                 <Border
                                     Height="80"
                                     VerticalAlignment="Bottom"
-                                    Background="Blue"
+                                    Background="{DynamicResource PrimaryColor}"
                                     IsVisible="{Binding $parent[TabControl].((vm:PanelVM)DataContext).NewNodeSide, Converter={x:Static ObjectConverters.Equal}, ConverterParameter={x:Static enums:Side.Bottom}}" />
                             </Grid>
                         </DataTemplate>
@@ -286,6 +340,9 @@
 
                 <Grid.Styles>
                     <themes:ShadTheme/>
+                    <Style Selector="Separator">
+                        <Setter Property="Background" Value="{DynamicResource BorderColor60}" />
+                    </Style>
                 </Grid.Styles>
 
                 <Grid.Resources>
@@ -372,16 +429,46 @@
                         Classes="Icon"
                         Content="{LucideIconContent EllipsisVertical, Size=18}">
                         <Button.Flyout>
-                            <MenuFlyout Placement="BottomEdgeAlignedLeft">
-                                <MenuItem Header="Редактировать" >
-                                </MenuItem>
+                            <MenuFlyout Placement="BottomEdgeAlignedRight">
 
-                                <MenuItem Header="Дублировать"/>
+                                <MenuItem 
+                                    Header="Открыть холст" 
+                                    Icon="{LucideIconContent LayoutDashboard, Size=18}" />
 
-                                <!-- Разделитель -->
                                 <Separator/>
 
-                                <MenuItem Header="Удалить"  Foreground="Red"/>
+                                <MenuItem 
+                                    Header="Сохранить" 
+                                    Icon="{LucideIconContent Save, Size=18}"
+                                    InputGesture="Ctrl+S" />
+                                <MenuItem 
+                                    Header="Сохранить как" 
+                                    Icon="{LucideIconContent SavePen, Size=18}"
+                                    InputGesture="Ctrl+Shift+S"/>
+                                <MenuItem Header="Сохранить все" Icon="{LucideIconContent SaveAll, Size=18}"/>
+
+                                <Separator/>
+
+                                <MenuItem Header="Найти" Icon="{LucideIconContent FileSearchCorner, Size=18}"/>
+                                <MenuItem Header="Заменить" Icon="{LucideIconContent FilePen, Size=18}"/>
+
+                                <Separator/>
+
+                                <MenuItem Header="Копировать путь" Icon="{LucideIconContent Copy, Size=18}"/>
+                                <MenuItem Header="Копировать относительный путь" Icon="{LucideIconContent CopySlash, Size=18}"/>
+
+                                <Separator/>
+
+                                <MenuItem Header="Показать в проводнике" Icon="{LucideIconContent FolderClosed, Size=18}"/>
+                                <MenuItem Header="Показать в файловом менеджере" Icon="{LucideIconContent FolderTree, Size=18}"/>
+
+                                <Separator/>
+
+                                <MenuItem 
+                                    Header="Удалить" 
+                                    Foreground="{DynamicResource DestructiveColor}"
+                                    Icon="{LucideIconContent Trash, Size=18}"/>
+
                             </MenuFlyout>
                         </Button.Flyout>
                     </Button>
@@ -400,103 +487,224 @@
         </DataTemplate>
     </Window.DataTemplates>
 
-    <Grid ColumnDefinitions="Auto,Auto,*" RowDefinitions="*,Auto">
+    <Grid ColumnDefinitions="Auto,Auto,*" RowDefinitions="Auto,*,Auto">
         
-        <Border BorderBrush="{DynamicResource BorderColor30}" BorderThickness="0,0,1,0" Grid.RowSpan="2" Background="{DynamicResource TitleBarBackgroundColor}">
-            <StackPanel Margin="6,3" Spacing="3">
+        <Border
+            x:Name="TitleBar"
+            BorderBrush="{DynamicResource BorderColor30}"
+            BorderThickness="0,0,0,1"
+            Grid.ColumnSpan="3"
+            Background="{DynamicResource TitleBarBackgroundColor}"
+            Height="34">
+            <Grid>
+                <Border
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Center"
+                    Margin="14,0,0,0"
+                    Width="19"
+                    Height="19">
+                    <Path
+                        Data="m 428.23643,1195.3056 -220.12851,-387.66701 43.57494,-205.10271 171.858,98.98302 104.21962,258.34417 m 288.89384,91.20253 12.77204,23.2819 -95.41409,116.4503 -114.94767,54.8443 -190.82817,-50.3365 117.9528,-170.9194 m -157.77127,-593.1446 5.54117,253.23946 m 267.97047,253.164 107.76905,-192.17558 m 53.65196,-344.82119 -53.65196,344.82119 149.88275,-73.81444 18.7823,221.63114 -121.70931,157.77132 -69.06175,-75.82695 -85.66304,-37.58549 -72.55042,54.5379 m 0,0 -43.18995,32.20324 m -18.42875,-64.52313 18.42875,64.52313 M 388.41796,431.2416 462.04457,292.25258 632.21565,120.07196 823.35061,400.64829"
+                        Stroke="{DynamicResource PrimaryColor}"
+                        StrokeLineCap="Flat"
+                        StrokeJoin="Round"
+                        StrokeThickness="1.5"
+                        Fill="{DynamicResource PrimaryColor10}"
+                        Stretch="Uniform"
+                        Height="19"
+                        Width="19" />
+                </Border>
+            </Grid>
+        </Border>
+
+        <Border 
+            BorderBrush="{DynamicResource BorderColor30}" 
+            BorderThickness="0,0,1,0" 
+            Grid.RowSpan="2" 
+            Grid.Row="1"
+            Background="{DynamicResource TitleBarBackgroundColor}">
+            <StackPanel Margin="6" Spacing="3">
                 <Button Classes="Icon" Content="{LucideIconContent FolderClosed, Size=20}" />
                 <Button Classes="Icon" Content="{LucideIconContent Search, Size=20}" />
                 <Button Classes="Icon" Content="{LucideIconContent Route, Size=20}" />
             </StackPanel>
         </Border>
         
-        <TreeView 
-            ItemsSource="{Binding FileTree}" 
+        <Grid
             Grid.Column="1"
-            Grid.RowSpan="2"
-            Background="{DynamicResource SidebarBackgroundColor}"
-            BorderThickness="0,0,1,0">
-            <TreeView.Styles>
-                <FluentTheme/>
-                <Style Selector="TreeViewItem">
-                    <Setter Property="Interaction.Behaviors">
-                        <BehaviorCollectionTemplate>
-                            <BehaviorCollection>
-                                <RoutedEventTriggerBehavior RoutedEvent="{x:Static InputElement.PointerPressedEvent}"
-                                                            RoutingStrategies="Tunnel">
-                                    <InvokeCommandAction Command="{Binding FileReplaceCommand}"
-                                                         PassEventArgsToCommand="True" />
-                                </RoutedEventTriggerBehavior>
-                                <RoutedEventTriggerBehavior RoutedEvent="{x:Static InputElement.PointerReleasedEvent}"
-                                                            RoutingStrategies="Tunnel">
-                                    <InvokeCommandAction Command="{Binding FileReplacedCommand}"
-                                                         PassEventArgsToCommand="True" />
-                                </RoutedEventTriggerBehavior>
-                            </BehaviorCollection>
-                        </BehaviorCollectionTemplate>
-                    </Setter>
-                </Style>
-            </TreeView.Styles>
-            <TreeView.DataTemplates>
-                <TreeDataTemplate DataType="{x:Type vm:DirectoryVM}" ItemsSource="{Binding Children}">
-                    <Grid>
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <LucideIcon Classes.opened="{Binding $parent[TreeViewItem].IsExpanded}" Size="18">
-                                <LucideIcon.Styles>
-                                    <Style Selector="LucideIcon">
-                                        <Setter Property="Kind" Value="Folder" />
-                                    </Style>
-                                    <Style Selector="LucideIcon.opened">
-                                        <Setter Property="Kind" Value="FolderOpen" />
-                                    </Style>
-                                </LucideIcon.Styles>
-                            </LucideIcon>
-                            <TextBlock VerticalAlignment="Center" Text="{Binding Header}" />
-                        </StackPanel>
-                    </Grid>
-                </TreeDataTemplate>
+            Grid.Row="0"
+            Grid.RowSpan="3"
+            RowDefinitions="Auto,*">
 
-                <DataTemplate DataType="{x:Type vm:LayerVM}">
-                    <Grid>
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <LucideIcon Kind="CircuitBoard" Size="19" />
-                            <TextBlock
-                                VerticalAlignment="Center"
-                                Foreground="LightBlue"
-                                Text="{Binding Header}" />
-                        </StackPanel>
-                    </Grid>
-                </DataTemplate>
+            <Border
+                Classes.with-thickness="{Binding RootNode, Converter={x:Static ObjectConverters.IsNotNull}}"
+                BorderBrush="{DynamicResource BorderColor30}"
+                Height="{Binding #TitleBar.Bounds.Height}">
+                <Border.Styles>
+                    <Style Selector="Border.with-thickness">
+                        <Setter Property="BorderThickness" Value="0,0,1,0" />
+                    </Style>
+                </Border.Styles>
+                <Grid 
+                    ColumnDefinitions="*,Auto"
+                    VerticalAlignment="Center"
+                    Margin="12,0">
+                    <Grid.Styles>
+                        <Style Selector="Button.Icon">
+                            <Setter Property="Width" Value="24" />
+                            <Setter Property="Height" Value="24" />
+                        </Style>
+                        <Style Selector="LucideIcon">
+                            <Setter Property="Foreground" Value="{DynamicResource PrimaryColor}" />
+                        </Style>
+                    </Grid.Styles>
+                    <TextBlock
+                        VerticalAlignment="Center"
+                        FontSize="12"
+                        Foreground="{DynamicResource PrimaryColor}"
+                        FontWeight="SemiLight"
+                        Text="ПРОВОДНИК"
+                        TextTrimming="CharacterEllipsis" />
+                    <StackPanel 
+                        Grid.Column="1"
+                        Orientation="Horizontal" 
+                        Margin="6,0,0,0"
+                        Spacing="3">
+                        <Button Classes="Icon" Content="{LucideIconContent FolderInput, Size=18}" />
+                        <Button
+                            Classes="Icon"
+                            Content="{LucideIconContent FilePlus, Size=18}">
+                            <Button.Flyout>
+                                <MenuFlyout Placement="BottomEdgeAlignedLeft">
+                                    <MenuItem Header="Редактировать" >
+                                    </MenuItem>
 
-                <DataTemplate DataType="{x:Type vm:BoardVM}">
-                    <Grid>
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <LucideIcon Kind="Layers" Size="18" />
-                            <TextBlock
-                                VerticalAlignment="Center"
-                                Foreground="LightBlue"
-                                Text="{Binding Header}" />
-                        </StackPanel>
-                    </Grid>
-                </DataTemplate>
+                                    <MenuItem Header="Дублировать"/>
 
-                <DataTemplate DataType="{x:Type vm:StylesFileVM}">
-                    <Grid>
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <LucideIcon Kind="PencilSparkles" Size="18" />
-                            <TextBlock
-                                VerticalAlignment="Center"
-                                Foreground="LightBlue"
-                                Text="{Binding Header}" />
-                        </StackPanel>
-                    </Grid>
-                </DataTemplate>
-            </TreeView.DataTemplates>
-        </TreeView>
+                                    <!-- Разделитель -->
+                                    <Separator/>
+
+                                    <MenuItem Header="Удалить"  Foreground="Red"/>
+                                </MenuFlyout>
+                            </Button.Flyout>
+                        </Button>
+                        <Button Classes="Icon" Content="{LucideIconContent FolderPlus, Size=18}" />
+                        <Button Classes="Icon" Content="{LucideIconContent ChevronsDownUp, Size=18}" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <TreeView 
+                Grid.Row="1"
+                ItemsSource="{Binding FileTree}" 
+                Background="{DynamicResource SidebarBackgroundColor}"
+                BorderThickness="0,0,1,0">
+
+                <TreeView.Styles>
+                    <FluentTheme/>
+                    <Style Selector="TreeViewItem">
+                        <Setter Property="Interaction.Behaviors">
+                            <BehaviorCollectionTemplate>
+                                <BehaviorCollection>
+                                    <RoutedEventTriggerBehavior RoutedEvent="{x:Static InputElement.PointerPressedEvent}"
+                                                                RoutingStrategies="Tunnel">
+                                        <InvokeCommandAction Command="{Binding FileReplaceCommand}"
+                                                            PassEventArgsToCommand="True" />
+                                    </RoutedEventTriggerBehavior>
+                                    <RoutedEventTriggerBehavior RoutedEvent="{x:Static InputElement.PointerReleasedEvent}"
+                                                                RoutingStrategies="Tunnel">
+                                        <InvokeCommandAction Command="{Binding FileReplacedCommand}"
+                                                            PassEventArgsToCommand="True" />
+                                    </RoutedEventTriggerBehavior>
+                                </BehaviorCollection>
+                            </BehaviorCollectionTemplate>
+                        </Setter>
+                    </Style>
+                </TreeView.Styles>
+
+                <TreeView.DataTemplates>
+                    <TreeDataTemplate DataType="{x:Type vm:DirectoryVM}" ItemsSource="{Binding Children}">
+                        <Grid>
+                            <Grid ColumnDefinitions="Auto,*">
+                                <LucideIcon Classes.opened="{Binding $parent[TreeViewItem].IsExpanded}" Size="18">
+                                    <LucideIcon.Styles>
+                                        <Style Selector="LucideIcon">
+                                            <Setter Property="Kind" Value="Folder" />
+                                        </Style>
+                                        <Style Selector="LucideIcon.opened">
+                                            <Setter Property="Kind" Value="FolderOpen" />
+                                        </Style>
+                                    </LucideIcon.Styles>
+                                </LucideIcon>
+                                <TextBlock 
+                                    Grid.Column="1"
+                                    Margin="6,0,0,0"
+                                    VerticalAlignment="Center" 
+                                    Text="{Binding Header}"
+                                    TextTrimming="CharacterEllipsis" />
+                            </Grid>
+                        </Grid>
+                    </TreeDataTemplate>
+
+                    <DataTemplate DataType="{x:Type vm:LayerVM}">
+                        <Grid>
+                            <Grid ColumnDefinitions="Auto,*">
+                                <LucideIcon 
+                                    Kind="CircuitBoard" 
+                                    Size="19"
+                                    Foreground="{DynamicResource IconLayyColor}"/>
+                                <TextBlock
+                                    Grid.Column="1"
+                                    Margin="6,0,0,0"
+                                    VerticalAlignment="Center"
+                                    Text="{Binding Header}"
+                                    TextTrimming="CharacterEllipsis"/>
+                            </Grid>
+                        </Grid>
+                    </DataTemplate>
+
+                    <DataTemplate DataType="{x:Type vm:BoardVM}">
+                        <Grid>
+                            <Grid ColumnDefinitions="Auto,*">
+                                <LucideIcon 
+                                    Kind="Layers" 
+                                    Size="18" 
+                                    Foreground="{DynamicResource IconPcbyColor}" />
+                                <TextBlock
+                                    Grid.Column="1"
+                                    Margin="6,0,0,0"
+                                    VerticalAlignment="Center"
+                                    Text="{Binding Header}"
+                                    TextTrimming="CharacterEllipsis" />
+                            </Grid>
+                        </Grid>
+                    </DataTemplate>
+
+                    <DataTemplate DataType="{x:Type vm:StylesFileVM}">
+                        <Grid>
+                            <Grid ColumnDefinitions="Auto,*" >
+                                <LucideIcon 
+                                    Kind="PencilSparkles" 
+                                    Size="18" 
+                                    Foreground="{DynamicResource IconStlyColor}" />
+                                <TextBlock
+                                    Grid.Column="1"
+                                    Margin="6,0,0,0"
+                                    VerticalAlignment="Center"
+                                    Text="{Binding Header}"
+                                    TextTrimming="CharacterEllipsis" />
+                            </Grid>
+                        </Grid>
+                    </DataTemplate>
+                </TreeView.DataTemplates>
+            </TreeView>
+
+        </Grid>
 
         <ContentControl
             Grid.Column="2"
             Grid.Row="0"
+            Grid.RowSpan="2"
             Margin="0,-1,0,0"
             Content="{Binding RootNode}"
             IsVisible="{Binding RootNode, Converter={x:Static ObjectConverters.IsNotNull}}"/>
@@ -504,7 +712,7 @@
         <TreeView 
             ItemsSource="{Binding ProjectErrors}"
             Grid.Column="2"
-            Grid.Row="1"
+            Grid.Row="2"
             BorderThickness="0,1,0,0"
             BorderBrush="{DynamicResource BorderColor60}"
             Background="{DynamicResource WindowBackgroundColor}">
@@ -555,7 +763,7 @@
         <GridSplitter
             x:Name="VerticalSplitter"
             Grid.Column="1"
-            Grid.Row="0"
+            Grid.Row="1"
             Grid.RowSpan="2"
             HorizontalAlignment="Right"
             Width="4"
@@ -565,17 +773,21 @@
         <GridSplitter
             x:Name="HorizontalSplitter"
             Grid.Column="2"
-            Grid.Row="0"
+            Grid.Row="1"
             VerticalAlignment="Bottom"
             Height="4"
             MinHeight="4"
             Classes="overlay-splitter" />
 
-        <Canvas Grid.Column="0" Grid.Row="0" Grid.ColumnSpan="3" Grid.RowSpan="2">
+        <Canvas Grid.Column="0" Grid.Row="0" Grid.ColumnSpan="3" Grid.RowSpan="3">
             <Border
                 Canvas.Left="{Binding FakeFileX}"
                 Canvas.Top="{Binding FakeFileY}"
-                IsHitTestVisible="False">
+                IsHitTestVisible="False"
+                CornerRadius="{DynamicResource SmCornerRadius}"
+                Background="{DynamicResource CardBackgroundColor}"
+                BorderThickness="1"
+                BorderBrush="{DynamicResource BorderColor30}">
                 <Border.IsVisible>
                     <MultiBinding Converter="{x:Static BoolConverters.Or}">
                         <Binding Path="IsFileReplacing" />
@@ -584,11 +796,13 @@
                 </Border.IsVisible>
                 <Grid>
                     <TextBlock
-                        Background="Yellow"
+                        Margin="6,3"
+                        FontSize="13"
                         IsVisible="{Binding DraggedFile, Converter={x:Static ObjectConverters.IsNotNull}}"
                         Text="{Binding DraggedFile?.Header}" />
                     <TextBlock
-                        Background="Yellow"
+                        Margin="6,3"
+                        FontSize="13"
                         IsVisible="{Binding DraggedTab, Converter={x:Static ObjectConverters.IsNotNull}}"
                         Text="{Binding DraggedTab?.Header}" />
                 </Grid>

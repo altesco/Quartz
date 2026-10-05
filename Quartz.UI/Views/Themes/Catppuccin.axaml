@@ -67,6 +67,12 @@
             <Color x:Key="SwitchForegroundColor">#1e1e2e</Color>
             <Color x:Key="TabItemSelectedColor">#313244</Color>
             <Color x:Key="TabItemsBackgroundColor">#181825</Color>
+
+            <!-- Цвета расширений файлов (File Icons) -->
+            <Color x:Key="IconPcbyColor">#89b4fa</Color> <!-- Синий -->
+            <Color x:Key="IconStlyColor">#f9e2af</Color> <!-- Желтый -->
+            <Color x:Key="IconLayyColor">#a6e3a1</Color> <!-- Зеленый -->
+
         </ResourceDictionary>
 
         <!-- Light Theme (Catppuccin Latte) -->
@@ -135,6 +141,12 @@
             <Color x:Key="SwitchForegroundColor">#eff1f5</Color>
             <Color x:Key="TabItemSelectedColor">#ccd0da</Color>
             <Color x:Key="TabItemsBackgroundColor">#e6e9ef</Color>
+
+            <!-- Цвета расширений файлов (File Icons) -->
+            <Color x:Key="IconPcbyColor">#1e66f5</Color> <!-- Насыщенный синий -->
+            <Color x:Key="IconStlyColor">#df8e1d</Color> <!-- Оранжево-желтый -->
+            <Color x:Key="IconLayyColor">#40a02b</Color> <!-- Темно-зеленый -->
+
         </ResourceDictionary>
     </ResourceDictionary.ThemeDictionaries>
 </ResourceDictionary>
