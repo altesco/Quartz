@@ -1,6 +1,8 @@
+using System.Collections.ObjectModel;
 using System.Linq;
 using CommunityToolkit.Mvvm.Input;
 using Quartz.Core.Enums;
+using Quartz.Core.Models;
 using Quartz.UI.Enums;
 
 namespace Quartz.UI.ViewModels;
@@ -12,6 +14,8 @@ public abstract partial class FileVM : FileStructVM
     }
 
     public abstract Extension Extension { get; }
+
+    public ObservableCollection<EditorError> Errors { get; } = [];
 
     public Side InsertSide
     {

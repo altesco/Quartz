@@ -43,7 +43,7 @@ public partial class MainVM : ObservableObject
 
     private string? _projectRootDir;
 
-    public ObservableCollection<FileErrorGroupVM> ProjectErrors { get; } = [];
+    public ObservableCollection<FileVM> ProjectErrors { get; } = [];//<FileErrorGroupVM> ProjectErrors { get; } = [];
 
     public MainVM(IBoardProcessingCoordinator boardProcessingCoordinator)
     {
@@ -376,11 +376,11 @@ public partial class MainVM : ObservableObject
                 };
 
                 // ЗАПОМИНАЕМ СЛОЙ СРАЗУ ПРИ ОТКРЫТИИ ПРОЕКТА
-                
+
                 _projectLayers[relPath] = layer;
 
                 return layer;
-            
+
             case ".stly":
                 var stylesFile = new StylesFileVM(mainVM: this, parent: parent, filePath: path,
                     coordinator: _boardProcessingCoordinator)
@@ -506,12 +506,14 @@ public partial class MainVM : ObservableObject
                 // Отдаем слою его результат — пусть сам решает, как себя обновить
                 layerVM.ApplyProjectResult(layerResult, boardOverlayPrimitives);
 
-                UpdateFileErrors(relPath, layerResult.Errors);
+                UpdateFileErrors(layerVM);//(relPath, layerResult.Errors);
             }
         }
     }
 
-    public void NotifyStylesUpdated(IDictionary<string, ProcessResult<List<Style>>> styleResults)
+    public void NotifyStylesUpdated(
+        IDictionary<string,
+        ProcessResult<List<Style>>> styleResults)
     {
         foreach (var (relPath, styleVM) in _projectStyles)
         {
@@ -519,7 +521,7 @@ public partial class MainVM : ObservableObject
             {
                 styleVM.ApplyProjectResult(styleResult);
 
-                UpdateFileErrors(relPath, styleResult.Errors);
+                UpdateFileErrors(styleVM);
             }
         }
     }
@@ -527,32 +529,17 @@ public partial class MainVM : ObservableObject
     /// <summary>
     /// Обновляет ошибки для конкретного файла в общем дереве ошибок
     /// </summary>
-    public void UpdateFileErrors(string relativeOrFullPath, IEnumerable<EditorError> errors)
+    public void UpdateFileErrors(FileVM fileVM)//string relativeOrFullPath, IEnumerable<EditorError> errors)
     {
-        var errList = errors.ToList();
-        var existingGroup = ProjectErrors.FirstOrDefault(x =>
-            string.Equals(x.FilePath, relativeOrFullPath, StringComparison.OrdinalIgnoreCase));
-
-        if (errList.Count == 0)
+        if (fileVM.Errors.Count == 0)
         {
             // Если ошибок нет — удаляем файл из списка TreeView
-            if (existingGroup != null)
-                ProjectErrors.Remove(existingGroup);
+            ProjectErrors.Remove(fileVM);
         }
-        else
+        else if (!ProjectErrors.Contains(fileVM))
         {
-            if (existingGroup == null)
-            {
-                // Если файла еще нет в дереве — добавляем
-                ProjectErrors.Add(new FileErrorGroupVM(relativeOrFullPath, errList));
-            }
-            else
-            {
-                // Если есть — обновляем список его ошибок
-                existingGroup.Errors.Clear();
-                foreach (var err in errList)
-                    existingGroup.Errors.Add(err);
-            }
+            // Если файла еще нет в дереве — добавляем
+            ProjectErrors.Add(fileVM);
         }
     }
 

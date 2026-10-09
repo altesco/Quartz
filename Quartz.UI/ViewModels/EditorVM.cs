@@ -19,8 +19,6 @@ public abstract partial class EditorVM : FileVM
 
     [ObservableProperty] private TextDocument? _document = new();
 
-    public ObservableCollection<EditorError> Errors { get; } = [];
-
     [ObservableProperty] private double _scrollX;
 
     [ObservableProperty]

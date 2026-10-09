@@ -48,7 +48,7 @@ public class BoardVM : EditorVM
         }
 
         string relPath = MainVM.GetRelativePath(FilePath);
-        MainVM.UpdateFileErrors(relPath, boardResult.Errors);
+        MainVM.UpdateFileErrors(this);//(relPath, boardResult.Errors);
 
         // 4. Отдаем результат в MainVM для рассылки по слоям
         MainVM.NotifyStylesUpdated(stylesResults);
