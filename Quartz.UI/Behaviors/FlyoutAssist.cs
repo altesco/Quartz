@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
+using Avalonia.VisualTree;
 
 namespace Quartz.UI.Behaviors
 {
@@ -8,11 +9,11 @@ namespace Quartz.UI.Behaviors
     {
         // Регистрируем Attached Property для сдвига по X
         public static readonly AttachedProperty<double> HorizontalOffsetProperty =
-            AvaloniaProperty.RegisterAttached<MenuFlyoutPresenter, MenuFlyoutPresenter, double>("HorizontalOffset");
+            AvaloniaProperty.RegisterAttached<Control, Control, double>("HorizontalOffset");
 
         // Регистрируем Attached Property для сдвига по Y
         public static readonly AttachedProperty<double> VerticalOffsetProperty =
-            AvaloniaProperty.RegisterAttached<MenuFlyoutPresenter, MenuFlyoutPresenter, double>("VerticalOffset");
+            AvaloniaProperty.RegisterAttached<Control, Control, double>("VerticalOffset");
 
         public static void SetHorizontalOffset(AvaloniaObject element, double value) => element.SetValue(HorizontalOffsetProperty, value);
         public static double GetHorizontalOffset(AvaloniaObject element) => element.GetValue(HorizontalOffsetProperty);
@@ -22,21 +23,33 @@ namespace Quartz.UI.Behaviors
 
         static FlyoutAssist()
         {
-            HorizontalOffsetProperty.Changed.AddClassHandler<MenuFlyoutPresenter>(OnOffsetChanged);
-            VerticalOffsetProperty.Changed.AddClassHandler<MenuFlyoutPresenter>(OnOffsetChanged);
+            HorizontalOffsetProperty.Changed.AddClassHandler<Control>(OnOffsetChanged);
+            VerticalOffsetProperty.Changed.AddClassHandler<Control>(OnOffsetChanged);
         }
 
-        private static void OnOffsetChanged(MenuFlyoutPresenter presenter, AvaloniaPropertyChangedEventArgs e)
+        private static void OnOffsetChanged(Control element, AvaloniaPropertyChangedEventArgs e)
         {
-            // Когда презентер загружается в дерево, ищем его Popup и сдвигаем
-            presenter.Loaded += (s, ev) =>
+            ApplyOffset(element);
+
+            element.AttachedToLogicalTree += (s, ev) => ApplyOffset(element);
+            element.AttachedToVisualTree += (s, ev) => ApplyOffset(element);
+            element.Loaded += (s, ev) => ApplyOffset(element);
+        }
+
+        private static void ApplyOffset(Control element)
+        {
+            var popup = element.Parent as Popup ?? element.FindAncestorOfType<Popup>();
+            if (popup == null) return;
+
+            if (element.IsSet(HorizontalOffsetProperty))
             {
-                if (presenter.Parent is Popup popup)
-                {
-                    popup.HorizontalOffset = GetHorizontalOffset(presenter);
-                    popup.VerticalOffset = GetVerticalOffset(presenter);
-                }
-            };
+                popup.HorizontalOffset = GetHorizontalOffset(element);
+            }
+
+            if (element.IsSet(VerticalOffsetProperty))
+            {
+                popup.VerticalOffset = GetVerticalOffset(element);
+            }
         }
     }
 }

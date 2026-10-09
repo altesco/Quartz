@@ -33,6 +33,10 @@
         <vm:MainVM />
     </Design.DataContext>
 
+    <Window.KeyBindings>
+        <KeyBinding Gesture="Ctrl+S" Command="{Binding SaveCurrentFileCommand}" />
+    </Window.KeyBindings>
+
     <Interaction.Behaviors>
         <EventTriggerBehavior EventName="PointerMoved">
             <InvokeCommandAction Command="{Binding MoveFileCommand}" PassEventArgsToCommand="True" />
@@ -384,7 +388,7 @@
                     HorizontalScrollBarVisibility="Auto"
                     ShowLineNumbers="True"
                     VerticalScrollBarVisibility="Visible"
-                    WordWrap="False"
+                    WordWrap="True"
                     LineNumbersMargin="0,0,16,0"
                     Margin="16,0,0,0">
                     <ae:TextEditor.Options>
@@ -393,6 +397,9 @@
                             IndentationSize="2" 
                             HighlightCurrentLine="True"/>
                     </ae:TextEditor.Options>
+                    <ae:TextEditor.KeyBindings>
+                        <KeyBinding Gesture="Ctrl+S" Command="{Binding SaveCommand}" />
+                    </ae:TextEditor.KeyBindings>
                     <Interaction.Behaviors>
                         <beh:TextEditorBehavior/>
                     </Interaction.Behaviors>
@@ -459,6 +466,7 @@
                                 <MenuItem 
                                     Header="Сохранить" 
                                     Icon="{LucideIconContent Save, Size=18}"
+                                    Command="{Binding SaveCommand}"
                                     InputGesture="Ctrl+S" />
                                 <MenuItem 
                                     Header="Сохранить как" 
@@ -591,7 +599,9 @@
                         <Button 
                             Classes="Icon" 
                             Content="{LucideIconContent FolderInput, Size=18}"
-                            Command="{Binding OpenProjectCommand}" />
+                            Command="{Binding OpenProjectCommand}"
+                            ToolTip.Tip="Открыть папку"
+                            ToolTip.Placement="Bottom" />
                         <Button
                             Classes="Icon"
                             Content="{LucideIconContent FilePlus, Size=18}">
@@ -712,6 +722,40 @@
                                     Grid.Column="1"
                                     Margin="6,0,0,0"
                                     VerticalAlignment="Center"
+                                    Text="{Binding Header}"
+                                    TextTrimming="CharacterEllipsis" />
+                            </Grid>
+                        </Grid>
+                    </DataTemplate>
+
+                    <DataTemplate DataType="{x:Type vm:PlainFileVM}">
+                        <Grid>
+                            <Grid ColumnDefinitions="Auto,*">
+                                <LucideIcon 
+                                    Kind="File" 
+                                    Size="18" 
+                                    Foreground="{DynamicResource MutedColor}" />
+                                <TextBlock
+                                    Grid.Column="1"
+                                    Margin="6,0,0,0"
+                                    VerticalAlignment="Center" 
+                                    Text="{Binding Header}"
+                                    TextTrimming="CharacterEllipsis" />
+                            </Grid>
+                        </Grid>
+                    </DataTemplate>
+
+                    <DataTemplate DataType="{x:Type vm:FileVM}">
+                        <Grid>
+                            <Grid ColumnDefinitions="Auto,*">
+                                <LucideIcon 
+                                    Kind="File" 
+                                    Size="18" 
+                                    Foreground="{DynamicResource MutedColor}" />
+                                <TextBlock
+                                    Grid.Column="1"
+                                    Margin="6,0,0,0"
+                                    VerticalAlignment="Center" 
                                     Text="{Binding Header}"
                                     TextTrimming="CharacterEllipsis" />
                             </Grid>

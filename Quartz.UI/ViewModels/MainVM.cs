@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
@@ -256,6 +256,11 @@ public partial class MainVM : ObservableObject
 
     public void OpenFileTab(FileVM file)
     {
+        if (file is EditorVM editor)
+        {
+            editor.LoadDocumentIfEmpty();
+        }
+
         if (file.Panel != null)
         {
             ActivePanel = file.Panel;
@@ -339,12 +344,9 @@ public partial class MainVM : ObservableObject
                 .OrderBy(x => x, StringComparer.OrdinalIgnoreCase);
             foreach (var f in files)
             {
-                if (Path.GetExtension(f) is ".pcby" or ".layy" or ".schy" or ".stly")
-                {
-                    var file = LoadFile(f, dir);
-                    if (file != null)
-                        dir.Children.Add(file);
-                }
+                var file = LoadFile(f, dir);
+                if (file != null)
+                    dir.Children.Add(file);
             }
         }
         catch (Exception ex)
@@ -395,9 +397,18 @@ public partial class MainVM : ObservableObject
                 _projectStyles[relPath] = stylesFile;
 
                 return stylesFile;
-        }
 
-        return null;
+            default:
+                var plainFile = new PlainFileVM(
+                    mainVM: this,
+                    filePath: path,
+                    parent: parent,
+                    coordinator: _boardProcessingCoordinator)
+                {
+                    FilePath = path
+                };
+                return plainFile;
+        }
     }
 
     [RelayCommand]
@@ -464,6 +475,15 @@ public partial class MainVM : ObservableObject
             return;
 
         LoadProjectFromDirectory(selectedPath);
+    }
+
+    [RelayCommand]
+    private void SaveCurrentFile()
+    {
+        if (ActivePanel?.SelectedTab is EditorVM editor)
+        {
+            editor.Save();
+        }
     }
 
     public void LoadProjectFromDirectory(string directoryPath)

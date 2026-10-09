@@ -72,6 +72,37 @@
                 </Setter>
             </ControlTheme>
 
+            <!-- ДАЕМ УНИКАЛЬНЫЙ КЛЮЧ: QuartzToolTipTheme -->
+            <ControlTheme x:Key="QuartzToolTipTheme" TargetType="ToolTip">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="Padding" Value="8,4" />
+                <Setter Property="FontSize" Value="12" />
+                <Setter Property="Foreground" Value="{DynamicResource ForegroundColor}" />
+
+                <!-- компенсация теней: только по вертикали, по горизонтали тень симметрична -->
+                <Setter Property="local:FlyoutAssist.VerticalOffset" Value="-12" />
+
+                <Setter Property="Template">
+                    <ControlTemplate TargetType="ToolTip">
+                        <!-- Отступ 12 во все стороны для красивой тени -->
+                        <Border Name="LayoutRoot"
+                                Background="{DynamicResource CardBackgroundColor}"
+                                BorderBrush="{DynamicResource BorderColor60}"
+                                BorderThickness="1"
+                                CornerRadius="{DynamicResource SmCornerRadius}"
+                                Padding="{TemplateBinding Padding}"
+                                Margin="12"
+                                BoxShadow="0 6 12 0 #40000000">
+                            <ContentPresenter Name="PART_ContentPresenter"
+                                              Content="{TemplateBinding Content}"
+                                              ContentTemplate="{TemplateBinding ContentTemplate}"
+                                              RecognizesAccessKey="True" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter>
+            </ControlTheme>
+
             <ResourceDictionary.MergedDictionaries>
                 <ResourceInclude Source="avares://Quartz.UI/Views/Themes/Catppuccin.axaml" />
             </ResourceDictionary.MergedDictionaries>
@@ -97,6 +128,11 @@
         <Style Selector="PopupRoot">
             <Setter Property="TransparencyLevelHint" Value="Transparent" />
             <Setter Property="Background" Value="Transparent" />
+        </Style>
+
+        <!-- 3. Прибиваем тему гвоздями для всех ToolTip -->
+        <Style Selector="ToolTip">
+            <Setter Property="Theme" Value="{DynamicResource QuartzToolTipTheme}" />
         </Style>
 
         <Style Selector="Separator">

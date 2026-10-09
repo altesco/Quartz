@@ -39,33 +39,15 @@ namespace Quartz.UI.Behaviors
 
                 _registryOptions = new RegistryOptions(initialTheme);
                 _textMateInstallation = AssociatedObject.InstallTextMate(_registryOptions);
-
-                string scopeName = _registryOptions.GetScopeByExtension(".yaml");
-                if (!string.IsNullOrEmpty(scopeName))
-                {
-                    _textMateInstallation.SetGrammar(scopeName);
-                }
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"TextMate init failed: {ex.Message}");
             }
 
-            try
-            {
-                if (AssociatedObject.TextArea?.TextView != null)
-                {
-                    _indentationRenderer = new YamlIndentationRenderer(AssociatedObject);
-                    AssociatedObject.TextArea.TextView.BackgroundRenderers.Add(_indentationRenderer);
-                }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Indentation renderer failed: {ex.Message}");
-            }
-
             // Подписки
             AssociatedObject.Loaded += OnEditorLoaded;
+            AssociatedObject.DataContextChanged += OnDataContextChanged;
             AssociatedObject.ActualThemeVariantChanged += OnActualThemeVariantChanged;
 
             if (Avalonia.Application.Current != null)
@@ -74,6 +56,7 @@ namespace Quartz.UI.Behaviors
             }
 
             UpdateThemeColors();
+            ConfigureEditorForCurrentFile();
 
             AssociatedObject.AddHandler(
                 InputElement.PointerWheelChangedEvent,
@@ -81,11 +64,87 @@ namespace Quartz.UI.Behaviors
                 RoutingStrategies.Tunnel);
         }
 
-        private void OnEditorLoaded(object? sender, RoutedEventArgs e) => UpdateThemeColors();
+        private void OnEditorLoaded(object? sender, RoutedEventArgs e)
+        {
+            UpdateThemeColors();
+            ConfigureEditorForCurrentFile();
+        }
+
+        private void OnDataContextChanged(object? sender, EventArgs e) => ConfigureEditorForCurrentFile();
 
         private void OnActualThemeVariantChanged(object? sender, EventArgs e) => UpdateThemeColors();
 
         private void OnGlobalThemeChanged(object? sender, EventArgs e) => UpdateThemeColors();
+
+        private void ConfigureEditorForCurrentFile()
+        {
+            if (AssociatedObject == null) return;
+
+            var vm = AssociatedObject.DataContext as ViewModels.EditorVM;
+            var filePath = vm?.FilePath;
+            var ext = !string.IsNullOrEmpty(filePath) ? System.IO.Path.GetExtension(filePath).ToLowerInvariant() : "";
+            bool isYaml = ext is ".pcby" or ".layy" or ".stly" or ".yaml" or ".yml";
+
+            // 1. Управление YamlIndentationRenderer (только для YAML файлов)
+            if (isYaml)
+            {
+                if (_indentationRenderer == null && AssociatedObject.TextArea?.TextView != null)
+                {
+                    _indentationRenderer = new YamlIndentationRenderer(AssociatedObject);
+                    AssociatedObject.TextArea.TextView.BackgroundRenderers.Add(_indentationRenderer);
+                }
+            }
+            else
+            {
+                if (_indentationRenderer != null && AssociatedObject.TextArea?.TextView != null)
+                {
+                    AssociatedObject.TextArea.TextView.BackgroundRenderers.Remove(_indentationRenderer);
+                    _indentationRenderer = null;
+                }
+            }
+
+            // 2. Управление подсветкой TextMate
+            if (_textMateInstallation != null && _registryOptions != null)
+            {
+                bool hasExcessiveLines = false;
+                if (AssociatedObject.Document != null)
+                {
+                    if (AssociatedObject.Document.TextLength > 1_500_000)
+                    {
+                        hasExcessiveLines = true;
+                    }
+                    else
+                    {
+                        foreach (var line in AssociatedObject.Document.Lines)
+                        {
+                            if (line.Length > 10_000)
+                            {
+                                hasExcessiveLines = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (!hasExcessiveLines)
+                {
+                    string? scopeName = null;
+                    if (isYaml)
+                    {
+                        scopeName = _registryOptions.GetScopeByExtension(".yaml");
+                    }
+                    else if (!string.IsNullOrEmpty(ext))
+                    {
+                        scopeName = _registryOptions.GetScopeByExtension(ext);
+                    }
+
+                    if (!string.IsNullOrEmpty(scopeName))
+                    {
+                        _textMateInstallation.SetGrammar(scopeName);
+                    }
+                }
+            }
+        }
 
         private void UpdateThemeColors()
         {
@@ -203,6 +262,7 @@ namespace Quartz.UI.Behaviors
             if (AssociatedObject != null)
             {
                 AssociatedObject.Loaded -= OnEditorLoaded;
+                AssociatedObject.DataContextChanged -= OnDataContextChanged;
                 AssociatedObject.ActualThemeVariantChanged -= OnActualThemeVariantChanged;
                 AssociatedObject.RemoveHandler(InputElement.PointerWheelChangedEvent, OnPointerWheelChanged);
 
@@ -250,11 +310,14 @@ namespace Quartz.UI.Behaviors
             foreach (VisualLine visualLine in textView.VisualLines)
             {
                 DocumentLine docLine = visualLine.FirstDocumentLine;
-                string text = _editor.Document.GetText(docLine.Offset, docLine.Length);
+                int lineLen = docLine.Length;
+                if (lineLen > 1000) continue; // Защита от гигантских строк
 
+                int lineOffset = docLine.Offset;
                 int leadingSpaces = 0;
-                foreach (char c in text)
+                for (int i = 0; i < lineLen; i++)
                 {
+                    char c = _editor.Document.GetCharAt(lineOffset + i);
                     if (c == ' ') leadingSpaces++;
                     else break;
                 }
