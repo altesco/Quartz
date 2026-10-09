@@ -588,7 +588,10 @@
                         Orientation="Horizontal" 
                         Margin="6,0,0,0"
                         Spacing="3">
-                        <Button Classes="Icon" Content="{LucideIconContent FolderInput, Size=18}" />
+                        <Button 
+                            Classes="Icon" 
+                            Content="{LucideIconContent FolderInput, Size=18}"
+                            Command="{Binding OpenProjectCommand}" />
                         <Button
                             Classes="Icon"
                             Content="{LucideIconContent FilePlus, Size=18}">

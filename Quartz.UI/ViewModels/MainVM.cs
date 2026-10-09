@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -15,6 +16,7 @@ using Quartz.Core.Models;
 using Quartz.Core.Models.BoardEntities;
 using Quartz.Core.Models.BoardEntities.Styles;
 using Quartz.UI.Enums;
+using Quartz.UI.Services;
 
 namespace Quartz.UI.ViewModels;
 
@@ -40,23 +42,24 @@ public partial class MainVM : ObservableObject
     [ObservableProperty] private double _fakeFileY;
 
     private readonly IBoardProcessingCoordinator _boardProcessingCoordinator;
+    private readonly IFolderDialogService _folderDialogService;
 
     private string? _projectRootDir;
 
-    public ObservableCollection<FileVM> ProjectErrors { get; } = [];//<FileErrorGroupVM> ProjectErrors { get; } = [];
+    public ObservableCollection<FileVM> ProjectErrors { get; } = [];
 
-    public MainVM(IBoardProcessingCoordinator boardProcessingCoordinator)
+    public MainVM(
+        IBoardProcessingCoordinator boardProcessingCoordinator,
+        IFolderDialogService folderDialogService)
     {
         _boardProcessingCoordinator = boardProcessingCoordinator;
+        _folderDialogService = folderDialogService;
 
-        _projectLayers.Clear();
-        _projectStyles.Clear();
-
-        // Запоминаем путь ДО вызова LoadDirectories!
         _projectRootDir = Path.Combine("/", "home", "alexandr", "Games", "Проект");
-
-        var rootDirVM = LoadDirectories(_projectRootDir, parent: null);
-        FileTree.Add(rootDirVM);
+        if (Directory.Exists(_projectRootDir))
+        {
+            LoadProjectFromDirectory(_projectRootDir);
+        }
     }
 
     public ObservableCollection<FileStructVM> FileTree { get; } = [];
@@ -453,6 +456,44 @@ public partial class MainVM : ObservableObject
         dc.TapEndCommand.Execute(null);
     }
 
+    [RelayCommand]
+    private async Task OpenProject()
+    {
+        var selectedPath = await _folderDialogService.OpenFolderAsync("Открыть проект Quartz");
+        if (string.IsNullOrWhiteSpace(selectedPath) || !Directory.Exists(selectedPath))
+            return;
+
+        LoadProjectFromDirectory(selectedPath);
+    }
+
+    public void LoadProjectFromDirectory(string directoryPath)
+    {
+        // 1. Очищаем состояние предыдущего проекта
+        _projectLayers.Clear();
+        _projectStyles.Clear();
+        FileTree.Clear();
+        ProjectErrors.Clear();
+        CurrentBoard = null;
+
+        // Сбрасываем разметку редактора и вкладки
+        RootNode = null;
+        ActivePanel = null;
+
+        // 2. Загружаем файловую структуру выбранной директории
+        _projectRootDir = directoryPath;
+        var rootDirVM = LoadDirectories(_projectRootDir, parent: null);
+        FileTree.Add(rootDirVM);
+
+        // 3. Если в проекте есть плата, запускаем расчет
+        if (CurrentBoard != null)
+        {
+            _ = CurrentBoard.ProcessBoardProject();
+        }
+    }
+
+
+
+
     // --- ОПТИМИЗИРОВАННАЯ РАБОТА С ФАЙЛАМИ ---
 
     /// <summary>
@@ -506,7 +547,7 @@ public partial class MainVM : ObservableObject
                 // Отдаем слою его результат — пусть сам решает, как себя обновить
                 layerVM.ApplyProjectResult(layerResult, boardOverlayPrimitives);
 
-                UpdateFileErrors(layerVM);//(relPath, layerResult.Errors);
+                UpdateFileErrors(layerVM);
             }
         }
     }

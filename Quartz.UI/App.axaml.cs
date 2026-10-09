@@ -7,6 +7,7 @@ using Quartz.Application.Services;
 using Quartz.Core.Interfaces;
 using Quartz.Infrastructure.Parsers;
 using Quartz.Infrastructure.Services;
+using Quartz.UI.Services;
 using Quartz.UI.ViewModels;
 using Quartz.UI.Views;
 
@@ -56,7 +57,10 @@ public class App : Avalonia.Application
         services.AddSingleton<IDrawingGenerationService, DrawingGenerationService>();
         services.AddSingleton<IBoardProcessingCoordinator, BoardProcessingCoordinator>();
 
-        // 3. ViewModels
+        // 3. UI Services
+        services.AddSingleton<IFolderDialogService, FolderDialogService>();
+
+        // 4. ViewModels
         services.AddSingleton<MainVM>();
     }
 }
