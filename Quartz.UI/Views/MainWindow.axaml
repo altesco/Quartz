@@ -388,7 +388,7 @@
                     HorizontalScrollBarVisibility="Auto"
                     ShowLineNumbers="True"
                     VerticalScrollBarVisibility="Visible"
-                    WordWrap="True"
+                    WordWrap="False"
                     LineNumbersMargin="0,0,16,0"
                     Margin="16,0,0,0">
                     <ae:TextEditor.Options>

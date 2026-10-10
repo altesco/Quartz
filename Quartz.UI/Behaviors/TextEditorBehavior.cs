@@ -20,7 +20,10 @@ namespace Quartz.UI.Behaviors
         private RegistryOptions? _registryOptions;
         private TextMate.Installation? _textMateInstallation;
         private YamlIndentationRenderer? _indentationRenderer;
+        private TextDocument? _trackedDocument;
+        private string? _currentScope;
 
+        public const int MaxLineLengthForHighlighting = 500;
         private const double MinFontSize = 6;
         private const double MaxFontSize = 72;
         private const double ZoomStep = 1.0;
@@ -31,30 +34,18 @@ namespace Quartz.UI.Behaviors
 
             if (AssociatedObject is null) return;
 
-            try
-            {
-                // Берем тему строго из приложения, так как DataTemplate может врать
-                var isLight = Avalonia.Application.Current?.ActualThemeVariant == ThemeVariant.Light;
-                var initialTheme = isLight ? ThemeName.LightPlus : ThemeName.DarkPlus;
-
-                _registryOptions = new RegistryOptions(initialTheme);
-                _textMateInstallation = AssociatedObject.InstallTextMate(_registryOptions);
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"TextMate init failed: {ex.Message}");
-            }
-
             // Подписки
             AssociatedObject.Loaded += OnEditorLoaded;
             AssociatedObject.DataContextChanged += OnDataContextChanged;
             AssociatedObject.ActualThemeVariantChanged += OnActualThemeVariantChanged;
+            AssociatedObject.PropertyChanged += OnPropertyChanged;
 
             if (Avalonia.Application.Current != null)
             {
                 Avalonia.Application.Current.ActualThemeVariantChanged += OnGlobalThemeChanged;
             }
 
+            HookDocument(AssociatedObject.Document);
             UpdateThemeColors();
             ConfigureEditorForCurrentFile();
 
@@ -63,6 +54,32 @@ namespace Quartz.UI.Behaviors
                 OnPointerWheelChanged,
                 RoutingStrategies.Tunnel);
         }
+
+        private void OnPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
+        {
+            if (e.Property == TextEditor.DocumentProperty)
+            {
+                HookDocument(e.GetNewValue<TextDocument?>());
+                ConfigureEditorForCurrentFile();
+            }
+        }
+
+        private void HookDocument(TextDocument? newDoc)
+        {
+            if (_trackedDocument != null)
+            {
+                _trackedDocument.TextChanged -= OnDocumentTextChanged;
+            }
+
+            _trackedDocument = newDoc;
+
+            if (_trackedDocument != null)
+            {
+                _trackedDocument.TextChanged += OnDocumentTextChanged;
+            }
+        }
+
+        private void OnDocumentTextChanged(object? sender, EventArgs e) => ConfigureEditorForCurrentFile();
 
         private void OnEditorLoaded(object? sender, RoutedEventArgs e)
         {
@@ -76,17 +93,82 @@ namespace Quartz.UI.Behaviors
 
         private void OnGlobalThemeChanged(object? sender, EventArgs e) => UpdateThemeColors();
 
+        private void EnsureTextMateInstalled()
+        {
+            if (AssociatedObject == null) return;
+            if (_textMateInstallation != null) return;
+
+            try
+            {
+                var targetTheme = Avalonia.Application.Current?.ActualThemeVariant ?? ThemeVariant.Dark;
+                var isLight = targetTheme == ThemeVariant.Light;
+                var initialTheme = isLight ? ThemeName.LightPlus : ThemeName.DarkPlus;
+
+                _registryOptions ??= new RegistryOptions(initialTheme);
+                _textMateInstallation = AssociatedObject.InstallTextMate(_registryOptions);
+
+                var tmTheme = isLight ? ThemeName.LightPlus : ThemeName.DarkPlus;
+                _textMateInstallation.SetTheme(_registryOptions.LoadTheme(tmTheme));
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"TextMate init failed: {ex.Message}");
+            }
+        }
+
+        private void RemoveTextMate()
+        {
+            if (_textMateInstallation != null)
+            {
+                try
+                {
+                    _textMateInstallation.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"TextMate dispose failed: {ex.Message}");
+                }
+                _textMateInstallation = null;
+            }
+        }
+
         private void ConfigureEditorForCurrentFile()
         {
             if (AssociatedObject == null) return;
+
+            if (_trackedDocument != AssociatedObject.Document)
+            {
+                HookDocument(AssociatedObject.Document);
+            }
 
             var vm = AssociatedObject.DataContext as ViewModels.EditorVM;
             var filePath = vm?.FilePath;
             var ext = !string.IsNullOrEmpty(filePath) ? System.IO.Path.GetExtension(filePath).ToLowerInvariant() : "";
             bool isYaml = ext is ".pcby" or ".layy" or ".stly" or ".yaml" or ".yml";
 
-            // 1. Управление YamlIndentationRenderer (только для YAML файлов)
-            if (isYaml)
+            bool hasExcessiveLines = false;
+            var doc = AssociatedObject.Document;
+            if (doc != null)
+            {
+                if (doc.TextLength > 1_500_000)
+                {
+                    hasExcessiveLines = true;
+                }
+                else
+                {
+                    foreach (var line in doc.Lines)
+                    {
+                        if (line.Length > MaxLineLengthForHighlighting)
+                        {
+                            hasExcessiveLines = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // 1. Управление YamlIndentationRenderer (только для YAML файлов и если нет сверхдлинных строк)
+            if (isYaml && !hasExcessiveLines)
             {
                 if (_indentationRenderer == null && AssociatedObject.TextArea?.TextView != null)
                 {
@@ -104,44 +186,47 @@ namespace Quartz.UI.Behaviors
             }
 
             // 2. Управление подсветкой TextMate
-            if (_textMateInstallation != null && _registryOptions != null)
+            if (hasExcessiveLines)
             {
-                bool hasExcessiveLines = false;
-                if (AssociatedObject.Document != null)
+                if (_textMateInstallation != null)
                 {
-                    if (AssociatedObject.Document.TextLength > 1_500_000)
-                    {
-                        hasExcessiveLines = true;
-                    }
-                    else
-                    {
-                        foreach (var line in AssociatedObject.Document.Lines)
-                        {
-                            if (line.Length > 10_000)
-                            {
-                                hasExcessiveLines = true;
-                                break;
-                            }
-                        }
-                    }
+                    RemoveTextMate();
+                    _currentScope = null;
+                    AssociatedObject.TextArea?.TextView?.Redraw();
+                }
+            }
+            else
+            {
+                string? scopeName = null;
+                if (isYaml)
+                {
+                    scopeName = _registryOptions?.GetScopeByExtension(".yaml");
+                }
+                else if (!string.IsNullOrEmpty(ext))
+                {
+                    scopeName = _registryOptions?.GetScopeByExtension(ext);
                 }
 
-                if (!hasExcessiveLines)
+                if (_textMateInstallation == null)
                 {
-                    string? scopeName = null;
-                    if (isYaml)
-                    {
-                        scopeName = _registryOptions.GetScopeByExtension(".yaml");
-                    }
-                    else if (!string.IsNullOrEmpty(ext))
-                    {
-                        scopeName = _registryOptions.GetScopeByExtension(ext);
-                    }
+                    EnsureTextMateInstalled();
+                }
 
+                if (_textMateInstallation != null && _currentScope != scopeName)
+                {
+                    _currentScope = scopeName;
                     if (!string.IsNullOrEmpty(scopeName))
                     {
-                        _textMateInstallation.SetGrammar(scopeName);
+                        try
+                        {
+                            _textMateInstallation.SetGrammar(scopeName);
+                        }
+                        catch (Exception ex)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"SetGrammar failed: {ex.Message}");
+                        }
                     }
+                    AssociatedObject.TextArea?.TextView?.Redraw();
                 }
             }
         }
@@ -264,7 +349,10 @@ namespace Quartz.UI.Behaviors
                 AssociatedObject.Loaded -= OnEditorLoaded;
                 AssociatedObject.DataContextChanged -= OnDataContextChanged;
                 AssociatedObject.ActualThemeVariantChanged -= OnActualThemeVariantChanged;
+                AssociatedObject.PropertyChanged -= OnPropertyChanged;
                 AssociatedObject.RemoveHandler(InputElement.PointerWheelChangedEvent, OnPointerWheelChanged);
+
+                HookDocument(null);
 
                 if (AssociatedObject.TextArea?.TextView != null && _indentationRenderer != null)
                 {
@@ -278,9 +366,9 @@ namespace Quartz.UI.Behaviors
                 Avalonia.Application.Current.ActualThemeVariantChanged -= OnGlobalThemeChanged;
             }
 
-            _textMateInstallation?.Dispose();
-            _textMateInstallation = null;
+            RemoveTextMate();
             _registryOptions = null;
+            _currentScope = null;
 
             base.OnDetaching();
         }
