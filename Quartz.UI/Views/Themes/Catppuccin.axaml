@@ -73,6 +73,19 @@
             <Color x:Key="IconStlyColor">#f9e2af</Color> <!-- Желтый -->
             <Color x:Key="IconLayyColor">#a6e3a1</Color> <!-- Зеленый -->
 
+            <!-- Холст и примитивы печатной платы (Canvas & Board Primitives) -->
+            <Color x:Key="CanvasBackgroundColor">#181825</Color>
+            <Color x:Key="CanvasGridColor">#80585b70</Color>
+            <Color x:Key="CanvasBoardOutlineColor">#f9e2af</Color>
+            <Color x:Key="CanvasComponentOutlineColor">#bac2de</Color>
+            <Color x:Key="CanvasFootprintColor">#a6adc8</Color>
+            <Color x:Key="CanvasPadColor">#fab387</Color>
+            <Color x:Key="CanvasPinColor">#a6e3a1</Color>
+            <Color x:Key="CanvasTraceColor">#89dceb</Color>
+            <Color x:Key="CanvasViaColor">#eba0ac</Color>
+            <Color x:Key="CanvasNetColor">#f5c2e7</Color>
+            <Color x:Key="CanvasTextColor">#cdd6f4</Color>
+
         </ResourceDictionary>
 
         <!-- Light Theme (Catppuccin Latte) -->
@@ -146,6 +159,19 @@
             <Color x:Key="IconPcbyColor">#1e66f5</Color> <!-- Насыщенный синий -->
             <Color x:Key="IconStlyColor">#df8e1d</Color> <!-- Оранжево-желтый -->
             <Color x:Key="IconLayyColor">#40a02b</Color> <!-- Темно-зеленый -->
+
+            <!-- Холст и примитивы печатной платы (Canvas & Board Primitives) -->
+            <Color x:Key="CanvasBackgroundColor">#e6e9ef</Color>
+            <Color x:Key="CanvasGridColor">#80acb0be</Color>
+            <Color x:Key="CanvasBoardOutlineColor">#df8e1d</Color>
+            <Color x:Key="CanvasComponentOutlineColor">#5c5f77</Color>
+            <Color x:Key="CanvasFootprintColor">#6c6f85</Color>
+            <Color x:Key="CanvasPadColor">#fe640b</Color>
+            <Color x:Key="CanvasPinColor">#40a02b</Color>
+            <Color x:Key="CanvasTraceColor">#179299</Color>
+            <Color x:Key="CanvasViaColor">#e64553</Color>
+            <Color x:Key="CanvasNetColor">#ea76cb</Color>
+            <Color x:Key="CanvasTextColor">#4c4f69</Color>
 
         </ResourceDictionary>
     </ResourceDictionary.ThemeDictionaries>

@@ -2,16 +2,22 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Input;
-using Avalonia.Labs.Controls;
+using Avalonia.Media;
+using Avalonia.Media.Imaging;
+using Avalonia.Platform;
+using Avalonia.Skia;
+using Avalonia.Styling;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Quartz.Core.Enums;
 using Quartz.Core.Models.BoardEntities;
 using SkiaSharp;
 
 namespace Quartz.UI.Controls;
 
-public class CircuitBoardCanvas : SKCanvasView, IDisposable
+public class CircuitBoardCanvas : Control, IDisposable
 {
     public static readonly StyledProperty<IReadOnlyList<DrawingPrimitive>?> DrawingDataProperty =
         AvaloniaProperty.Register<CircuitBoardCanvas, IReadOnlyList<DrawingPrimitive>?>(nameof(DrawingData));
@@ -31,6 +37,9 @@ public class CircuitBoardCanvas : SKCanvasView, IDisposable
     public static readonly StyledProperty<float> OffsetYProperty =
         AvaloniaProperty.Register<CircuitBoardCanvas, float>(nameof(OffsetY));
 
+    public static readonly StyledProperty<IBrush?> BackgroundProperty =
+        AvaloniaProperty.Register<CircuitBoardCanvas, IBrush?>(nameof(Background));
+
     public float Zoom
     {
         get => GetValue(ZoomProperty);
@@ -47,6 +56,12 @@ public class CircuitBoardCanvas : SKCanvasView, IDisposable
     {
         get => GetValue(OffsetYProperty);
         set => SetValue(OffsetYProperty, value);
+    }
+
+    public IBrush? Background
+    {
+        get => GetValue(BackgroundProperty);
+        set => SetValue(BackgroundProperty, value);
     }
 
     private const float MinZoom = 0.05f;
@@ -69,11 +84,15 @@ public class CircuitBoardCanvas : SKCanvasView, IDisposable
     private readonly DispatcherTimer _animationTimer;
 
     private readonly Dictionary<PrimitiveType, SKPaint> _paintCache = [];
+    private SKColor _backgroundColor = SKColors.Black;
+    private SKColor _gridColor = new SKColor(120, 120, 120, 180);
+    private WriteableBitmap? _bitmap;
 
     public CircuitBoardCanvas()
     {
-        InitializePaintCache();
+        ClipToBounds = true;
         Focusable = true;
+        InitializePaintCache();
 
         _animationTimer = new DispatcherTimer
         {
@@ -82,12 +101,45 @@ public class CircuitBoardCanvas : SKCanvasView, IDisposable
         _animationTimer.Tick += OnAnimationTick;
     }
 
+    public void InvalidateSurface()
+    {
+        InvalidateVisual();
+    }
+
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        ActualThemeVariantChanged -= OnActualThemeVariantChanged;
+        ActualThemeVariantChanged += OnActualThemeVariantChanged;
+
+        if (Avalonia.Application.Current != null)
+        {
+            Avalonia.Application.Current.ActualThemeVariantChanged -= OnGlobalThemeChanged;
+            Avalonia.Application.Current.ActualThemeVariantChanged += OnGlobalThemeChanged;
+        }
+
+        UpdateThemePaints();
+    }
+
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnDetachedFromVisualTree(e);
+        ActualThemeVariantChanged -= OnActualThemeVariantChanged;
+
+        if (Avalonia.Application.Current != null)
+        {
+            Avalonia.Application.Current.ActualThemeVariantChanged -= OnGlobalThemeChanged;
+        }
+    }
+
+    private void OnActualThemeVariantChanged(object? sender, EventArgs e) => UpdateThemePaints();
+    private void OnGlobalThemeChanged(object? sender, EventArgs e) => UpdateThemePaints();
+
     private void InitializePaintCache()
     {
         // 1. Границы платы
         _paintCache[PrimitiveType.BoardOutline] = new SKPaint
         {
-            Color = SKColors.Yellow,
             Style = SKPaintStyle.Stroke,
             StrokeWidth = 2.0f,
             IsAntialias = true
@@ -96,7 +148,6 @@ public class CircuitBoardCanvas : SKCanvasView, IDisposable
         // 2. Контур компонента
         _paintCache[PrimitiveType.ComponentOutline] = new SKPaint
         {
-            Color = SKColors.LightGray,
             Style = SKPaintStyle.Stroke,
             StrokeWidth = 1.2f,
             IsAntialias = true
@@ -105,7 +156,6 @@ public class CircuitBoardCanvas : SKCanvasView, IDisposable
         // 3. Посадочное место (Footprint / Шелкография)
         _paintCache[PrimitiveType.Footprint] = new SKPaint
         {
-            Color = SKColors.Silver,
             Style = SKPaintStyle.Stroke,
             StrokeWidth = 1.0f,
             IsAntialias = true
@@ -114,7 +164,6 @@ public class CircuitBoardCanvas : SKCanvasView, IDisposable
         // 4. Контактные площадки (Pads) — сплошная заливка
         _paintCache[PrimitiveType.Pad] = new SKPaint
         {
-            Color = SKColors.Goldenrod,
             Style = SKPaintStyle.Fill,
             IsAntialias = true
         };
@@ -122,7 +171,6 @@ public class CircuitBoardCanvas : SKCanvasView, IDisposable
         // 5. Выводы (Pins) — тонкий контур
         _paintCache[PrimitiveType.Pin] = new SKPaint
         {
-            Color = SKColors.SpringGreen,
             Style = SKPaintStyle.Stroke,
             StrokeWidth = 1.0f,
             IsAntialias = true
@@ -131,7 +179,6 @@ public class CircuitBoardCanvas : SKCanvasView, IDisposable
         // 6. Трассы (Traces)
         _paintCache[PrimitiveType.Trace] = new SKPaint
         {
-            Color = SKColors.DarkCyan,
             Style = SKPaintStyle.Stroke,
             IsAntialias = true,
             StrokeWidth = 1.5f
@@ -140,7 +187,6 @@ public class CircuitBoardCanvas : SKCanvasView, IDisposable
         // 7. Переходные отверстия (Vias)
         _paintCache[PrimitiveType.Via] = new SKPaint
         {
-            Color = SKColors.DarkOrange,
             Style = SKPaintStyle.Fill,
             IsAntialias = true
         };
@@ -148,7 +194,6 @@ public class CircuitBoardCanvas : SKCanvasView, IDisposable
         // 8. Электрические связи (Nets / Airwires) — пунктирная линия
         _paintCache[PrimitiveType.Net] = new SKPaint
         {
-            Color = SKColors.DeepPink,
             Style = SKPaintStyle.Stroke,
             StrokeWidth = 1.0f,
             IsAntialias = true,
@@ -158,14 +203,139 @@ public class CircuitBoardCanvas : SKCanvasView, IDisposable
         // 9. Текст
         _paintCache[PrimitiveType.Text] = new SKPaint
         {
-            Color = SKColors.White,
             IsAntialias = true
         };
+
+        UpdateThemePaints();
+    }
+
+    private void UpdateThemePaints()
+    {
+        var targetTheme = GetCurrentThemeVariant();
+
+        if (Background is ISolidColorBrush scb)
+        {
+            _backgroundColor = new SKColor(scb.Color.R, scb.Color.G, scb.Color.B, scb.Color.A);
+        }
+        else
+        {
+            _backgroundColor = GetColor("CanvasBackgroundColor", "BackgroundColor", SKColors.Black, targetTheme);
+        }
+
+        _gridColor = GetColor("CanvasGridColor", "BorderColor", new SKColor(120, 120, 120, 180), targetTheme);
+
+        if (_paintCache.TryGetValue(PrimitiveType.BoardOutline, out var boardPaint))
+            boardPaint.Color = GetColor("CanvasBoardOutlineColor", "WarningColor", SKColors.Yellow, targetTheme);
+
+        if (_paintCache.TryGetValue(PrimitiveType.ComponentOutline, out var compPaint))
+            compPaint.Color = GetColor("CanvasComponentOutlineColor", "ForegroundLeadColor", SKColors.LightGray, targetTheme);
+
+        if (_paintCache.TryGetValue(PrimitiveType.Footprint, out var fpPaint))
+            fpPaint.Color = GetColor("CanvasFootprintColor", "MutedColor", SKColors.Silver, targetTheme);
+
+        if (_paintCache.TryGetValue(PrimitiveType.Pad, out var padPaint))
+            padPaint.Color = GetColor("CanvasPadColor", "WarningColor", SKColors.Goldenrod, targetTheme);
+
+        if (_paintCache.TryGetValue(PrimitiveType.Pin, out var pinPaint))
+            pinPaint.Color = GetColor("CanvasPinColor", "SuccessColor", SKColors.SpringGreen, targetTheme);
+
+        if (_paintCache.TryGetValue(PrimitiveType.Trace, out var tracePaint))
+            tracePaint.Color = GetColor("CanvasTraceColor", "PrimaryColor", SKColors.DarkCyan, targetTheme);
+
+        if (_paintCache.TryGetValue(PrimitiveType.Via, out var viaPaint))
+            viaPaint.Color = GetColor("CanvasViaColor", "DestructiveColor", SKColors.DarkOrange, targetTheme);
+
+        if (_paintCache.TryGetValue(PrimitiveType.Net, out var netPaint))
+            netPaint.Color = GetColor("CanvasNetColor", "DestructiveColor", SKColors.DeepPink, targetTheme);
+
+        if (_paintCache.TryGetValue(PrimitiveType.Text, out var textPaint))
+            textPaint.Color = GetColor("CanvasTextColor", "ForegroundColor", SKColors.White, targetTheme);
+
+        InvalidateVisual();
+    }
+
+    private ThemeVariant GetCurrentThemeVariant()
+    {
+        if (ActualThemeVariant != ThemeVariant.Default)
+            return ActualThemeVariant;
+
+        return Avalonia.Application.Current?.ActualThemeVariant ?? ThemeVariant.Dark;
+    }
+
+    private SKColor GetColor(string specificKey, string fallbackKey, SKColor hardcodedFallback, ThemeVariant targetTheme)
+    {
+        if (TryGetThemeColor(specificKey, targetTheme, out var col))
+            return col;
+
+        if (!string.IsNullOrEmpty(fallbackKey) && TryGetThemeColor(fallbackKey, targetTheme, out var fallbackCol))
+            return fallbackCol;
+
+        return hardcodedFallback;
+    }
+
+    private bool TryGetThemeColor(string key, ThemeVariant targetTheme, out SKColor color)
+    {
+        color = default;
+        Visual? current = this;
+
+        while (current != null)
+        {
+            if (current is IResourceNode node && node.TryGetResource(key, targetTheme, out var res))
+            {
+                if (TryConvertToSKColor(res, out color))
+                    return true;
+            }
+            current = current.GetVisualParent();
+        }
+
+        if (Avalonia.Application.Current is IResourceNode appNode &&
+            appNode.TryGetResource(key, targetTheme, out var appRes))
+        {
+            if (TryConvertToSKColor(appRes, out color))
+                return true;
+        }
+
+        if (this.TryFindResource(key, out var localRes) && TryConvertToSKColor(localRes, out color))
+            return true;
+
+        return false;
+    }
+
+    private static bool TryConvertToSKColor(object? resource, out SKColor color)
+    {
+        if (resource is Avalonia.Media.Color c)
+        {
+            color = new SKColor(c.R, c.G, c.B, c.A);
+            return true;
+        }
+
+        if (resource is ISolidColorBrush b)
+        {
+            var sc = b.Color;
+            color = new SKColor(sc.R, sc.G, sc.B, sc.A);
+            return true;
+        }
+
+        color = default;
+        return false;
     }
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
+
+        if (change.Property == BackgroundProperty)
+        {
+            if (Background is ISolidColorBrush scb)
+            {
+                _backgroundColor = new SKColor(scb.Color.R, scb.Color.G, scb.Color.B, scb.Color.A);
+                InvalidateVisual();
+            }
+            else
+            {
+                UpdateThemePaints();
+            }
+        }
 
         if (change.Property == ZoomProperty && !_animationTimer.IsEnabled)
             _targetZoom = Zoom;
@@ -179,7 +349,7 @@ public class CircuitBoardCanvas : SKCanvasView, IDisposable
             change.Property == OffsetXProperty ||
             change.Property == OffsetYProperty)
         {
-            InvalidateSurface();
+            InvalidateVisual();
         }
     }
 
@@ -357,14 +527,52 @@ public class CircuitBoardCanvas : SKCanvasView, IDisposable
 
     #endregion
 
-    protected override void OnPaintSurface(SKPaintSurfaceEventArgs e)
+    public override void Render(DrawingContext context)
     {
-        base.OnPaintSurface(e);
+        base.Render(context);
 
-        var canvas = e.Surface.Canvas;
-        canvas.Clear(SKColors.Black);
+        var bounds = Bounds;
+        if (bounds.Width <= 0 || bounds.Height <= 0)
+            return;
 
-        DrawAdaptiveGrid(canvas);
+        var topLevel = TopLevel.GetTopLevel(this);
+        double scale = topLevel != null && topLevel.RenderScaling > 0 ? topLevel.RenderScaling : 1.0;
+
+        int pixelWidth = Math.Max(1, (int)Math.Ceiling(bounds.Width * scale));
+        int pixelHeight = Math.Max(1, (int)Math.Ceiling(bounds.Height * scale));
+
+        if (_bitmap == null || _bitmap.PixelSize.Width != pixelWidth || _bitmap.PixelSize.Height != pixelHeight)
+        {
+            var oldBitmap = _bitmap;
+            _bitmap = new WriteableBitmap(
+                new PixelSize(pixelWidth, pixelHeight),
+                new Vector(96 * scale, 96 * scale),
+                PixelFormat.Bgra8888,
+                AlphaFormat.Premul);
+            oldBitmap?.Dispose();
+        }
+
+        using (var fb = _bitmap.Lock())
+        {
+            var info = new SKImageInfo(pixelWidth, pixelHeight, fb.Format.ToSkColorType(), SKAlphaType.Premul);
+            var properties = new SKSurfaceProperties(SKPixelGeometry.RgbHorizontal);
+            using var surface = SKSurface.Create(info, fb.Address, fb.RowBytes, properties);
+            if (surface != null)
+            {
+                var canvas = surface.Canvas;
+                canvas.Scale((float)scale);
+                DrawCanvas(canvas, (float)bounds.Width, (float)bounds.Height);
+            }
+        }
+
+        context.DrawImage(_bitmap, new Rect(0, 0, bounds.Width, bounds.Height));
+    }
+
+    private void DrawCanvas(SKCanvas canvas, float width, float height)
+    {
+        canvas.Clear(_backgroundColor);
+
+        DrawAdaptiveGrid(canvas, width, height);
 
         var primitives = DrawingData;
         if (primitives == null || primitives.Count == 0)
@@ -450,6 +658,10 @@ public class CircuitBoardCanvas : SKCanvasView, IDisposable
                     break;
                 }
 
+                case CirclePrimitive circle:
+                    canvas.DrawCircle(circle.X, circle.Y, circle.Radius, paint);
+                    break;
+
                 case RectanglePrimitive rect:
                     var skRect = new SKRect(
                         rect.X - rect.Width / 2f,
@@ -475,7 +687,7 @@ public class CircuitBoardCanvas : SKCanvasView, IDisposable
                     {
                         switch (segment)
                         {
-                            case ArcSegment arc:
+                            case Quartz.Core.Models.BoardEntities.ArcSegment arc:
                                 skPath.ArcTo(
                                     rx: (float)arc.Radius,
                                     ry: (float)arc.Radius,
@@ -533,13 +745,11 @@ public class CircuitBoardCanvas : SKCanvasView, IDisposable
         return niceFraction * magnitude;
     }
 
-    private void DrawAdaptiveGrid(SKCanvas canvas)
+    private void DrawAdaptiveGrid(SKCanvas canvas, float width, float height)
     {
         float scale = BasePixelsPerMm * Zoom;
         float d = CalculateGridStep(scale, targetVisualPixels: 40f);
 
-        float width = (float)Bounds.Width;
-        float height = (float)Bounds.Height;
         if (width <= 0 || height <= 0) return;
 
         float minXMm = -OffsetX / scale;
@@ -553,7 +763,7 @@ public class CircuitBoardCanvas : SKCanvasView, IDisposable
         long endY = (long)Math.Ceiling(maxYMm / d);
 
         using var dotPaint = new SKPaint();
-        dotPaint.Color = new SKColor(120, 120, 120, 180);
+        dotPaint.Color = _gridColor;
         dotPaint.IsAntialias = true;
         dotPaint.Style = SKPaintStyle.Fill;
 
@@ -572,11 +782,20 @@ public class CircuitBoardCanvas : SKCanvasView, IDisposable
 
     public void Dispose()
     {
+        ActualThemeVariantChanged -= OnActualThemeVariantChanged;
+        if (Avalonia.Application.Current != null)
+        {
+            Avalonia.Application.Current.ActualThemeVariantChanged -= OnGlobalThemeChanged;
+        }
+
         _animationTimer.Stop();
         _animationTimer.Tick -= OnAnimationTick;
 
         foreach (var paint in _paintCache.Values)
             paint.Dispose();
         _paintCache.Clear();
+
+        _bitmap?.Dispose();
+        _bitmap = null;
     }
 }

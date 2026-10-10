@@ -504,8 +504,9 @@
         </DataTemplate>
 
         <DataTemplate DataType="vm:CanvasVM">
-            <Grid>
+            <Grid Background="{DynamicResource CanvasBackgroundColor}">
                 <controls:CircuitBoardCanvas
+                    Background="{DynamicResource CanvasBackgroundColor}"
                     DrawingData="{Binding RenderData}"
                     Zoom="{Binding Zoom, Mode=TwoWay}"
                     OffsetX="{Binding OffsetX, Mode=TwoWay}"
