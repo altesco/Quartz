@@ -29,6 +29,8 @@ public class App : Avalonia.Application
 
         Services = collection.BuildServiceProvider();
 
+        LinuxX11PinchGestureService.Initialize();
+
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             var mainVm = Services.GetRequiredService<MainVM>();
@@ -37,9 +39,13 @@ public class App : Avalonia.Application
             {
                 DataContext = mainVm
             };
+
+            LinuxX11PinchGestureService.RegisterWindow(desktop.MainWindow);
         }
 
         base.OnFrameworkInitializationCompleted();
+
+        LinuxX11PinchGestureService.Initialize();
     }
 
     private void ConfigureServices(IServiceCollection services)

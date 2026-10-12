@@ -268,6 +268,11 @@ public partial class MainVM : ObservableObject
             return;
         }
 
+        if (ActivePanel is null && RootNode != null)
+        {
+            ActivePanel = FindFirstPanel(RootNode);
+        }
+
         if (ActivePanel is null || RootNode is null)
         {
             var initialPanel = new PanelVM(this) { Size = "1*" };
@@ -278,6 +283,33 @@ public partial class MainVM : ObservableObject
         ActivePanel.Tabs.Add(file);
         ActivePanel.SelectedTab = file;
         file.Panel = ActivePanel;
+    }
+
+    [RelayCommand]
+    public void NavigateToError(object? parameter)
+    {
+        if (parameter is EditorError error)
+        {
+            var file = ProjectErrors.FirstOrDefault(f => f.Errors.Contains(error));
+            if (file != null)
+            {
+                NavigateToError(file, error);
+            }
+        }
+        else if (parameter is FileVM file)
+        {
+            OpenFileTab(file);
+        }
+    }
+
+    public void NavigateToError(FileVM file, EditorError error)
+    {
+        OpenFileTab(file);
+
+        if (file is EditorVM editor)
+        {
+            editor.RequestNavigateTo(error.Line, error.Column);
+        }
     }
 
     /// <summary>

@@ -776,6 +776,7 @@
             IsVisible="{Binding RootNode, Converter={x:Static ObjectConverters.IsNotNull}}"/>
 
         <TreeView 
+            x:Name="ErrorsTreeView"
             ItemsSource="{Binding ProjectErrors}"
             Grid.Column="2"
             Grid.Row="2"
@@ -792,7 +793,7 @@
 
                 <!-- Шаблон 1: Корневой узел (ФАЙЛ) -->
                 <TreeDataTemplate DataType="vm:FileVM" ItemsSource="{Binding Errors}">
-                    <StackPanel Orientation="Horizontal" Spacing="6">
+                    <StackPanel Orientation="Horizontal" Spacing="6" Background="Transparent">
                         <ContentControl
                             Content="{Binding}"
                             VerticalAlignment="Center">
@@ -837,7 +838,7 @@
 
                 <!-- Шаблон 2: Дочерний узел (ОШИБКА) -->
                 <DataTemplate DataType="models:EditorError">
-                    <Grid ColumnDefinitions="Auto,*,Auto" HorizontalAlignment="Left">
+                    <Grid ColumnDefinitions="Auto,*,Auto" HorizontalAlignment="Stretch" Background="Transparent">
                         <LucideIcon Kind="CircleX" Size="18" Foreground="{DynamicResource ErrorColor}" />
                         <TextBlock
                             Grid.Column="1"
@@ -906,5 +907,57 @@
                 </Grid>
             </Border>
         </Canvas>
+
+        <Border
+            Grid.Column="0" Grid.Row="0" Grid.ColumnSpan="3" Grid.RowSpan="3"
+            CornerRadius="6,0,0,0"
+            BorderThickness="1,1,0,0"
+            BorderBrush="{DynamicResource BorderColor}"
+            Background="{DynamicResource TitleBarBackgroundColor}"
+            Height="26"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Bottom">
+            <StackPanel Orientation="Horizontal" Margin="4,0" Spacing="4">
+                <StackPanel.Styles>
+                    <Style Selector="Button.Ghost">
+                        <Setter Property="FontSize" Value="13" />
+                        <Setter Property="Padding" Value="4,1" />
+                        <Setter Property="Height" Value="NaN" />
+                        <Setter Property="CornerRadius" Value="{DynamicResource SmCornerRadius}" />
+                        <Setter Property="VerticalAlignment" Value="Center" />
+                    </Style>
+                    <Style Selector="TextBlock">
+                        <Setter Property="FontSize" Value="12" />
+                        <Setter Property="VerticalAlignment" Value="Center" />
+                    </Style>
+                </StackPanel.Styles>
+
+                <Button Classes="Ghost" Padding="4,0">
+                    <StackPanel Orientation="Horizontal" Spacing="3">
+                        <LucideIcon Kind="CircleX" Size="18" />
+                        <TextBlock Text="0" />
+                        <LucideIcon Kind="TriangleAlert" Size="18" StrokeWidth="2" />
+                        <TextBlock Text="0" />
+                    </StackPanel>
+                </Button>
+
+                <Button Classes="Ghost">
+                    <!-- <TextBlock.Text>
+                        <MultiBinding StringFormat="[Строка {0}, столбец {1}]">
+                            <Binding Path="Line" />
+                            <Binding Path="Column" />
+                        </MultiBinding>
+                    </TextBlock.Text> -->
+                    <Button.Content>
+                        Строка 927, столбец 44
+                    </Button.Content>
+                </Button>
+
+                <Button Classes="Ghost" FontWeight="Normal">
+                    Пробелов: 2
+                </Button>
+
+            </StackPanel>
+        </Border>
     </Grid>
 </Window>

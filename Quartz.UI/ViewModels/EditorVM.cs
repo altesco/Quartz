@@ -37,6 +37,22 @@ public abstract partial class EditorVM : FileVM
         set => SetProperty(ref _fontSize, value);
     }
 
+    public event Action<long, long>? NavigationRequested;
+    private (long Line, long Column)? _pendingNavigation;
+
+    public void RequestNavigateTo(long line, long column)
+    {
+        _pendingNavigation = (line, column);
+        NavigationRequested?.Invoke(line, column);
+    }
+
+    public (long Line, long Column)? ConsumePendingNavigation()
+    {
+        var pending = _pendingNavigation;
+        _pendingNavigation = null;
+        return pending;
+    }
+
     public EditorVM(MainVM mainVM, string filePath, DirectoryVM? parent, IBoardProcessingCoordinator? coordinator = null)
         : base(mainVM, filePath, parent)
     {

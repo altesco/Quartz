@@ -231,5 +231,9 @@
             </Setter>
         </Style>
 
+        <Style Selector="Button.Ghost">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+
     </Application.Styles>
 </Application>

@@ -5,12 +5,15 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Styling;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Avalonia.Xaml.Interactivity;
 using AvaloniaEdit;
 using AvaloniaEdit.Document;
 using AvaloniaEdit.Rendering;
 using AvaloniaEdit.TextMate;
+using Quartz.UI.Services;
+using Quartz.UI.Tools;
 using TextMateSharp.Grammars;
 
 namespace Quartz.UI.Behaviors
@@ -22,11 +25,44 @@ namespace Quartz.UI.Behaviors
         private YamlIndentationRenderer? _indentationRenderer;
         private TextDocument? _trackedDocument;
         private string? _currentScope;
+        private ViewModels.EditorVM? _subscribedVm;
+
+        private void HookVm(ViewModels.EditorVM? newVm)
+        {
+            if (_subscribedVm == newVm) return;
+
+            if (_subscribedVm != null)
+            {
+                _subscribedVm.NavigationRequested -= OnNavigationRequested;
+            }
+
+            _subscribedVm = newVm;
+
+            if (_subscribedVm != null)
+            {
+                _subscribedVm.NavigationRequested += OnNavigationRequested;
+                var pending = _subscribedVm.ConsumePendingNavigation();
+                if (pending.HasValue)
+                {
+                    NavigateTo(pending.Value.Line, pending.Value.Column);
+                }
+            }
+        }
+
+        private void OnNavigationRequested(long line, long col)
+        {
+            _subscribedVm?.ConsumePendingNavigation();
+            NavigateTo(line, col);
+        }
 
         public const int MaxLineLengthForHighlighting = 500;
         private const double MinFontSize = 6;
         private const double MaxFontSize = 72;
         private const double ZoomStep = 1.0;
+
+        private readonly PinchGestureRecognizer _pinchRecognizer = new();
+        private double _pinchStartFontSize;
+        private bool _isPinchActive;
 
         protected override void OnAttached()
         {
@@ -48,11 +84,32 @@ namespace Quartz.UI.Behaviors
             HookDocument(AssociatedObject.Document);
             UpdateThemeColors();
             ConfigureEditorForCurrentFile();
+            HookVm(AssociatedObject.DataContext as ViewModels.EditorVM);
+
+            AssociatedObject.GestureRecognizers.Add(_pinchRecognizer);
 
             AssociatedObject.AddHandler(
                 InputElement.PointerWheelChangedEvent,
                 OnPointerWheelChanged,
                 RoutingStrategies.Tunnel);
+
+            AssociatedObject.AddHandler(
+                InputElement.PinchEvent,
+                OnPinchGesture,
+                RoutingStrategies.Tunnel | RoutingStrategies.Bubble);
+
+            AssociatedObject.AddHandler(
+                InputElement.PinchEndedEvent,
+                OnPinchGestureEnded,
+                RoutingStrategies.Tunnel | RoutingStrategies.Bubble);
+
+            AssociatedObject.AddHandler(
+                InputElement.PointerTouchPadGestureMagnifyEvent,
+                OnTouchPadGestureMagnify,
+                RoutingStrategies.Tunnel | RoutingStrategies.Bubble);
+
+            LinuxX11PinchGestureService.PinchGesture -= OnLinuxPinchGesture;
+            LinuxX11PinchGestureService.PinchGesture += OnLinuxPinchGesture;
         }
 
         private void OnPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
@@ -61,6 +118,14 @@ namespace Quartz.UI.Behaviors
             {
                 HookDocument(e.GetNewValue<TextDocument?>());
                 ConfigureEditorForCurrentFile();
+                if (_subscribedVm != null)
+                {
+                    var pending = _subscribedVm.ConsumePendingNavigation();
+                    if (pending.HasValue)
+                    {
+                        NavigateTo(pending.Value.Line, pending.Value.Column);
+                    }
+                }
             }
         }
 
@@ -85,9 +150,14 @@ namespace Quartz.UI.Behaviors
         {
             UpdateThemeColors();
             ConfigureEditorForCurrentFile();
+            HookVm(AssociatedObject?.DataContext as ViewModels.EditorVM);
         }
 
-        private void OnDataContextChanged(object? sender, EventArgs e) => ConfigureEditorForCurrentFile();
+        private void OnDataContextChanged(object? sender, EventArgs e)
+        {
+            ConfigureEditorForCurrentFile();
+            HookVm(AssociatedObject?.DataContext as ViewModels.EditorVM);
+        }
 
         private void OnActualThemeVariantChanged(object? sender, EventArgs e) => UpdateThemeColors();
 
@@ -323,6 +393,77 @@ namespace Quartz.UI.Behaviors
             return false;
         }
 
+        private void OnPinchGesture(object? sender, PinchEventArgs e)
+        {
+            if (AssociatedObject == null) return;
+
+            if (!_isPinchActive)
+            {
+                _isPinchActive = true;
+                _pinchStartFontSize = AssociatedObject.FontSize;
+            }
+
+            if (e.Scale <= 0.001) return;
+
+            double targetFontSize = Math.Clamp(_pinchStartFontSize * e.Scale, MinFontSize, MaxFontSize);
+            AssociatedObject.FontSize = Math.Round(targetFontSize, 2);
+            e.Handled = true;
+        }
+
+        private void OnPinchGestureEnded(object? sender, PinchEndedEventArgs e)
+        {
+            _isPinchActive = false;
+            e.Handled = true;
+        }
+
+        private void OnLinuxPinchGesture(object? sender, LinuxPinchEventArgs e)
+        {
+            if (e.Handled || AssociatedObject == null) return;
+
+            var localPoint = e.Window.TranslatePoint(e.WindowPosition, AssociatedObject);
+            if (!localPoint.HasValue || !new Rect(AssociatedObject.Bounds.Size).Contains(localPoint.Value))
+                return;
+
+            if (e.State == LinuxGestureState.Begin)
+            {
+                _isPinchActive = true;
+                _pinchStartFontSize = AssociatedObject.FontSize;
+                e.Handled = true;
+            }
+            else if (e.State == LinuxGestureState.Update)
+            {
+                if (!_isPinchActive)
+                {
+                    _isPinchActive = true;
+                    _pinchStartFontSize = AssociatedObject.FontSize;
+                }
+
+                if (e.Scale <= 0.001) return;
+
+                double targetFontSize = Math.Clamp(_pinchStartFontSize * e.Scale, MinFontSize, MaxFontSize);
+                AssociatedObject.FontSize = Math.Round(targetFontSize, 2);
+                e.Handled = true;
+            }
+            else if (e.State == LinuxGestureState.End)
+            {
+                _isPinchActive = false;
+                e.Handled = true;
+            }
+        }
+
+        private void OnTouchPadGestureMagnify(object? sender, PointerDeltaEventArgs e)
+        {
+            if (AssociatedObject == null) return;
+
+            double delta = Math.Abs(e.Delta.Y) > 0.00001 ? e.Delta.Y : e.Delta.X;
+            if (Math.Abs(delta) < 0.0001) return;
+
+            double scaleFactor = Math.Exp(delta);
+            double newFontSize = Math.Clamp(AssociatedObject.FontSize * scaleFactor, MinFontSize, MaxFontSize);
+            AssociatedObject.FontSize = Math.Round(newFontSize, 2);
+            e.Handled = true;
+        }
+
         private void OnPointerWheelChanged(object? sender, PointerWheelEventArgs e)
         {
             if (e.KeyModifiers.HasFlag(KeyModifiers.Control))
@@ -331,11 +472,25 @@ namespace Quartz.UI.Behaviors
 
                 if (Math.Abs(e.Delta.Y) < 0.001) return;
 
-                double direction = Math.Sign(e.Delta.Y);
                 double currentFontSize = AssociatedObject!.FontSize;
-                double newFontSize = currentFontSize + (direction * ZoomStep);
+                double newFontSize;
 
-                if (newFontSize >= MinFontSize && newFontSize <= MaxFontSize)
+                // Поддержка как дискретных щелчков колесика мыши (Delta.Y = +/-1.0),
+                // так и плавного жеста сведения/разведения тачпада (дробные Delta.Y)
+                if (Math.Abs(e.Delta.Y) >= 0.9)
+                {
+                    double direction = Math.Sign(e.Delta.Y);
+                    newFontSize = currentFontSize + (direction * ZoomStep);
+                }
+                else
+                {
+                    double zoomMultiplier = Math.Pow(1.2, e.Delta.Y);
+                    newFontSize = currentFontSize * zoomMultiplier;
+                }
+
+                newFontSize = Math.Clamp(Math.Round(newFontSize, 2), MinFontSize, MaxFontSize);
+
+                if (Math.Abs(newFontSize - currentFontSize) > 0.001)
                 {
                     AssociatedObject.FontSize = newFontSize;
                 }
@@ -350,9 +505,16 @@ namespace Quartz.UI.Behaviors
                 AssociatedObject.DataContextChanged -= OnDataContextChanged;
                 AssociatedObject.ActualThemeVariantChanged -= OnActualThemeVariantChanged;
                 AssociatedObject.PropertyChanged -= OnPropertyChanged;
+                AssociatedObject.GestureRecognizers.Remove(_pinchRecognizer);
                 AssociatedObject.RemoveHandler(InputElement.PointerWheelChangedEvent, OnPointerWheelChanged);
+                AssociatedObject.RemoveHandler(InputElement.PinchEvent, OnPinchGesture);
+                AssociatedObject.RemoveHandler(InputElement.PinchEndedEvent, OnPinchGestureEnded);
+                AssociatedObject.RemoveHandler(InputElement.PointerTouchPadGestureMagnifyEvent, OnTouchPadGestureMagnify);
+
+                LinuxX11PinchGestureService.PinchGesture -= OnLinuxPinchGesture;
 
                 HookDocument(null);
+                HookVm(null);
 
                 if (AssociatedObject.TextArea?.TextView != null && _indentationRenderer != null)
                 {
@@ -371,6 +533,68 @@ namespace Quartz.UI.Behaviors
             _currentScope = null;
 
             base.OnDetaching();
+        }
+
+        public void NavigateTo(long line, long column)
+        {
+            if (AssociatedObject == null) return;
+
+            void DoNavigate(int retriesLeft)
+            {
+                if (AssociatedObject == null) return;
+                var doc = AssociatedObject.Document;
+                if (doc == null || doc.LineCount == 0)
+                {
+                    if (retriesLeft > 0)
+                    {
+                        Dispatcher.UIThread.Post(() => DoNavigate(retriesLeft - 1), DispatcherPriority.Background);
+                    }
+                    return;
+                }
+
+                var scrollViewer = AssociatedObject.FindDescendantOfType<ScrollViewer>();
+                if ((scrollViewer == null || scrollViewer.Viewport.Height <= 0 || !AssociatedObject.IsEffectivelyVisible) && retriesLeft > 0)
+                {
+                    Dispatcher.UIThread.Post(() => DoNavigate(retriesLeft - 1), DispatcherPriority.Background);
+                    return;
+                }
+
+                int targetLine = Math.Clamp((int)line, 1, Math.Max(1, doc.LineCount));
+                var docLine = doc.GetLineByNumber(targetLine);
+                int targetCol = Math.Clamp((int)column, 1, Math.Max(1, docLine.Length + 1));
+                int offset = doc.GetOffset(targetLine, targetCol);
+
+                AssociatedObject.CaretOffset = offset;
+                if (AssociatedObject.TextArea != null)
+                {
+                    AssociatedObject.TextArea.Caret.Location = new TextLocation(targetLine, targetCol);
+                    AssociatedObject.TextArea.ClearSelection();
+                }
+
+                AssociatedObject.ScrollTo(targetLine, targetCol);
+
+                if (AssociatedObject.TextArea?.Caret != null)
+                {
+                    AssociatedObject.TextArea.Caret.BringCaretToView();
+                }
+
+                AssociatedObject.Focus();
+                AssociatedObject.TextArea?.Focus();
+
+                if (scrollViewer != null)
+                {
+                    ScrollProps.SetVerticalOffset(AssociatedObject, scrollViewer.Offset.Y);
+                    ScrollProps.SetHorizontalOffset(AssociatedObject, scrollViewer.Offset.X);
+                }
+            }
+
+            var sv = AssociatedObject.FindDescendantOfType<ScrollViewer>();
+            if (sv != null && sv.Viewport.Height > 0 && AssociatedObject.IsEffectivelyVisible)
+            {
+                DoNavigate(0);
+            }
+
+            Dispatcher.UIThread.Post(() => DoNavigate(10), DispatcherPriority.Background);
         }
     }
 

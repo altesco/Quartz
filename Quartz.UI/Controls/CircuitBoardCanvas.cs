@@ -13,6 +13,7 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Quartz.Core.Enums;
 using Quartz.Core.Models.BoardEntities;
+using Quartz.UI.Services;
 using SkiaSharp;
 
 namespace Quartz.UI.Controls;
@@ -77,6 +78,12 @@ public class CircuitBoardCanvas : Control, IDisposable
     private Point _lastPinchMidpoint;
     private bool _isPinchingManual;
 
+    private float _pinchStartZoom;
+    private float _pinchStartOffsetX;
+    private float _pinchStartOffsetY;
+    private Point _pinchStartOrigin;
+    private bool _isPinchGestureActive;
+
     // Переменные для анимации плавной подгонки
     private float _targetZoom = 1.0f;
     private float _targetOffsetX;
@@ -93,6 +100,11 @@ public class CircuitBoardCanvas : Control, IDisposable
         ClipToBounds = true;
         Focusable = true;
         InitializePaintCache();
+
+        GestureRecognizers.Add(new PinchGestureRecognizer());
+        AddHandler(InputElement.PinchEvent, OnPinch);
+        AddHandler(InputElement.PinchEndedEvent, OnPinchEnded);
+        AddHandler(InputElement.PointerTouchPadGestureMagnifyEvent, OnPointerTouchPadGestureMagnify);
 
         _animationTimer = new DispatcherTimer
         {
@@ -118,18 +130,24 @@ public class CircuitBoardCanvas : Control, IDisposable
             Avalonia.Application.Current.ActualThemeVariantChanged += OnGlobalThemeChanged;
         }
 
+        LinuxX11PinchGestureService.PinchGesture -= OnLinuxPinchGesture;
+        LinuxX11PinchGestureService.PinchGesture += OnLinuxPinchGesture;
+
         UpdateThemePaints();
     }
 
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnDetachedFromVisualTree(e);
+        _isPinchGestureActive = false;
         ActualThemeVariantChanged -= OnActualThemeVariantChanged;
 
         if (Avalonia.Application.Current != null)
         {
             Avalonia.Application.Current.ActualThemeVariantChanged -= OnGlobalThemeChanged;
         }
+
+        LinuxX11PinchGestureService.PinchGesture -= OnLinuxPinchGesture;
     }
 
     private void OnActualThemeVariantChanged(object? sender, EventArgs e) => UpdateThemePaints();
@@ -358,6 +376,12 @@ public class CircuitBoardCanvas : Control, IDisposable
     protected override void OnPointerPressed(PointerPressedEventArgs e)
     {
         base.OnPointerPressed(e);
+
+        if (_isPinchGestureActive)
+        {
+            return;
+        }
+
         _trackedPointers[e.Pointer.Id] = e.GetPosition(this);
 
         // При ручном нажатии останавливаем анимацию зума
@@ -387,6 +411,11 @@ public class CircuitBoardCanvas : Control, IDisposable
     protected override void OnPointerMoved(PointerEventArgs e)
     {
         base.OnPointerMoved(e);
+
+        if (_isPinchGestureActive)
+        {
+            return;
+        }
 
         if (_trackedPointers.ContainsKey(e.Pointer.Id))
         {
@@ -447,6 +476,116 @@ public class CircuitBoardCanvas : Control, IDisposable
         }
     }
 
+    private void OnPinch(object? sender, PinchEventArgs e)
+    {
+        StopAnimation();
+
+        if (!_isPinchGestureActive)
+        {
+            _isPinchGestureActive = true;
+            _pinchStartZoom = Zoom;
+            _pinchStartOffsetX = OffsetX;
+            _pinchStartOffsetY = OffsetY;
+            _pinchStartOrigin = e.ScaleOrigin;
+        }
+
+        if (e.Scale <= 0.001) return;
+
+        float newZoom = Math.Clamp(_pinchStartZoom * (float)e.Scale, MinZoom, MaxZoom);
+        float effectiveScale = newZoom / _pinchStartZoom;
+
+        Point currentOrigin = e.ScaleOrigin;
+        OffsetX = (float)(currentOrigin.X - (_pinchStartOrigin.X - _pinchStartOffsetX) * effectiveScale);
+        OffsetY = (float)(currentOrigin.Y - (_pinchStartOrigin.Y - _pinchStartOffsetY) * effectiveScale);
+        Zoom = newZoom;
+
+        SyncTargetsWithCurrent();
+        InvalidateVisual();
+        e.Handled = true;
+    }
+
+    private void OnPinchEnded(object? sender, PinchEndedEventArgs e)
+    {
+        _isPinchGestureActive = false;
+        SyncTargetsWithCurrent();
+        e.Handled = true;
+    }
+
+    private void OnLinuxPinchGesture(object? sender, LinuxPinchEventArgs e)
+    {
+        if (e.Handled) return;
+
+        var localPoint = e.Window.TranslatePoint(e.WindowPosition, this);
+        if (!localPoint.HasValue || !new Rect(Bounds.Size).Contains(localPoint.Value))
+            return;
+
+        Point origin = localPoint.Value;
+
+        if (e.State == LinuxGestureState.Begin)
+        {
+            StopAnimation();
+            _isPinchGestureActive = true;
+            _pinchStartZoom = Zoom;
+            _pinchStartOffsetX = OffsetX;
+            _pinchStartOffsetY = OffsetY;
+            _pinchStartOrigin = origin;
+            e.Handled = true;
+        }
+        else if (e.State == LinuxGestureState.Update)
+        {
+            if (!_isPinchGestureActive)
+            {
+                StopAnimation();
+                _isPinchGestureActive = true;
+                _pinchStartZoom = Zoom;
+                _pinchStartOffsetX = OffsetX;
+                _pinchStartOffsetY = OffsetY;
+                _pinchStartOrigin = origin;
+            }
+
+            if (e.Scale <= 0.001) return;
+
+            float newZoom = Math.Clamp(_pinchStartZoom * (float)e.Scale, MinZoom, MaxZoom);
+            float effectiveScale = newZoom / _pinchStartZoom;
+
+            OffsetX = (float)(origin.X - (_pinchStartOrigin.X - _pinchStartOffsetX) * effectiveScale);
+            OffsetY = (float)(origin.Y - (_pinchStartOrigin.Y - _pinchStartOffsetY) * effectiveScale);
+            Zoom = newZoom;
+
+            SyncTargetsWithCurrent();
+            InvalidateVisual();
+            e.Handled = true;
+        }
+        else if (e.State == LinuxGestureState.End)
+        {
+            _isPinchGestureActive = false;
+            SyncTargetsWithCurrent();
+            e.Handled = true;
+        }
+    }
+
+    private void OnPointerTouchPadGestureMagnify(object? sender, PointerDeltaEventArgs e)
+    {
+        StopAnimation();
+
+        var mousePos = e.GetPosition(this);
+        double delta = Math.Abs(e.Delta.Y) > 0.00001 ? e.Delta.Y : e.Delta.X;
+        if (Math.Abs(delta) < 0.0001) return;
+
+        float scaleFactor = (float)Math.Exp(delta);
+        float oldZoom = Zoom;
+        float newZoom = Math.Clamp(Zoom * scaleFactor, MinZoom, MaxZoom);
+        if (Math.Abs(newZoom - oldZoom) < 0.00001f) return;
+
+        Zoom = newZoom;
+        OffsetX = (float)(mousePos.X - (mousePos.X - OffsetX) * (Zoom / oldZoom));
+        OffsetY = (float)(mousePos.Y - (mousePos.Y - OffsetY) * (Zoom / oldZoom));
+
+        SyncTargetsWithCurrent();
+        InvalidateVisual();
+        e.Handled = true;
+    }
+
     protected override void OnPointerWheelChanged(PointerWheelEventArgs e)
     {
         base.OnPointerWheelChanged(e);
@@ -454,8 +593,11 @@ public class CircuitBoardCanvas : Control, IDisposable
 
         if (e.KeyModifiers.HasFlag(KeyModifiers.Control))
         {
-            // Возвращаем честные 10% за каждый щелчок колесика!
-            float zoomFactor = e.Delta.Y > 0 ? 1.2f : 1.0f / 1.2f;
+            if (Math.Abs(e.Delta.Y) < 0.0001) return;
+
+            // Поддержка как дискретных щелчков колесика мыши (Delta.Y = +/-1.0),
+            // так и плавного жеста сведения/разведения тачпада (дробные Delta.Y)
+            float zoomFactor = MathF.Pow(1.2f, (float)e.Delta.Y);
 
             // Считаем целевые значения от текущих таргетов, чтобы быстрый скролл накопился
             float newTargetZoom = Math.Clamp(_targetZoom * zoomFactor, MinZoom, MaxZoom);
@@ -787,6 +929,11 @@ public class CircuitBoardCanvas : Control, IDisposable
         {
             Avalonia.Application.Current.ActualThemeVariantChanged -= OnGlobalThemeChanged;
         }
+
+        RemoveHandler(InputElement.PinchEvent, OnPinch);
+        RemoveHandler(InputElement.PinchEndedEvent, OnPinchEnded);
+        RemoveHandler(InputElement.PointerTouchPadGestureMagnifyEvent, OnPointerTouchPadGestureMagnify);
+        LinuxX11PinchGestureService.PinchGesture -= OnLinuxPinchGesture;
 
         _animationTimer.Stop();
         _animationTimer.Tick -= OnAnimationTick;
