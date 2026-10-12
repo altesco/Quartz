@@ -231,6 +231,18 @@
             </Setter>
         </Style>
 
+        <Style Selector="Button /template/ ContentPresenter">
+            <Setter Property="FontWeight" Value="{Binding $parent[Button].FontWeight}" />
+        </Style>
+
+        <Style Selector="Button :is(TextBlock)">
+            <Setter Property="FontWeight" Value="{Binding $parent[Button].FontWeight}" />
+        </Style>
+
+        <Style Selector="Button">
+            <Setter Property="FontWeight" Value="Normal" />
+        </Style>
+
         <Style Selector="Button.Ghost">
             <Setter Property="Background" Value="Transparent" />
         </Style>

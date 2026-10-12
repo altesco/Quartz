@@ -19,7 +19,8 @@
     d:DesignWidth="800"
     x:DataType="vm:MainVM"
     Icon="/Assets/avalonia-logo.ico"
-    mc:Ignorable="d">
+    mc:Ignorable="d"
+    Foreground="{DynamicResource ForegroundColor}">
 
     <Window.Background>
         <SolidColorBrush Color="{DynamicResource WindowBackgroundColor}" />
@@ -775,89 +776,145 @@
             Content="{Binding RootNode}"
             IsVisible="{Binding RootNode, Converter={x:Static ObjectConverters.IsNotNull}}"/>
 
-        <TreeView 
-            x:Name="ErrorsTreeView"
-            ItemsSource="{Binding ProjectErrors}"
+        <Border
             Grid.Column="2"
             Grid.Row="2"
             BorderThickness="0,1,0,0"
             BorderBrush="{DynamicResource BorderColor60}"
             Background="{DynamicResource WindowBackgroundColor}">
-            <TreeView.Styles>
-                <FluentTheme/>
-                <Style Selector="TreeViewItem">
-                    <Setter Property="IsExpanded" Value="True"/>
-                </Style>
-            </TreeView.Styles>
-            <TreeView.DataTemplates>
+            
+            <Grid RowDefinitions="Auto,*">
 
-                <!-- Шаблон 1: Корневой узел (ФАЙЛ) -->
-                <TreeDataTemplate DataType="vm:FileVM" ItemsSource="{Binding Errors}">
-                    <StackPanel Orientation="Horizontal" Spacing="6" Background="Transparent">
-                        <ContentControl
-                            Content="{Binding}"
-                            VerticalAlignment="Center">
-                            <ContentControl.DataTemplates>
+                <StackPanel
+                    Orientation="Horizontal"
+                    Spacing="8"
+                    Margin="8,4">
 
-                                <!-- Файл платы (.pcby) -->
-                                <DataTemplate DataType="vm:BoardVM">
-                                    <LucideIcon Kind="Layers"
-                                                Size="18"
-                                                Foreground="{DynamicResource IconPcbyColor}" />
-                                </DataTemplate>
+                    <StackPanel.Styles>
+                        <Style Selector="Button.Ghost">
+                            <Setter Property="FontSize" Value="12" />
+                            <Setter Property="VerticalAlignment" Value="Center" />
+                            <Setter Property="Padding" Value="4,2" />
+                            <Setter Property="CornerRadius" Value="{DynamicResource SmCornerRadius}" />
+                            <Setter Property="Height" Value="NaN" />
+                        </Style>
+                    </StackPanel.Styles>
 
-                                <!-- Файл слоя (.layy) -->
-                                <DataTemplate DataType="vm:LayerVM">
-                                    <LucideIcon Kind="CircuitBoard"
-                                                Size="19"
-                                                Foreground="{DynamicResource IconLayyColor}" />
-                                </DataTemplate>
+                    <Button Classes="Ghost">
+                        ПРОБЛЕМЫ
+                    </Button>
+                    <Button Classes="Ghost">
+                        ТЕРМИНАЛ
+                    </Button>
 
-                                <!-- Файл стилей (.stly) -->
-                                <DataTemplate DataType="vm:StylesFileVM">
-                                    <LucideIcon Kind="PencilSparkles"
-                                                Size="18"
-                                                Foreground="{DynamicResource IconStlyColor}" />
-                                </DataTemplate>
+                </StackPanel>
 
-                                <!-- Дефолтная иконка на случай других файлов -->
-                                <DataTemplate DataType="vm:FileVM">
-                                    <LucideIcon Kind="File"
-                                                Size="18"
-                                                Foreground="{DynamicResource MutedColor}" />
-                                </DataTemplate>
+                <StackPanel
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Spacing="4"
+                    Margin="8,4">
 
-                            </ContentControl.DataTemplates>
-                        </ContentControl>
-                        <TextBlock Text="{Binding Header}" />
-                        <TextBlock 
-                            Text="{Binding Errors.Count, StringFormat='({0})'}"
-                            Foreground="{DynamicResource MutedColor}" />
-                    </StackPanel>
-                </TreeDataTemplate>
+                    <StackPanel.Styles>
+                        <Style Selector="Button.Icon">
+                            <Setter Property="VerticalAlignment" Value="Center" />
+                            <Setter Property="Padding" Value="0" />
+                            <Setter Property="Height" Value="24" />
+                            <Setter Property="Width" Value="24" />
+                        </Style>
+                    </StackPanel.Styles>
 
-                <!-- Шаблон 2: Дочерний узел (ОШИБКА) -->
-                <DataTemplate DataType="models:EditorError">
-                    <Grid ColumnDefinitions="Auto,*,Auto" HorizontalAlignment="Stretch" Background="Transparent">
-                        <LucideIcon Kind="CircleX" Size="18" Foreground="{DynamicResource ErrorColor}" />
-                        <TextBlock
-                            Grid.Column="1"
-                            Text="{Binding Message}"
-                            Margin="4,0,12,0"
-                            TextTrimming="CharacterEllipsis" />
-                        <TextBlock Grid.Column="2" Foreground="{DynamicResource MutedColor}">
-                            <TextBlock.Text>
-                                <MultiBinding StringFormat="[Строка {0}, столбец {1}]">
-                                    <Binding Path="Line" />
-                                    <Binding Path="Column" />
-                                </MultiBinding>
-                            </TextBlock.Text>
-                        </TextBlock>
-                    </Grid>
-                </DataTemplate>
+                    <Button Classes="Icon" Content="{LucideIconContent Maximize, Size=16}" />
+                    <Button Classes="Icon" Content="{LucideIconContent X, Size=18}" />
 
-            </TreeView.DataTemplates>
-        </TreeView>
+                </StackPanel>
+
+                <TreeView
+                    x:Name="ErrorsTreeView"
+                    ItemsSource="{Binding ProjectErrors}"
+                    Grid.Row="1">
+                    <TreeView.Styles>
+                        <FluentTheme/>
+                        <Style Selector="TreeViewItem">
+                            <Setter Property="IsExpanded" Value="True"/>
+                        </Style>
+                    </TreeView.Styles>
+                    <TreeView.DataTemplates>
+
+                        <!-- Шаблон 1: Корневой узел (ФАЙЛ) -->
+                        <TreeDataTemplate DataType="vm:FileVM" ItemsSource="{Binding Errors}">
+                            <StackPanel Orientation="Horizontal" Spacing="6" Background="Transparent">
+                                <ContentControl
+                                    Content="{Binding}"
+                                    VerticalAlignment="Center">
+                                    <ContentControl.DataTemplates>
+
+                                        <!-- Файл платы (.pcby) -->
+                                        <DataTemplate DataType="vm:BoardVM">
+                                            <LucideIcon Kind="Layers"
+                                                        Size="18"
+                                                        Foreground="{DynamicResource IconPcbyColor}" />
+                                        </DataTemplate>
+
+                                        <!-- Файл слоя (.layy) -->
+                                        <DataTemplate DataType="vm:LayerVM">
+                                            <LucideIcon Kind="CircuitBoard"
+                                                        Size="19"
+                                                        Foreground="{DynamicResource IconLayyColor}" />
+                                        </DataTemplate>
+
+                                        <!-- Файл стилей (.stly) -->
+                                        <DataTemplate DataType="vm:StylesFileVM">
+                                            <LucideIcon Kind="PencilSparkles"
+                                                        Size="18"
+                                                        Foreground="{DynamicResource IconStlyColor}" />
+                                        </DataTemplate>
+
+                                        <!-- Дефолтная иконка на случай других файлов -->
+                                        <DataTemplate DataType="vm:FileVM">
+                                            <LucideIcon Kind="File"
+                                                        Size="18"
+                                                        Foreground="{DynamicResource MutedColor}" />
+                                        </DataTemplate>
+
+                                    </ContentControl.DataTemplates>
+                                </ContentControl>
+                                <TextBlock Text="{Binding Header}" />
+                                <TextBlock
+                                    Text="{Binding Errors.Count, StringFormat='({0})'}"
+                                    Foreground="{DynamicResource MutedColor}" />
+                            </StackPanel>
+                        </TreeDataTemplate>
+
+                        <!-- Шаблон 2: Дочерний узел (ОШИБКА) -->
+                        <DataTemplate DataType="models:EditorError">
+                            <Grid ColumnDefinitions="Auto,*,Auto" HorizontalAlignment="Stretch" Background="Transparent">
+                                <LucideIcon Kind="CircleX" Size="18" Foreground="{DynamicResource ErrorColor}" />
+                                <TextBlock
+                                    Grid.Column="1"
+                                    Text="{Binding Message}"
+                                    Margin="4,0,6,0"
+                                    TextTrimming="CharacterEllipsis" />
+                                <TextBlock
+                                    Grid.Column="2"
+                                    Margin="6,0"
+                                    Foreground="{DynamicResource MutedColor}">
+                                    <TextBlock.Text>
+                                        <MultiBinding StringFormat="[Строка {0}, столбец {1}]">
+                                            <Binding Path="Line" />
+                                            <Binding Path="Column" />
+                                        </MultiBinding>
+                                    </TextBlock.Text>
+                                </TextBlock>
+                            </Grid>
+                        </DataTemplate>
+
+                    </TreeView.DataTemplates>
+                </TreeView>
+
+            </Grid>
+
+        </Border>
 
         <GridSplitter
             x:Name="VerticalSplitter"
@@ -927,7 +984,7 @@
                         <Setter Property="VerticalAlignment" Value="Center" />
                     </Style>
                     <Style Selector="TextBlock">
-                        <Setter Property="FontSize" Value="12" />
+                        <Setter Property="FontSize" Value="13" />
                         <Setter Property="VerticalAlignment" Value="Center" />
                     </Style>
                 </StackPanel.Styles>
@@ -942,18 +999,12 @@
                 </Button>
 
                 <Button Classes="Ghost">
-                    <!-- <TextBlock.Text>
-                        <MultiBinding StringFormat="[Строка {0}, столбец {1}]">
-                            <Binding Path="Line" />
-                            <Binding Path="Column" />
-                        </MultiBinding>
-                    </TextBlock.Text> -->
                     <Button.Content>
                         Строка 927, столбец 44
                     </Button.Content>
                 </Button>
 
-                <Button Classes="Ghost" FontWeight="Normal">
+                <Button Classes="Ghost">
                     Пробелов: 2
                 </Button>
 
