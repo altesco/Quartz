@@ -80,7 +80,7 @@
                 <Setter Property="FontSize" Value="12" />
                 <Setter Property="Foreground" Value="{DynamicResource ForegroundColor}" />
 
-                <!-- компенсация теней: только по вертикали, по горизонтали тень симметрична -->
+                <!-- компенсация теней настраивается через FlyoutAssist с учетом Placement -->
                 <Setter Property="local:FlyoutAssist.VerticalOffset" Value="-12" />
 
                 <Setter Property="Template">

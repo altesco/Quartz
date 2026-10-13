@@ -15,6 +15,7 @@ namespace Quartz.UI.Views;
 public partial class MainWindow : Window
 {
     private double _savedBottomPanelHeight = 220;
+    private double _savedSidebarWidth = 240;
     private MainVM? _subscribedMainVm;
 
     public MainWindow()
@@ -27,10 +28,16 @@ public partial class MainWindow : Window
         {
             if (e.GetCurrentPoint(VerticalSplitter).Properties.IsLeftButtonPressed) VerticalSplitter.Classes.Add("dragging");
         }, RoutingStrategies.Bubble, handledEventsToo: true);
-        VerticalSplitter.AddHandler(PointerReleasedEvent, (s, e) => VerticalSplitter.Classes.Remove("dragging"),
-            RoutingStrategies.Bubble, handledEventsToo: true);
-        VerticalSplitter.AddHandler(PointerCaptureLostEvent, (s, e) => VerticalSplitter.Classes.Remove("dragging"),
-            RoutingStrategies.Bubble, handledEventsToo: true);
+        VerticalSplitter.AddHandler(PointerReleasedEvent, (s, e) =>
+        {
+            VerticalSplitter.Classes.Remove("dragging");
+            SaveCurrentSidebarWidth();
+        }, RoutingStrategies.Bubble, handledEventsToo: true);
+        VerticalSplitter.AddHandler(PointerCaptureLostEvent, (s, e) =>
+        {
+            VerticalSplitter.Classes.Remove("dragging");
+            SaveCurrentSidebarWidth();
+        }, RoutingStrategies.Bubble, handledEventsToo: true);
         
         HorizontalSplitter.AddHandler(PointerPressedEvent, (s, e) =>
         {
@@ -128,6 +135,7 @@ public partial class MainWindow : Window
         {
             _subscribedMainVm.PropertyChanged += OnMainVmPropertyChanged;
             UpdateBottomPanelLayout(_subscribedMainVm);
+            UpdateSidebarLayout(_subscribedMainVm);
         }
     }
 
@@ -138,6 +146,13 @@ public partial class MainWindow : Window
             if (_subscribedMainVm != null)
             {
                 UpdateBottomPanelLayout(_subscribedMainVm);
+            }
+        }
+        else if (e.PropertyName == nameof(MainVM.IsSidebarVisible))
+        {
+            if (_subscribedMainVm != null)
+            {
+                UpdateSidebarLayout(_subscribedMainVm);
             }
         }
     }
@@ -177,6 +192,42 @@ public partial class MainWindow : Window
                 if (row2Height.IsAbsolute && row2Height.Value > 30)
                 {
                     _savedBottomPanelHeight = row2Height.Value;
+                }
+            }
+        }
+    }
+
+    private void UpdateSidebarLayout(MainVM vm)
+    {
+        if (MainGrid.ColumnDefinitions.Count < 2)
+            return;
+
+        if (!vm.IsSidebarVisible)
+        {
+            SaveCurrentSidebarWidth();
+            MainGrid.ColumnDefinitions[1].Width = new GridLength(0);
+        }
+        else
+        {
+            double targetWidth = _savedSidebarWidth > 30 ? _savedSidebarWidth : 240;
+            MainGrid.ColumnDefinitions[1].Width = new GridLength(targetWidth, GridUnitType.Pixel);
+        }
+    }
+
+    private void SaveCurrentSidebarWidth()
+    {
+        if (_subscribedMainVm != null && _subscribedMainVm.IsSidebarVisible)
+        {
+            if (MainGrid.ColumnDefinitions.Count >= 2)
+            {
+                var col1 = MainGrid.ColumnDefinitions[1];
+                if (col1.Width.IsAbsolute && col1.Width.Value > 30)
+                {
+                    _savedSidebarWidth = col1.Width.Value;
+                }
+                else if (SidebarGrid.Bounds.Width > 30)
+                {
+                    _savedSidebarWidth = SidebarGrid.Bounds.Width;
                 }
             }
         }

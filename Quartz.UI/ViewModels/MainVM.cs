@@ -52,6 +52,48 @@ public partial class MainVM : ObservableObject
     public bool IsHorizontalSplitterVisible => IsBottomPanelVisible && !IsBottomPanelMaximized;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsSidebarVisible))]
+    [NotifyPropertyChangedFor(nameof(IsExplorerTabActive))]
+    [NotifyPropertyChangedFor(nameof(IsSearchTabActive))]
+    [NotifyPropertyChangedFor(nameof(IsTracingTabActive))]
+    [NotifyPropertyChangedFor(nameof(SidebarHeaderTitle))]
+    private SidebarTab _activeSidebarTab = SidebarTab.Explorer;
+
+    public bool IsSidebarVisible => ActiveSidebarTab != SidebarTab.None;
+    public bool IsExplorerTabActive => ActiveSidebarTab == SidebarTab.Explorer;
+    public bool IsSearchTabActive => ActiveSidebarTab == SidebarTab.Search;
+    public bool IsTracingTabActive => ActiveSidebarTab == SidebarTab.Tracing;
+
+    public string ProjectName
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(_projectRootDir))
+                return "ПРОВОДНИК";
+
+            try
+            {
+                var dirInfo = new DirectoryInfo(_projectRootDir);
+                var name = dirInfo.Name;
+                return !string.IsNullOrWhiteSpace(name) ? name.ToUpperInvariant() : "ПРОВОДНИК";
+            }
+            catch
+            {
+                return "ПРОВОДНИК";
+            }
+        }
+    }
+
+    public string SidebarHeaderTitle =>
+        ActiveSidebarTab switch
+        {
+            SidebarTab.Explorer => ProjectName,
+            SidebarTab.Search => "ПОИСК",
+            SidebarTab.Tracing => "ТРАССИРОВКА",
+            _ => string.Empty
+        };
+
+    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsProblemsTabActive))]
     [NotifyPropertyChangedFor(nameof(IsTerminalTabActive))]
     private BottomPanelTab _activeBottomTab = BottomPanelTab.Problems;
@@ -408,6 +450,24 @@ public partial class MainVM : ObservableObject
     }
 
     [RelayCommand]
+    public void SelectExplorerTab()
+    {
+        ActiveSidebarTab = ActiveSidebarTab == SidebarTab.Explorer ? SidebarTab.None : SidebarTab.Explorer;
+    }
+
+    [RelayCommand]
+    public void SelectSearchTab()
+    {
+        ActiveSidebarTab = ActiveSidebarTab == SidebarTab.Search ? SidebarTab.None : SidebarTab.Search;
+    }
+
+    [RelayCommand]
+    public void SelectTracingTab()
+    {
+        ActiveSidebarTab = ActiveSidebarTab == SidebarTab.Tracing ? SidebarTab.None : SidebarTab.Tracing;
+    }
+
+    [RelayCommand]
     public void ToggleIndentationSize()
     {
         IndentationSize = IndentationSize == 2 ? 4 : 2;
@@ -716,6 +776,8 @@ public partial class MainVM : ObservableObject
         FileTree.Clear();
         ProjectErrors.Clear();
         OnPropertyChanged(nameof(TotalErrorCount));
+        OnPropertyChanged(nameof(ProjectName));
+        OnPropertyChanged(nameof(SidebarHeaderTitle));
         CurrentBoard = null;
 
         // Сбрасываем разметку редактора и вкладки
@@ -724,6 +786,8 @@ public partial class MainVM : ObservableObject
 
         // 2. Загружаем файловую структуру выбранной директории
         _projectRootDir = directoryPath;
+        OnPropertyChanged(nameof(ProjectName));
+        OnPropertyChanged(nameof(SidebarHeaderTitle));
         var rootDirVM = LoadDirectories(_projectRootDir, parent: null);
         FileTree.Add(rootDirVM);
 

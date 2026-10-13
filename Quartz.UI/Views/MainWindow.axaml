@@ -516,7 +516,7 @@
         </DataTemplate>
     </Window.DataTemplates>
 
-    <Grid x:Name="MainGrid" ColumnDefinitions="Auto,Auto,*" RowDefinitions="Auto,*,220">
+    <Grid x:Name="MainGrid" ColumnDefinitions="Auto,240,*" RowDefinitions="Auto,*,220">
         
         <Border
             x:Name="TitleBar"
@@ -553,17 +553,98 @@
             Grid.Row="1"
             Background="{DynamicResource TitleBarBackgroundColor}">
             <StackPanel Margin="6" Spacing="3">
-                <Button Classes="Icon" Content="{LucideIconContent FolderClosed, Size=20}" />
-                <Button Classes="Icon" Content="{LucideIconContent Search, Size=20}" />
-                <Button Classes="Icon" Content="{LucideIconContent Route, Size=20}" />
+                <StackPanel.Styles>
+                    <Style Selector="Button.ActivityTab">
+                        <Setter Property="Width" Value="28" />
+                        <Setter Property="Height" Value="28" />
+                        <Setter Property="Padding" Value="0" />
+                        <Setter Property="CornerRadius" Value="{DynamicResource SmCornerRadius}" />
+                        <Setter Property="Background" Value="Transparent" />
+                        <Setter Property="ToolTip.Placement" Value="Right" />
+                        <Setter Property="ToolTip.VerticalOffset" Value="-1" />
+                        <Setter Property="ToolTip.HorizontalOffset" Value="-6" />
+                    </Style>
+                    <Style Selector="Button.ActivityTab /template/ ContentPresenter#PART_ContentPresenter">
+                        <Setter Property="Background" Value="Transparent" />
+                    </Style>
+                    <Style Selector="Button.ActivityTab LucideIcon">
+                        <Setter Property="Foreground" Value="{DynamicResource ForegroundColor}" />
+                        <Setter Property="HorizontalAlignment" Value="Center" />
+                        <Setter Property="VerticalAlignment" Value="Center" />
+                    </Style>
+
+                    <!-- Неактивная при наведении: меняется background с прозрачного, иконка ForegroundColor -->
+                    <Style Selector="Button.ActivityTab:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+                        <Setter Property="Background" Value="{DynamicResource GhostHoverColor}" />
+                    </Style>
+                    <Style Selector="Button.ActivityTab:pointerover LucideIcon">
+                        <Setter Property="Foreground" Value="{DynamicResource ForegroundColor}" />
+                    </Style>
+
+                    <!-- Неактивная при нажатии: иконка сохраняет ForegroundColor -->
+                    <Style Selector="Button.ActivityTab:pressed LucideIcon">
+                        <Setter Property="Foreground" Value="{DynamicResource ForegroundColor}" />
+                    </Style>
+
+                    <!-- Активная: есть background и иконка меняет цвет на primary -->
+                    <Style Selector="Button.ActivityTab.active">
+                        <Setter Property="Background" Value="{DynamicResource PrimaryColor10}" />
+                    </Style>
+                    <Style Selector="Button.ActivityTab.active /template/ ContentPresenter#PART_ContentPresenter">
+                        <Setter Property="Background" Value="{DynamicResource PrimaryColor10}" />
+                    </Style>
+                    <Style Selector="Button.ActivityTab.active LucideIcon">
+                        <Setter Property="Foreground" Value="{DynamicResource PrimaryColor}" />
+                    </Style>
+
+                    <!-- При наведении на активную ниче не меняется -->
+                    <Style Selector="Button.ActivityTab.active:pointerover">
+                        <Setter Property="Background" Value="{DynamicResource PrimaryColor10}" />
+                    </Style>
+                    <Style Selector="Button.ActivityTab.active:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+                        <Setter Property="Background" Value="{DynamicResource PrimaryColor10}" />
+                    </Style>
+                    <Style Selector="Button.ActivityTab.active:pointerover LucideIcon">
+                        <Setter Property="Foreground" Value="{DynamicResource PrimaryColor}" />
+                    </Style>
+
+                    <!-- При нажатии на активную тоже ничего не меняется -->
+                    <Style Selector="Button.ActivityTab.active:pressed /template/ ContentPresenter#PART_ContentPresenter">
+                        <Setter Property="Background" Value="{DynamicResource PrimaryColor10}" />
+                    </Style>
+                    <Style Selector="Button.ActivityTab.active:pressed LucideIcon">
+                        <Setter Property="Foreground" Value="{DynamicResource PrimaryColor}" />
+                    </Style>
+                </StackPanel.Styles>
+
+                <Button Classes="ActivityTab"
+                        Classes.active="{Binding IsExplorerTabActive}"
+                        Command="{Binding SelectExplorerTabCommand}"
+                        ToolTip.Tip="Проводник">
+                    <LucideIcon Kind="FolderClosed" Size="20" />
+                </Button>
+                <Button Classes="ActivityTab"
+                        Classes.active="{Binding IsSearchTabActive}"
+                        Command="{Binding SelectSearchTabCommand}"
+                        ToolTip.Tip="Поиск">
+                    <LucideIcon Kind="Search" Size="20" />
+                </Button>
+                <Button Classes="ActivityTab"
+                        Classes.active="{Binding IsTracingTabActive}"
+                        Command="{Binding SelectTracingTabCommand}"
+                        ToolTip.Tip="Трассировка">
+                    <LucideIcon Kind="Route" Size="20" />
+                </Button>
             </StackPanel>
         </Border>
         
         <Grid
+            x:Name="SidebarGrid"
             Grid.Column="1"
             Grid.Row="0"
             Grid.RowSpan="3"
-            RowDefinitions="Auto,*">
+            RowDefinitions="Auto,*"
+            IsVisible="{Binding IsSidebarVisible}">
 
             <Border
                 Classes.with-thickness="{Binding RootNode, Converter={x:Static ObjectConverters.IsNotNull}}"
@@ -591,13 +672,15 @@
                         VerticalAlignment="Center"
                         FontSize="12"
                         Foreground="{DynamicResource PrimaryColor}"
-                        Text="ПРОВОДНИК"
+                        Text="{Binding SidebarHeaderTitle}"
+                        ToolTip.Tip="{Binding SidebarHeaderTitle}"
                         TextTrimming="CharacterEllipsis" />
                     <StackPanel 
                         Grid.Column="1"
                         Orientation="Horizontal" 
-                        Margin="6,0,0,0"
-                        Spacing="3">
+                        Margin="6,0,0,0" 
+                        Spacing="3"
+                        IsVisible="{Binding IsExplorerTabActive}">
                         <Button 
                             Classes="Icon" 
                             Content="{LucideIconContent FolderInput, Size=18}"
@@ -631,7 +714,8 @@
                 Grid.Row="1"
                 ItemsSource="{Binding FileTree}" 
                 Background="{DynamicResource SidebarBackgroundColor}"
-                BorderThickness="0,0,1,0">
+                BorderThickness="0,0,1,0"
+                IsVisible="{Binding IsExplorerTabActive}">
 
                 <TreeView.Styles>
                     <FluentTheme/>
@@ -766,6 +850,20 @@
                 </TreeView.DataTemplates>
             </TreeView>
 
+            <Border 
+                Grid.Row="1"
+                Background="{DynamicResource SidebarBackgroundColor}"
+                BorderBrush="{DynamicResource BorderColor30}"
+                BorderThickness="0,0,1,0"
+                IsVisible="{Binding IsSearchTabActive}" />
+
+            <Border 
+                Grid.Row="1"
+                Background="{DynamicResource SidebarBackgroundColor}"
+                BorderBrush="{DynamicResource BorderColor30}"
+                BorderThickness="0,0,1,0"
+                IsVisible="{Binding IsTracingTabActive}" />
+
         </Grid>
 
         <ContentControl
@@ -786,10 +884,16 @@
             x:Name="BottomPanelBorder"
             Grid.Column="2"
             Grid.Row="2"
-            BorderThickness="0,1,0,0"
+            Classes.minimized="{Binding !IsBottomPanelMaximized}"
             BorderBrush="{DynamicResource BorderColor60}"
             Background="{DynamicResource WindowBackgroundColor}"
             IsVisible="{Binding IsBottomPanelVisible}">
+
+            <Border.Styles>
+                <Style Selector="Border.minimized">
+                    <Setter Property="BorderThickness" Value="0,1,0,0" />
+                </Style>
+            </Border.Styles>
             
             <Grid RowDefinitions="Auto,*">
 
@@ -978,7 +1082,8 @@
             HorizontalAlignment="Right"
             Width="4"
             MinWidth="4"
-            Classes="overlay-splitter" />
+            Classes="overlay-splitter"
+            IsVisible="{Binding IsSidebarVisible}" />
 
         <GridSplitter
             x:Name="HorizontalSplitter"
