@@ -516,7 +516,7 @@
         </DataTemplate>
     </Window.DataTemplates>
 
-    <Grid ColumnDefinitions="Auto,Auto,*" RowDefinitions="Auto,*,Auto">
+    <Grid x:Name="MainGrid" ColumnDefinitions="Auto,Auto,*" RowDefinitions="Auto,*,220">
         
         <Border
             x:Name="TitleBar"
@@ -773,15 +773,23 @@
             Grid.Row="0"
             Grid.RowSpan="2"
             Margin="0,-1,0,0"
-            Content="{Binding RootNode}"
-            IsVisible="{Binding RootNode, Converter={x:Static ObjectConverters.IsNotNull}}"/>
+            Content="{Binding RootNode}">
+            <ContentControl.IsVisible>
+                <MultiBinding Converter="{x:Static BoolConverters.And}">
+                    <Binding Path="RootNode" Converter="{x:Static ObjectConverters.IsNotNull}" />
+                    <Binding Path="!IsBottomPanelMaximized" />
+                </MultiBinding>
+            </ContentControl.IsVisible>
+        </ContentControl>
 
         <Border
+            x:Name="BottomPanelBorder"
             Grid.Column="2"
             Grid.Row="2"
             BorderThickness="0,1,0,0"
             BorderBrush="{DynamicResource BorderColor60}"
-            Background="{DynamicResource WindowBackgroundColor}">
+            Background="{DynamicResource WindowBackgroundColor}"
+            IsVisible="{Binding IsBottomPanelVisible}">
             
             <Grid RowDefinitions="Auto,*">
 
@@ -791,19 +799,53 @@
                     Margin="8,4">
 
                     <StackPanel.Styles>
-                        <Style Selector="Button.Ghost">
+                        <Style Selector="Button.PanelTab">
                             <Setter Property="FontSize" Value="12" />
                             <Setter Property="VerticalAlignment" Value="Center" />
-                            <Setter Property="Padding" Value="4,2" />
+                            <Setter Property="Padding" Value="6,2" />
                             <Setter Property="CornerRadius" Value="{DynamicResource SmCornerRadius}" />
                             <Setter Property="Height" Value="NaN" />
+                            <Setter Property="Background" Value="Transparent" />
+                            <Setter Property="Foreground" Value="{DynamicResource MutedColor}" />
+                        </Style>
+                        <Style Selector="Button.PanelTab :is(TextBlock)">
+                            <Setter Property="Foreground" Value="{Binding $parent[Button].Foreground}" />
+                        </Style>
+                        <Style Selector="Button.PanelTab /template/ ContentPresenter#PART_ContentPresenter">
+                            <Setter Property="Foreground" Value="{Binding $parent[Button].Foreground}" />
+                        </Style>
+                        <Style Selector="Button.PanelTab:pointerover">
+                            <Setter Property="Foreground" Value="{DynamicResource ForegroundColor}" />
+                        </Style>
+                        <Style Selector="Button.PanelTab:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+                            <Setter Property="Background" Value="{DynamicResource GhostHoverColor50}" />
+                            <Setter Property="Foreground" Value="{DynamicResource ForegroundColor}" />
+                        </Style>
+                        <Style Selector="Button.PanelTab.active">
+                            <Setter Property="Background" Value="{DynamicResource PrimaryColor10}" />
+                            <Setter Property="Foreground" Value="{DynamicResource PrimaryColor}" />
+                        </Style>
+                        <Style Selector="Button.PanelTab.active /template/ ContentPresenter#PART_ContentPresenter">
+                            <Setter Property="Background" Value="{DynamicResource PrimaryColor10}" />
+                            <Setter Property="Foreground" Value="{DynamicResource PrimaryColor}" />
+                        </Style>
+                        <Style Selector="Button.PanelTab.active:pointerover">
+                            <Setter Property="Foreground" Value="{DynamicResource PrimaryColor}" />
+                        </Style>
+                        <Style Selector="Button.PanelTab.active:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+                            <Setter Property="Background" Value="{DynamicResource SelectionColor}" />
+                            <Setter Property="Foreground" Value="{DynamicResource PrimaryColor}" />
                         </Style>
                     </StackPanel.Styles>
 
-                    <Button Classes="Ghost">
+                    <Button Classes="PanelTab"
+                            Classes.active="{Binding IsProblemsTabActive}"
+                            Command="{Binding SelectProblemsTabCommand}">
                         ПРОБЛЕМЫ
                     </Button>
-                    <Button Classes="Ghost">
+                    <Button Classes="PanelTab"
+                            Classes.active="{Binding IsTerminalTabActive}"
+                            Command="{Binding SelectTerminalTabCommand}">
                         ТЕРМИНАЛ
                     </Button>
 
@@ -824,15 +866,23 @@
                         </Style>
                     </StackPanel.Styles>
 
-                    <Button Classes="Icon" Content="{LucideIconContent Maximize, Size=16}" />
-                    <Button Classes="Icon" Content="{LucideIconContent X, Size=18}" />
+                    <Button Classes="Icon" Command="{Binding ToggleMaximizeBottomPanelCommand}">
+                        <Panel>
+                            <LucideIcon Kind="Maximize" Size="16" IsVisible="{Binding !IsBottomPanelMaximized}" />
+                            <LucideIcon Kind="Minimize" Size="16" IsVisible="{Binding IsBottomPanelMaximized}" />
+                        </Panel>
+                    </Button>
+                    <Button Classes="Icon"
+                            Command="{Binding CloseBottomPanelCommand}"
+                            Content="{LucideIconContent X, Size=18}" />
 
                 </StackPanel>
 
                 <TreeView
                     x:Name="ErrorsTreeView"
                     ItemsSource="{Binding ProjectErrors}"
-                    Grid.Row="1">
+                    Grid.Row="1"
+                    IsVisible="{Binding IsProblemsTabActive}">
                     <TreeView.Styles>
                         <FluentTheme/>
                         <Style Selector="TreeViewItem">
@@ -912,6 +962,10 @@
                     </TreeView.DataTemplates>
                 </TreeView>
 
+                <Panel
+                    Grid.Row="1"
+                    IsVisible="{Binding IsTerminalTabActive}" />
+
             </Grid>
 
         </Border>
@@ -933,7 +987,8 @@
             VerticalAlignment="Bottom"
             Height="4"
             MinHeight="4"
-            Classes="overlay-splitter" />
+            Classes="overlay-splitter"
+            IsVisible="{Binding IsHorizontalSplitterVisible}" />
 
         <Canvas Grid.Column="0" Grid.Row="0" Grid.ColumnSpan="3" Grid.RowSpan="3">
             <Border
@@ -989,24 +1044,25 @@
                     </Style>
                 </StackPanel.Styles>
 
-                <Button Classes="Ghost" Padding="4,0">
+                <Button Classes="Ghost"
+                        Padding="4,0"
+                        Command="{Binding ToggleBottomPanelCommand}">
                     <StackPanel Orientation="Horizontal" Spacing="3">
                         <LucideIcon Kind="CircleX" Size="18" />
-                        <TextBlock Text="0" />
+                        <TextBlock Text="{Binding TotalErrorCount}" />
                         <LucideIcon Kind="TriangleAlert" Size="18" StrokeWidth="2" />
                         <TextBlock Text="0" />
                     </StackPanel>
                 </Button>
 
-                <Button Classes="Ghost">
-                    <Button.Content>
-                        Строка 927, столбец 44
-                    </Button.Content>
-                </Button>
+                <Button Classes="Ghost"
+                        Content="{Binding CurrentCaretPositionText}"
+                        IsVisible="{Binding ActiveEditor, Converter={x:Static ObjectConverters.IsNotNull}}" />
 
-                <Button Classes="Ghost">
-                    Пробелов: 2
-                </Button>
+                <Button Classes="Ghost"
+                        Command="{Binding ToggleIndentationSizeCommand}"
+                        Content="{Binding IndentationText}"
+                        IsVisible="{Binding ActiveEditor, Converter={x:Static ObjectConverters.IsNotNull}}" />
 
             </StackPanel>
         </Border>

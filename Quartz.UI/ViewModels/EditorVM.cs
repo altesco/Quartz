@@ -37,6 +37,22 @@ public abstract partial class EditorVM : FileVM
         set => SetProperty(ref _fontSize, value);
     }
 
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CaretPositionText))]
+    private int _caretLine = 1;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CaretPositionText))]
+    private int _caretColumn = 1;
+
+    public string CaretPositionText => $"Строка {CaretLine}, столбец {CaretColumn}";
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IndentationText))]
+    private int _indentationSize = 2;
+
+    public string IndentationText => $"Пробелов: {IndentationSize}";
+
     public event Action<long, long>? NavigationRequested;
     private (long Line, long Column)? _pendingNavigation;
 

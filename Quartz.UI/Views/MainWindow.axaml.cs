@@ -1,4 +1,7 @@
+using System;
+using System.ComponentModel;
 using System.Linq;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
@@ -11,9 +14,14 @@ namespace Quartz.UI.Views;
 
 public partial class MainWindow : Window
 {
+    private double _savedBottomPanelHeight = 220;
+    private MainVM? _subscribedMainVm;
+
     public MainWindow()
     {
         InitializeComponent();
+
+        DataContextChanged += OnDataContextChanged;
 
         VerticalSplitter.AddHandler(PointerPressedEvent, (s, e) =>
         {
@@ -28,10 +36,16 @@ public partial class MainWindow : Window
         {
             if (e.GetCurrentPoint(HorizontalSplitter).Properties.IsLeftButtonPressed) HorizontalSplitter.Classes.Add("dragging");
         }, RoutingStrategies.Bubble, handledEventsToo: true);
-        HorizontalSplitter.AddHandler(PointerReleasedEvent, (s, e) => HorizontalSplitter.Classes.Remove("dragging"),
-            RoutingStrategies.Bubble, handledEventsToo: true);
-        HorizontalSplitter.AddHandler(PointerCaptureLostEvent, (s, e) => HorizontalSplitter.Classes.Remove("dragging"),
-            RoutingStrategies.Bubble, handledEventsToo: true);
+        HorizontalSplitter.AddHandler(PointerReleasedEvent, (s, e) =>
+        {
+            HorizontalSplitter.Classes.Remove("dragging");
+            SaveCurrentBottomPanelHeight();
+        }, RoutingStrategies.Bubble, handledEventsToo: true);
+        HorizontalSplitter.AddHandler(PointerCaptureLostEvent, (s, e) =>
+        {
+            HorizontalSplitter.Classes.Remove("dragging");
+            SaveCurrentBottomPanelHeight();
+        }, RoutingStrategies.Bubble, handledEventsToo: true);
 
         ErrorsTreeView.AddHandler(PointerPressedEvent, OnErrorsTreeViewPointerPressed, RoutingStrategies.Tunnel);
         ErrorsTreeView.AddHandler(DoubleTappedEvent, OnErrorsTreeViewDoubleTapped, RoutingStrategies.Bubble, handledEventsToo: true);
@@ -93,7 +107,78 @@ public partial class MainWindow : Window
         }
         else if (dataContext is FileVM fileVm)
         {
+            if (mainVm.IsBottomPanelMaximized)
+            {
+                mainVm.IsBottomPanelMaximized = false;
+            }
             mainVm.OpenFileTab(fileVm);
+        }
+    }
+
+    private void OnDataContextChanged(object? sender, EventArgs e)
+    {
+        if (_subscribedMainVm != null)
+        {
+            _subscribedMainVm.PropertyChanged -= OnMainVmPropertyChanged;
+        }
+
+        _subscribedMainVm = DataContext as MainVM;
+
+        if (_subscribedMainVm != null)
+        {
+            _subscribedMainVm.PropertyChanged += OnMainVmPropertyChanged;
+            UpdateBottomPanelLayout(_subscribedMainVm);
+        }
+    }
+
+    private void OnMainVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(MainVM.IsBottomPanelVisible) or nameof(MainVM.IsBottomPanelMaximized))
+        {
+            if (_subscribedMainVm != null)
+            {
+                UpdateBottomPanelLayout(_subscribedMainVm);
+            }
+        }
+    }
+
+    private void UpdateBottomPanelLayout(MainVM vm)
+    {
+        if (MainGrid.RowDefinitions.Count < 3)
+            return;
+
+        if (!vm.IsBottomPanelVisible)
+        {
+            SaveCurrentBottomPanelHeight();
+            MainGrid.RowDefinitions[1].Height = new GridLength(1, GridUnitType.Star);
+            MainGrid.RowDefinitions[2].Height = new GridLength(0);
+        }
+        else if (vm.IsBottomPanelMaximized)
+        {
+            SaveCurrentBottomPanelHeight();
+            MainGrid.RowDefinitions[1].Height = new GridLength(0);
+            MainGrid.RowDefinitions[2].Height = new GridLength(1, GridUnitType.Star);
+        }
+        else
+        {
+            double targetHeight = _savedBottomPanelHeight > 30 ? _savedBottomPanelHeight : 220;
+            MainGrid.RowDefinitions[1].Height = new GridLength(1, GridUnitType.Star);
+            MainGrid.RowDefinitions[2].Height = new GridLength(targetHeight, GridUnitType.Pixel);
+        }
+    }
+
+    private void SaveCurrentBottomPanelHeight()
+    {
+        if (_subscribedMainVm != null && _subscribedMainVm.IsBottomPanelVisible && !_subscribedMainVm.IsBottomPanelMaximized)
+        {
+            if (MainGrid.RowDefinitions.Count >= 3)
+            {
+                var row2Height = MainGrid.RowDefinitions[2].Height;
+                if (row2Height.IsAbsolute && row2Height.Value > 30)
+                {
+                    _savedBottomPanelHeight = row2Height.Value;
+                }
+            }
         }
     }
 }

@@ -41,6 +41,40 @@ public partial class MainVM : ObservableObject
     [ObservableProperty] private double _fakeFileX;
     [ObservableProperty] private double _fakeFileY;
 
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsHorizontalSplitterVisible))]
+    private bool _isBottomPanelVisible = true;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsHorizontalSplitterVisible))]
+    private bool _isBottomPanelMaximized = false;
+
+    public bool IsHorizontalSplitterVisible => IsBottomPanelVisible && !IsBottomPanelMaximized;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsProblemsTabActive))]
+    [NotifyPropertyChangedFor(nameof(IsTerminalTabActive))]
+    private BottomPanelTab _activeBottomTab = BottomPanelTab.Problems;
+
+    public bool IsProblemsTabActive => ActiveBottomTab == BottomPanelTab.Problems;
+    public bool IsTerminalTabActive => ActiveBottomTab == BottomPanelTab.Terminal;
+
+    [ObservableProperty]
+    private EditorVM? _activeEditor;
+
+    public string CurrentCaretPositionText =>
+        ActiveEditor != null
+            ? $"Строка {ActiveEditor.CaretLine}, столбец {ActiveEditor.CaretColumn}"
+            : "Строка 1, столбец 1";
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IndentationText))]
+    private int _indentationSize = 2;
+
+    public string IndentationText => $"Пробелов: {IndentationSize}";
+
+    public int TotalErrorCount => ProjectErrors.Sum(f => f.Errors.Count);
+
     private readonly IBoardProcessingCoordinator _boardProcessingCoordinator;
     private readonly IFolderDialogService _folderDialogService;
 
@@ -54,6 +88,8 @@ public partial class MainVM : ObservableObject
     {
         _boardProcessingCoordinator = boardProcessingCoordinator;
         _folderDialogService = folderDialogService;
+
+        ProjectErrors.CollectionChanged += OnProjectErrorsCollectionChanged;
 
         _projectRootDir = Path.Combine("/", "home", "alexandr", "Games", "Проект");
         if (Directory.Exists(_projectRootDir))
@@ -265,6 +301,7 @@ public partial class MainVM : ObservableObject
         {
             ActivePanel = file.Panel;
             file.Panel.SelectedTab = file;
+            ActiveEditor = file as EditorVM;
             return;
         }
 
@@ -283,6 +320,7 @@ public partial class MainVM : ObservableObject
         ActivePanel.Tabs.Add(file);
         ActivePanel.SelectedTab = file;
         file.Panel = ActivePanel;
+        ActiveEditor = file as EditorVM;
     }
 
     [RelayCommand]
@@ -304,12 +342,164 @@ public partial class MainVM : ObservableObject
 
     public void NavigateToError(FileVM file, EditorError error)
     {
+        if (IsBottomPanelMaximized)
+        {
+            IsBottomPanelMaximized = false;
+        }
+
         OpenFileTab(file);
 
         if (file is EditorVM editor)
         {
             editor.RequestNavigateTo(error.Line, error.Column);
         }
+    }
+
+    [RelayCommand]
+    public void CloseBottomPanel()
+    {
+        IsBottomPanelVisible = false;
+        IsBottomPanelMaximized = false;
+    }
+
+    [RelayCommand]
+    public void ToggleBottomPanel()
+    {
+        if (IsBottomPanelVisible)
+        {
+            if (ActiveBottomTab != BottomPanelTab.Problems)
+            {
+                ActiveBottomTab = BottomPanelTab.Problems;
+            }
+            else
+            {
+                IsBottomPanelVisible = false;
+                IsBottomPanelMaximized = false;
+            }
+        }
+        else
+        {
+            IsBottomPanelVisible = true;
+            ActiveBottomTab = BottomPanelTab.Problems;
+        }
+    }
+
+    [RelayCommand]
+    public void ToggleMaximizeBottomPanel()
+    {
+        if (!IsBottomPanelVisible)
+        {
+            IsBottomPanelVisible = true;
+        }
+
+        IsBottomPanelMaximized = !IsBottomPanelMaximized;
+    }
+
+    [RelayCommand]
+    public void SelectProblemsTab()
+    {
+        ActiveBottomTab = BottomPanelTab.Problems;
+    }
+
+    [RelayCommand]
+    public void SelectTerminalTab()
+    {
+        ActiveBottomTab = BottomPanelTab.Terminal;
+    }
+
+    [RelayCommand]
+    public void ToggleIndentationSize()
+    {
+        IndentationSize = IndentationSize == 2 ? 4 : 2;
+        if (ActiveEditor != null)
+        {
+            ActiveEditor.IndentationSize = IndentationSize;
+        }
+    }
+
+    partial void OnActivePanelChanged(PanelVM? oldValue, PanelVM? newValue)
+    {
+        if (oldValue != null)
+        {
+            oldValue.PropertyChanged -= OnActivePanelPropertyChanged;
+        }
+
+        if (newValue != null)
+        {
+            newValue.PropertyChanged += OnActivePanelPropertyChanged;
+        }
+
+        UpdateActiveEditor();
+    }
+
+    private void OnActivePanelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(PanelVM.SelectedTab))
+        {
+            UpdateActiveEditor();
+        }
+    }
+
+    private void UpdateActiveEditor()
+    {
+        ActiveEditor = ActivePanel?.SelectedTab as EditorVM;
+    }
+
+    partial void OnActiveEditorChanged(EditorVM? oldValue, EditorVM? newValue)
+    {
+        if (oldValue != null)
+        {
+            oldValue.PropertyChanged -= OnActiveEditorPropertyChanged;
+        }
+
+        if (newValue != null)
+        {
+            newValue.PropertyChanged += OnActiveEditorPropertyChanged;
+            IndentationSize = newValue.IndentationSize;
+        }
+
+        OnPropertyChanged(nameof(CurrentCaretPositionText));
+        OnPropertyChanged(nameof(IndentationText));
+    }
+
+    private void OnActiveEditorPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(EditorVM.CaretLine) or nameof(EditorVM.CaretColumn))
+        {
+            OnPropertyChanged(nameof(CurrentCaretPositionText));
+        }
+        else if (e.PropertyName == nameof(EditorVM.IndentationSize))
+        {
+            if (ActiveEditor != null)
+            {
+                IndentationSize = ActiveEditor.IndentationSize;
+            }
+            OnPropertyChanged(nameof(IndentationText));
+        }
+    }
+
+    private void OnProjectErrorsCollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    {
+        if (e.NewItems != null)
+        {
+            foreach (FileVM file in e.NewItems.OfType<FileVM>())
+            {
+                file.Errors.CollectionChanged += OnFileErrorsCollectionChanged;
+            }
+        }
+        if (e.OldItems != null)
+        {
+            foreach (FileVM file in e.OldItems.OfType<FileVM>())
+            {
+                file.Errors.CollectionChanged -= OnFileErrorsCollectionChanged;
+            }
+        }
+        OnPropertyChanged(nameof(TotalErrorCount));
+    }
+
+    private void OnFileErrorsCollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    {
+        OnPropertyChanged(nameof(TotalErrorCount));
     }
 
     /// <summary>
@@ -525,6 +715,7 @@ public partial class MainVM : ObservableObject
         _projectStyles.Clear();
         FileTree.Clear();
         ProjectErrors.Clear();
+        OnPropertyChanged(nameof(TotalErrorCount));
         CurrentBoard = null;
 
         // Сбрасываем разметку редактора и вкладки
@@ -634,6 +825,7 @@ public partial class MainVM : ObservableObject
             // Если файла еще нет в дереве — добавляем
             ProjectErrors.Add(fileVM);
         }
+        OnPropertyChanged(nameof(TotalErrorCount));
     }
 
     public string GetRelativePath(string fullPath)

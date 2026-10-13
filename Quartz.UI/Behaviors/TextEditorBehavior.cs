@@ -34,6 +34,7 @@ namespace Quartz.UI.Behaviors
             if (_subscribedVm != null)
             {
                 _subscribedVm.NavigationRequested -= OnNavigationRequested;
+                _subscribedVm.PropertyChanged -= OnSubscribedVmPropertyChanged;
             }
 
             _subscribedVm = newVm;
@@ -41,11 +42,39 @@ namespace Quartz.UI.Behaviors
             if (_subscribedVm != null)
             {
                 _subscribedVm.NavigationRequested += OnNavigationRequested;
+                _subscribedVm.PropertyChanged += OnSubscribedVmPropertyChanged;
+                if (AssociatedObject != null)
+                {
+                    AssociatedObject.Options.IndentationSize = _subscribedVm.IndentationSize;
+                }
+                UpdateCaretPosition();
                 var pending = _subscribedVm.ConsumePendingNavigation();
                 if (pending.HasValue)
                 {
                     NavigateTo(pending.Value.Line, pending.Value.Column);
                 }
+            }
+        }
+
+        private void OnSubscribedVmPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(ViewModels.EditorVM.IndentationSize) && AssociatedObject != null && _subscribedVm != null)
+            {
+                AssociatedObject.Options.IndentationSize = _subscribedVm.IndentationSize;
+            }
+        }
+
+        private void OnCaretPositionChanged(object? sender, EventArgs e)
+        {
+            UpdateCaretPosition();
+        }
+
+        private void UpdateCaretPosition()
+        {
+            if (_subscribedVm != null && AssociatedObject?.TextArea?.Caret != null)
+            {
+                _subscribedVm.CaretLine = AssociatedObject.TextArea.Caret.Line;
+                _subscribedVm.CaretColumn = AssociatedObject.TextArea.Caret.Column;
             }
         }
 
@@ -85,6 +114,12 @@ namespace Quartz.UI.Behaviors
             UpdateThemeColors();
             ConfigureEditorForCurrentFile();
             HookVm(AssociatedObject.DataContext as ViewModels.EditorVM);
+
+            if (AssociatedObject.TextArea?.Caret != null)
+            {
+                AssociatedObject.TextArea.Caret.PositionChanged += OnCaretPositionChanged;
+            }
+            UpdateCaretPosition();
 
             AssociatedObject.GestureRecognizers.Add(_pinchRecognizer);
 
@@ -512,6 +547,11 @@ namespace Quartz.UI.Behaviors
                 AssociatedObject.RemoveHandler(InputElement.PointerTouchPadGestureMagnifyEvent, OnTouchPadGestureMagnify);
 
                 LinuxX11PinchGestureService.PinchGesture -= OnLinuxPinchGesture;
+
+                if (AssociatedObject.TextArea?.Caret != null)
+                {
+                    AssociatedObject.TextArea.Caret.PositionChanged -= OnCaretPositionChanged;
+                }
 
                 HookDocument(null);
                 HookVm(null);
