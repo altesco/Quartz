@@ -1,4 +1,6 @@
-﻿using Avalonia;
+using Avalonia;
+using Avalonia.X11; // added for X11PlatformOptions
+using Avalonia.Win32; // added for Win32PlatformOptions
 using System;
 
 namespace Quartz.UI;
@@ -9,16 +11,32 @@ sealed class Program
     // SynchronizationContext-reliant code before AppMain is called: things aren't initialized
     // yet and stuff might break.
     [STAThread]
-    public static void Main(string[] args) => BuildAvaloniaApp()
-        .StartWithClassicDesktopLifetime(args);
+    public static void Main(string[] args)
+    {
+        // Let Avalonia auto‑detect the platform (X11 or Wayland).
+        // No forced platform variable; the appropriate backend will be used automatically.
+        BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+    }
 
     // Avalonia configuration, don't remove; also used by visual designer.
     public static AppBuilder BuildAvaloniaApp()
-        => AppBuilder.Configure<App>()
-            .UsePlatformDetect()
+    {
+        var builder = AppBuilder.Configure<App>();
+
+        if (OperatingSystem.IsLinux() && !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("WAYLAND_DISPLAY")))
+        {
+            builder = builder.UseWayland();
+        }
+        else
+        {
+            builder = builder.UsePlatformDetect();
+        }
+
+        return builder
             .WithInterFont()
             .LogToTrace()
             .UseSkia()
+            .UseHarfBuzz()
             // Настройка для Linux (X11)
             .With(new X11PlatformOptions
             {
@@ -29,4 +47,5 @@ sealed class Program
             {
                 OverlayPopups = true
             });
+    }
 }

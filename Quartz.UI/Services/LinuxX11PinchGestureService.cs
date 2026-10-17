@@ -10,6 +10,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform;
+using System.IO;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 
@@ -50,6 +51,11 @@ public static class LinuxX11PinchGestureService
     private static InputElement? _activeTarget;
     private static readonly Dictionary<IntPtr, Window> _registeredWindows = new();
 
+    private static void Log(string message)
+    {
+        System.Diagnostics.Debug.WriteLine($"[Pinch] {message}");
+    }
+
     // P/Invoke X11 and XInput2
     [StructLayout(LayoutKind.Sequential)]
     private struct XIEventMask
@@ -76,9 +82,12 @@ public static class LinuxX11PinchGestureService
 
     public static void Initialize()
     {
-        if (_initialized || !OperatingSystem.IsLinux())
+        if (!OperatingSystem.IsLinux())
             return;
-
+        LinuxWaylandPinchGestureService.Initialize();
+        if (_initialized)
+            return;
+        Log("Initialize entered");
         try
         {
             var windowingPlatform = AvaloniaLocator.Current.GetService(typeof(IWindowingPlatform));
@@ -96,7 +105,8 @@ public static class LinuxX11PinchGestureService
             var displayProp = platformType.GetProperty("Display", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
             if (displayProp == null) return;
 
-            _display = (IntPtr)displayProp.GetValue(windowingPlatform)!;
+                        _display = (IntPtr)displayProp.GetValue(windowingPlatform)!;
+            Log($"Display obtained: {_display}");
             if (_display == IntPtr.Zero)
             {
                 return;
@@ -108,6 +118,7 @@ public static class LinuxX11PinchGestureService
 
             var opcodeProp = x11Info.GetType().GetProperty("XInputOpcode", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
             _xInputOpcode = (int)(opcodeProp?.GetValue(x11Info) ?? -1);
+            Log($"XInputOpcode obtained: {_xInputOpcode}");
 
             // Read pointer device id and patch DefaultEventTypes from XI2Manager if available
             try
@@ -128,6 +139,7 @@ public static class LinuxX11PinchGestureService
                     {
                         var idProp = ptrDev.GetType().GetProperty("Id", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
                         _pointerDeviceId = (int)(idProp?.GetValue(ptrDev) ?? 2);
+            Log($"Pointer device ID obtained: {_pointerDeviceId}");
                     }
                 }
             }
@@ -136,10 +148,9 @@ public static class LinuxX11PinchGestureService
             // Announce support for XInput 2.4 (needed for pinch gesture events)
             int major = 2, minor = 4;
             int status = XIQueryVersion(_display, ref major, ref minor);
-            System.Diagnostics.Debug.WriteLine($"[Pinch] XIQueryVersion status={status} version={major}.{minor}");
+            Log($"XI version: major={major}, minor={minor}");
             if (status != 0 || major < 2 || (major == 2 && minor < 4))
             {
-                System.Diagnostics.Debug.WriteLine($"[Pinch] XIQueryVersion failed or version too low, aborting.");
                 return;
             }
 
@@ -159,7 +170,6 @@ public static class LinuxX11PinchGestureService
 
             InstallEventHook(eventDispatcher);
             _initialized = true;
-            System.Diagnostics.Debug.WriteLine($"[Pinch] Hook installed! xiopcode={_xInputOpcode} pointerDevId={_pointerDeviceId} display=0x{_display:X}");
 
             // Select pinch events for any windows that already exist in platform.Windows
             try
@@ -317,6 +327,7 @@ public static class LinuxX11PinchGestureService
     public static void RegisterWindow(Window window)
     {
         if (window == null) return;
+        LinuxWaylandPinchGestureService.RegisterWindow(window);
 
         void SelectForWindow()
         {
@@ -354,9 +365,8 @@ public static class LinuxX11PinchGestureService
     private static void SelectPinchEvents(IntPtr display, IntPtr window)
     {
         if (display == IntPtr.Zero || window == IntPtr.Zero)
-            return;
-
-        System.Diagnostics.Debug.WriteLine($"[Pinch] SelectPinchEvents: display=0x{display:X} window=0x{window:X}");
+    return;
+Log($"SelectPinchEvents called for display={display}, window={window}");
 
         try
         {
@@ -411,9 +421,8 @@ public static class LinuxX11PinchGestureService
             }
 
             var masksArray = masksToSet.ToArray();
-            int result = XISelectEvents(display, window, masksArray, masksArray.Length);
+            XISelectEvents(display, window, masksArray, masksArray.Length);
             XFlush(display);
-            System.Diagnostics.Debug.WriteLine($"[Pinch] XISelectEvents result={result} for {masksArray.Length} masks");
 
             foreach (var m in masksArray)
             {
@@ -434,32 +443,25 @@ public static class LinuxX11PinchGestureService
             return InvokePreviousHook(pEvt);
 
         int extension = Marshal.ReadInt32(pEvt, 32);
-        int evtype = Marshal.ReadInt32(pEvt, 36);
-
-        // Log ALL GenericEvents so we can see what arrives (evtype 27/28/29 = pinch)
-        System.Diagnostics.Debug.WriteLine($"[Pinch] GenericEvent type={type} ext={extension} evtype={evtype} xiopcode={_xInputOpcode}");
-
         if (_xInputOpcode > 0 && extension != _xInputOpcode)
             return InvokePreviousHook(pEvt);
 
+        int evtype = Marshal.ReadInt32(pEvt, 36);
         if (evtype < 27 || evtype > 29)
             return InvokePreviousHook(pEvt);
 
-        System.Diagnostics.Debug.WriteLine($"[Pinch] >>> PINCH EVENT evtype={evtype}!");
-
         IntPtr data = Marshal.ReadIntPtr(pEvt, 48);
-        System.Diagnostics.Debug.WriteLine($"[Pinch] data ptr = 0x{data:X}");
         if (data == IntPtr.Zero)
             return InvokePreviousHook(pEvt);
 
         try
         {
-            IntPtr windowXid = Marshal.ReadIntPtr(data, 72);
+                                    IntPtr windowXid = Marshal.ReadIntPtr(data, 72);
             double eventX = ReadDouble(data, 104);
             double eventY = ReadDouble(data, 112);
             double scale = ReadDouble(data, 152);
             double deltaAngle = ReadDouble(data, 160);
-
+            Log($"OnRawX11Event: type={type}, extension={extension}, evtype={evtype}, windowXid={windowXid}, x={eventX}, y={eventY}, scale={scale}");
             DispatchPinch(windowXid, evtype, eventX, eventY, scale, deltaAngle);
             return true; // We fully handled this gesture event!
         }
@@ -532,10 +534,18 @@ public static class LinuxX11PinchGestureService
         };
 
         var eventArgs = new LinuxPinchEventArgs(window, dipPosition, scale, state);
+        RaisePinchGesture(eventArgs);
+    }
+
+    public static void RaisePinchGesture(LinuxPinchEventArgs eventArgs)
+    {
         PinchGesture?.Invoke(null, eventArgs);
 
         try
         {
+            var window = eventArgs.Window;
+            var dipPosition = eventArgs.WindowPosition;
+            var state = eventArgs.State;
             var hitElement = window.InputHitTest(dipPosition) as InputElement ?? window;
             if (state == LinuxGestureState.Begin)
             {
@@ -552,7 +562,7 @@ public static class LinuxX11PinchGestureService
                 }
                 var target = _activeTarget ?? hitElement;
                 var localPoint = window.TranslatePoint(dipPosition, target) ?? dipPosition;
-                var args = new PinchEventArgs(scale, localPoint);
+                var args = new PinchEventArgs(eventArgs.Scale, localPoint);
                 target.RaiseEvent(args);
             }
             else if (state == LinuxGestureState.End)

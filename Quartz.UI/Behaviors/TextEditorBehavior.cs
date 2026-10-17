@@ -143,6 +143,11 @@ namespace Quartz.UI.Behaviors
                 OnTouchPadGestureMagnify,
                 RoutingStrategies.Tunnel | RoutingStrategies.Bubble);
 
+            AssociatedObject.AddHandler(
+                InputElement.KeyDownEvent,
+                OnEditorKeyDown,
+                RoutingStrategies.Tunnel);
+
             LinuxX11PinchGestureService.PinchGesture -= OnLinuxPinchGesture;
             LinuxX11PinchGestureService.PinchGesture += OnLinuxPinchGesture;
         }
@@ -455,9 +460,12 @@ namespace Quartz.UI.Behaviors
         {
             if (e.Handled || AssociatedObject == null || !AssociatedObject.IsEffectivelyVisible) return;
 
-            var localPoint = e.Window.TranslatePoint(e.WindowPosition, AssociatedObject);
-            if (!localPoint.HasValue || !new Rect(AssociatedObject.Bounds.Size).Contains(localPoint.Value))
-                return;
+            if (!_isPinchActive)
+            {
+                var localPoint = e.Window.TranslatePoint(e.WindowPosition, AssociatedObject);
+                if (!localPoint.HasValue || !new Rect(AssociatedObject.Bounds.Size).Contains(localPoint.Value))
+                    return;
+            }
 
             if (e.State == LinuxGestureState.Begin)
             {
@@ -533,6 +541,32 @@ namespace Quartz.UI.Behaviors
             }
         }
 
+        private void OnEditorKeyDown(object? sender, KeyEventArgs e)
+        {
+            if (AssociatedObject == null) return;
+
+            if (e.KeyModifiers.HasFlag(KeyModifiers.Control))
+            {
+                if (e.Key is Key.OemPlus or Key.Add)
+                {
+                    double newSize = Math.Clamp(AssociatedObject.FontSize + ZoomStep, MinFontSize, MaxFontSize);
+                    AssociatedObject.FontSize = Math.Round(newSize, 2);
+                    e.Handled = true;
+                }
+                else if (e.Key is Key.OemMinus or Key.Subtract)
+                {
+                    double newSize = Math.Clamp(AssociatedObject.FontSize - ZoomStep, MinFontSize, MaxFontSize);
+                    AssociatedObject.FontSize = Math.Round(newSize, 2);
+                    e.Handled = true;
+                }
+                else if (e.Key is Key.D0 or Key.NumPad0)
+                {
+                    AssociatedObject.FontSize = 14.0;
+                    e.Handled = true;
+                }
+            }
+        }
+
         protected override void OnDetaching()
         {
             if (AssociatedObject != null)
@@ -543,6 +577,7 @@ namespace Quartz.UI.Behaviors
                 AssociatedObject.PropertyChanged -= OnPropertyChanged;
                 AssociatedObject.GestureRecognizers.Remove(_pinchRecognizer);
                 AssociatedObject.RemoveHandler(InputElement.PointerWheelChangedEvent, OnPointerWheelChanged);
+                AssociatedObject.RemoveHandler(InputElement.KeyDownEvent, OnEditorKeyDown);
                 AssociatedObject.RemoveHandler(InputElement.PinchEvent, OnPinchGesture);
                 AssociatedObject.RemoveHandler(InputElement.PinchEndedEvent, OnPinchGestureEnded);
                 AssociatedObject.RemoveHandler(InputElement.PointerTouchPadGestureMagnifyEvent, OnTouchPadGestureMagnify);

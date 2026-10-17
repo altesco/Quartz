@@ -520,10 +520,15 @@ public class CircuitBoardCanvas : Control, IDisposable, Avalonia.Rendering.ICust
         if (e.Handled || !IsEffectivelyVisible) return;
 
         var localPoint = e.Window.TranslatePoint(e.WindowPosition, this);
-        if (!localPoint.HasValue || !new Rect(Bounds.Size).Contains(localPoint.Value))
-            return;
 
-        Point origin = localPoint.Value;
+        if (!_isPinchGestureActive)
+        {
+            if (!localPoint.HasValue || !new Rect(Bounds.Size).Contains(localPoint.Value))
+                return;
+            _lastPointerPosition = localPoint.Value;
+        }
+
+        Point origin = localPoint ?? _lastPointerPosition;
 
         if (e.State == LinuxGestureState.Begin)
         {
@@ -625,6 +630,56 @@ public class CircuitBoardCanvas : Control, IDisposable, Avalonia.Rendering.ICust
         }
 
         e.Handled = true;
+    }
+
+    public void ZoomAt(Point center, float factor)
+    {
+        float newTargetZoom = Math.Clamp(_targetZoom * factor, MinZoom, MaxZoom);
+        if (Math.Abs(newTargetZoom - _targetZoom) < 0.00001f) return;
+
+        _targetOffsetX = (float)(center.X - (center.X - _targetOffsetX) * (newTargetZoom / _targetZoom));
+        _targetOffsetY = (float)(center.Y - (center.Y - _targetOffsetY) * (newTargetZoom / _targetZoom));
+        _targetZoom = newTargetZoom;
+
+        if (!_animationTimer.IsEnabled)
+        {
+            _animationTimer.Start();
+        }
+    }
+
+    public void ResetZoom()
+    {
+        StopAnimation();
+        Zoom = 1.0f;
+        OffsetX = 0f;
+        OffsetY = 0f;
+        SyncTargetsWithCurrent();
+        InvalidateVisual();
+    }
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        base.OnKeyDown(e);
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Control))
+        {
+            if (e.Key is Key.OemPlus or Key.Add)
+            {
+                var center = new Point(Bounds.Width / 2.0, Bounds.Height / 2.0);
+                ZoomAt(center, 1.25f);
+                e.Handled = true;
+            }
+            else if (e.Key is Key.OemMinus or Key.Subtract)
+            {
+                var center = new Point(Bounds.Width / 2.0, Bounds.Height / 2.0);
+                ZoomAt(center, 1.0f / 1.25f);
+                e.Handled = true;
+            }
+            else if (e.Key is Key.D0 or Key.NumPad0)
+            {
+                ResetZoom();
+                e.Handled = true;
+            }
+        }
     }
 
     private void OnAnimationTick(object? sender, EventArgs e)
