@@ -18,8 +18,10 @@ using SkiaSharp;
 
 namespace Quartz.UI.Controls;
 
-public class CircuitBoardCanvas : Control, IDisposable
+public class CircuitBoardCanvas : Control, IDisposable, Avalonia.Rendering.ICustomHitTest
 {
+    bool Avalonia.Rendering.ICustomHitTest.HitTest(Point point) => new Rect(Bounds.Size).Contains(point);
+
     public static readonly StyledProperty<IReadOnlyList<DrawingPrimitive>?> DrawingDataProperty =
         AvaloniaProperty.Register<CircuitBoardCanvas, IReadOnlyList<DrawingPrimitive>?>(nameof(DrawingData));
 
@@ -478,6 +480,8 @@ public class CircuitBoardCanvas : Control, IDisposable
 
     private void OnPinch(object? sender, PinchEventArgs e)
     {
+        if (!IsEffectivelyVisible) return;
+
         StopAnimation();
 
         if (!_isPinchGestureActive)
@@ -513,7 +517,7 @@ public class CircuitBoardCanvas : Control, IDisposable
 
     private void OnLinuxPinchGesture(object? sender, LinuxPinchEventArgs e)
     {
-        if (e.Handled) return;
+        if (e.Handled || !IsEffectivelyVisible) return;
 
         var localPoint = e.Window.TranslatePoint(e.WindowPosition, this);
         if (!localPoint.HasValue || !new Rect(Bounds.Size).Contains(localPoint.Value))
@@ -593,6 +597,7 @@ public class CircuitBoardCanvas : Control, IDisposable
 
         if (e.KeyModifiers.HasFlag(KeyModifiers.Control))
         {
+            _isPinchGestureActive = false;
             if (Math.Abs(e.Delta.Y) < 0.0001) return;
 
             // Поддержка как дискретных щелчков колесика мыши (Delta.Y = +/-1.0),

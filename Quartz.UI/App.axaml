@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="Quartz.UI.App"
              xmlns:themes="clr-namespace:ShadUI;assembly=ShadUI"
+             xmlns:shadui="clr-namespace:ShadUI;assembly=ShadUI"
              xmlns:local="clr-namespace:Quartz.UI.Behaviors"
              RequestedThemeVariant="Default">
 
@@ -133,6 +134,36 @@
         <!-- 3. Прибиваем тему гвоздями для всех ToolTip -->
         <Style Selector="ToolTip">
             <Setter Property="Theme" Value="{DynamicResource QuartzToolTipTheme}" />
+        </Style>
+
+        <!-- 4. Стилизация всплывающего меню SimpleDropdown как у контекстного меню (QuartzFlyoutTheme) -->
+        <Style Selector="shadui|SimpleDropdown">
+            <Setter Property="local:FlyoutAssist.HorizontalOffset" Value="-12" />
+            <Setter Property="local:FlyoutAssist.VerticalOffset" Value="-12" />
+            <Setter Property="PopupHorizontalOffset" Value="-12" />
+            <Setter Property="PopupVerticalOffset" Value="-12" />
+        </Style>
+
+        <Style Selector="shadui|SimpleDropdown /template/ Popup#PART_Popup Border">
+            <Setter Property="Background" Value="{DynamicResource CardBackgroundColor}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderColor60}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="{DynamicResource SmCornerRadius}" />
+            <Setter Property="Margin" Value="12" />
+            <Setter Property="BoxShadow" Value="0 6 12 0 #40000000" />
+            <Setter Property="Padding" Value="8,4" />
+        </Style>
+
+        <Style Selector="shadui|SimpleDropdown /template/ Popup#PART_Popup StackPanel">
+            <Setter Property="Margin" Value="0" />
+        </Style>
+
+        <Style Selector="shadui|SimpleDropdown /template/ Popup#PART_Popup ScrollViewer">
+            <Setter Property="Margin" Value="0" />
+        </Style>
+
+        <Style Selector="shadui|SimpleDropdown /template/ Popup#PART_Popup LayoutTransformControl">
+            <Setter Property="Margin" Value="0" />
         </Style>
 
         <Style Selector="Separator">

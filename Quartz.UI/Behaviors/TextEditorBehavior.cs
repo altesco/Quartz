@@ -430,7 +430,7 @@ namespace Quartz.UI.Behaviors
 
         private void OnPinchGesture(object? sender, PinchEventArgs e)
         {
-            if (AssociatedObject == null) return;
+            if (AssociatedObject == null || !AssociatedObject.IsEffectivelyVisible) return;
 
             if (!_isPinchActive)
             {
@@ -453,7 +453,7 @@ namespace Quartz.UI.Behaviors
 
         private void OnLinuxPinchGesture(object? sender, LinuxPinchEventArgs e)
         {
-            if (e.Handled || AssociatedObject == null) return;
+            if (e.Handled || AssociatedObject == null || !AssociatedObject.IsEffectivelyVisible) return;
 
             var localPoint = e.Window.TranslatePoint(e.WindowPosition, AssociatedObject);
             if (!localPoint.HasValue || !new Rect(AssociatedObject.Bounds.Size).Contains(localPoint.Value))
@@ -488,7 +488,7 @@ namespace Quartz.UI.Behaviors
 
         private void OnTouchPadGestureMagnify(object? sender, PointerDeltaEventArgs e)
         {
-            if (AssociatedObject == null) return;
+            if (AssociatedObject == null || !AssociatedObject.IsEffectivelyVisible) return;
 
             double delta = Math.Abs(e.Delta.Y) > 0.00001 ? e.Delta.Y : e.Delta.X;
             if (Math.Abs(delta) < 0.0001) return;
@@ -503,6 +503,7 @@ namespace Quartz.UI.Behaviors
         {
             if (e.KeyModifiers.HasFlag(KeyModifiers.Control))
             {
+                _isPinchActive = false;
                 e.Handled = true;
 
                 if (Math.Abs(e.Delta.Y) < 0.001) return;

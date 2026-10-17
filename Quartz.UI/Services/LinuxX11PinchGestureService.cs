@@ -109,9 +109,15 @@ public static class LinuxX11PinchGestureService
             var opcodeProp = x11Info.GetType().GetProperty("XInputOpcode", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
             _xInputOpcode = (int)(opcodeProp?.GetValue(x11Info) ?? -1);
 
-            // Read pointer device id from XI2Manager if available
+            // Read pointer device id and patch DefaultEventTypes from XI2Manager if available
             try
             {
+                var xi2Type = platformType.Assembly.GetType("Avalonia.X11.XI2Manager");
+                if (xi2Type != null)
+                {
+                    PatchXI2DefaultEventTypes(xi2Type);
+                }
+
                 var xi2Prop = platformType.GetProperty("XI2", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
                 var xi2 = xi2Prop?.GetValue(windowingPlatform);
                 if (xi2 != null)
@@ -130,8 +136,10 @@ public static class LinuxX11PinchGestureService
             // Announce support for XInput 2.4 (needed for pinch gesture events)
             int major = 2, minor = 4;
             int status = XIQueryVersion(_display, ref major, ref minor);
+            System.Diagnostics.Debug.WriteLine($"[Pinch] XIQueryVersion status={status} version={major}.{minor}");
             if (status != 0 || major < 2 || (major == 2 && minor < 4))
             {
+                System.Diagnostics.Debug.WriteLine($"[Pinch] XIQueryVersion failed or version too low, aborting.");
                 return;
             }
 
@@ -151,6 +159,7 @@ public static class LinuxX11PinchGestureService
 
             InstallEventHook(eventDispatcher);
             _initialized = true;
+            System.Diagnostics.Debug.WriteLine($"[Pinch] Hook installed! xiopcode={_xInputOpcode} pointerDevId={_pointerDeviceId} display=0x{_display:X}");
 
             // Select pinch events for any windows that already exist in platform.Windows
             try
@@ -184,6 +193,66 @@ public static class LinuxX11PinchGestureService
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"[LinuxX11Pinch] Init failed: {ex}");
+        }
+    }
+
+    private static void PatchXI2DefaultEventTypes(Type xi2Type)
+    {
+        try
+        {
+            PatchField(xi2Type, "DefaultEventTypes");
+            PatchField(xi2Type, "MultiTouchEventTypes");
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[LinuxX11Pinch] Failed to patch XI2 event types: {ex}");
+        }
+
+        static void PatchField(Type type, string fieldName)
+        {
+            var field = type.GetField(fieldName, BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
+            if (field == null) return;
+
+            if (field.GetValue(null) is not Array currentArr) return;
+
+            var elemType = currentArr.GetType().GetElementType();
+            if (elemType == null) return;
+
+            var existingList = new List<object>();
+            foreach (var item in currentArr)
+            {
+                existingList.Add(item);
+            }
+
+            int[] gestureValues = [27, 28, 29]; // XI_GesturePinchBegin, XI_GesturePinchUpdate, XI_GesturePinchEnd
+            bool modified = false;
+            foreach (var val in gestureValues)
+            {
+                var enumVal = Enum.ToObject(elemType, val);
+                if (!existingList.Contains(enumVal))
+                {
+                    existingList.Add(enumVal);
+                    modified = true;
+                }
+            }
+
+            if (!modified) return;
+
+            var newArr = Array.CreateInstance(elemType, existingList.Count);
+            for (int i = 0; i < existingList.Count; i++)
+            {
+                newArr.SetValue(existingList[i], i);
+            }
+
+            var dm = new DynamicMethod($"Set_{fieldName}", typeof(void), new[] { typeof(object) }, typeof(LinuxX11PinchGestureService).Module, true);
+            var il = dm.GetILGenerator();
+            il.Emit(OpCodes.Ldarg_0);
+            il.Emit(OpCodes.Castclass, field.FieldType);
+            il.Emit(OpCodes.Stsfld, field);
+            il.Emit(OpCodes.Ret);
+
+            var setter = (Action<object>)dm.CreateDelegate(typeof(Action<object>));
+            setter(newArr);
         }
     }
 
@@ -249,7 +318,7 @@ public static class LinuxX11PinchGestureService
     {
         if (window == null) return;
 
-        void OnWindowOpened()
+        void SelectForWindow()
         {
             var handle = window.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
             if (handle != IntPtr.Zero)
@@ -265,20 +334,9 @@ public static class LinuxX11PinchGestureService
             }
         }
 
-        var handle = window.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
-        if (handle != IntPtr.Zero)
-        {
-            lock (_registeredWindows)
-            {
-                _registeredWindows[handle] = window;
-            }
-            if (_display != IntPtr.Zero)
-            {
-                SelectPinchEvents(_display, handle);
-            }
-        }
-
-        window.Opened += (s, e) => OnWindowOpened();
+        SelectForWindow();
+        window.Opened += (s, e) => SelectForWindow();
+        window.Loaded += (s, e) => SelectForWindow();
 
         window.Closed += (s, e) =>
         {
@@ -297,6 +355,8 @@ public static class LinuxX11PinchGestureService
     {
         if (display == IntPtr.Zero || window == IntPtr.Zero)
             return;
+
+        System.Diagnostics.Debug.WriteLine($"[Pinch] SelectPinchEvents: display=0x{display:X} window=0x{window:X}");
 
         try
         {
@@ -351,8 +411,9 @@ public static class LinuxX11PinchGestureService
             }
 
             var masksArray = masksToSet.ToArray();
-            XISelectEvents(display, window, masksArray, masksArray.Length);
+            int result = XISelectEvents(display, window, masksArray, masksArray.Length);
             XFlush(display);
+            System.Diagnostics.Debug.WriteLine($"[Pinch] XISelectEvents result={result} for {masksArray.Length} masks");
 
             foreach (var m in masksArray)
             {
@@ -373,14 +434,21 @@ public static class LinuxX11PinchGestureService
             return InvokePreviousHook(pEvt);
 
         int extension = Marshal.ReadInt32(pEvt, 32);
+        int evtype = Marshal.ReadInt32(pEvt, 36);
+
+        // Log ALL GenericEvents so we can see what arrives (evtype 27/28/29 = pinch)
+        System.Diagnostics.Debug.WriteLine($"[Pinch] GenericEvent type={type} ext={extension} evtype={evtype} xiopcode={_xInputOpcode}");
+
         if (_xInputOpcode > 0 && extension != _xInputOpcode)
             return InvokePreviousHook(pEvt);
 
-        int evtype = Marshal.ReadInt32(pEvt, 36);
         if (evtype < 27 || evtype > 29)
             return InvokePreviousHook(pEvt);
 
+        System.Diagnostics.Debug.WriteLine($"[Pinch] >>> PINCH EVENT evtype={evtype}!");
+
         IntPtr data = Marshal.ReadIntPtr(pEvt, 48);
+        System.Diagnostics.Debug.WriteLine($"[Pinch] data ptr = 0x{data:X}");
         if (data == IntPtr.Zero)
             return InvokePreviousHook(pEvt);
 
@@ -456,46 +524,45 @@ public static class LinuxX11PinchGestureService
         if (scaling <= 0.001) scaling = 1.0;
         Point dipPosition = new Point(eventX / scaling, eventY / scaling);
 
-        var hitElement = window.InputHitTest(dipPosition) as InputElement ?? window;
-
-        if (evtype == 27) // Begin
+        LinuxGestureState state = evtype switch
         {
-            _activeTarget = hitElement;
-            var localPoint = window.TranslatePoint(dipPosition, hitElement) ?? dipPosition;
-            var args = new PinchEventArgs(1.0, localPoint);
-            hitElement.RaiseEvent(args);
+            27 => LinuxGestureState.Begin,
+            28 => LinuxGestureState.Update,
+            _ => LinuxGestureState.End
+        };
 
-            var eventArgs = new LinuxPinchEventArgs(window, dipPosition, 1.0, LinuxGestureState.Begin)
-            {
-                Handled = args.Handled
-            };
-            PinchGesture?.Invoke(null, eventArgs);
-        }
-        else if (evtype == 28) // Update
+        var eventArgs = new LinuxPinchEventArgs(window, dipPosition, scale, state);
+        PinchGesture?.Invoke(null, eventArgs);
+
+        try
         {
-            var target = _activeTarget ?? hitElement;
-            var localPoint = window.TranslatePoint(dipPosition, target) ?? dipPosition;
-            var args = new PinchEventArgs(scale, localPoint);
-            target.RaiseEvent(args);
-
-            var eventArgs = new LinuxPinchEventArgs(window, dipPosition, scale, LinuxGestureState.Update)
+            var hitElement = window.InputHitTest(dipPosition) as InputElement ?? window;
+            if (state == LinuxGestureState.Begin)
             {
-                Handled = args.Handled
-            };
-            PinchGesture?.Invoke(null, eventArgs);
-        }
-        else if (evtype == 29) // End
-        {
-            var target = _activeTarget ?? hitElement;
-            var args = new PinchEndedEventArgs();
-            target.RaiseEvent(args);
-
-            var eventArgs = new LinuxPinchEventArgs(window, dipPosition, scale, LinuxGestureState.End)
+                _activeTarget = hitElement;
+                var localPoint = window.TranslatePoint(dipPosition, hitElement) ?? dipPosition;
+                var args = new PinchEventArgs(1.0, localPoint);
+                hitElement.RaiseEvent(args);
+            }
+            else if (state == LinuxGestureState.Update)
             {
-                Handled = args.Handled
-            };
-            PinchGesture?.Invoke(null, eventArgs);
-            _activeTarget = null;
+                if (_activeTarget != null && !_activeTarget.IsAttachedToVisualTree())
+                {
+                    _activeTarget = null;
+                }
+                var target = _activeTarget ?? hitElement;
+                var localPoint = window.TranslatePoint(dipPosition, target) ?? dipPosition;
+                var args = new PinchEventArgs(scale, localPoint);
+                target.RaiseEvent(args);
+            }
+            else if (state == LinuxGestureState.End)
+            {
+                var target = _activeTarget ?? hitElement;
+                var args = new PinchEndedEventArgs();
+                target.RaiseEvent(args);
+                _activeTarget = null;
+            }
         }
+        catch { }
     }
 }

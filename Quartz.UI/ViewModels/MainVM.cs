@@ -33,6 +33,7 @@ public partial class MainVM : ObservableObject
     [ObservableProperty] private FileStructVM? _draggedFile;
 
     [ObservableProperty] private PanelVM? _activePanel;
+    [ObservableProperty] private FileVM? _activeFile;
 
     public bool IsReadyToDrag { get; set; }
     public double DragStartX { get; set; }
@@ -121,6 +122,7 @@ public partial class MainVM : ObservableObject
     private readonly IFolderDialogService _folderDialogService;
 
     private string? _projectRootDir;
+    public string? ProjectRootDir => _projectRootDir;
 
     public ObservableCollection<FileVM> ProjectErrors { get; } = [];
 
@@ -332,6 +334,7 @@ public partial class MainVM : ObservableObject
         return null;
     }
 
+    [RelayCommand]
     public void OpenFileTab(FileVM file)
     {
         if (file is EditorVM editor)
@@ -339,11 +342,14 @@ public partial class MainVM : ObservableObject
             editor.LoadDocumentIfEmpty();
         }
 
+        file.UpdateBreadcrumbs();
+
         if (file.Panel != null)
         {
             ActivePanel = file.Panel;
             file.Panel.SelectedTab = file;
             ActiveEditor = file as EditorVM;
+            ActiveFile = file;
             return;
         }
 
@@ -363,6 +369,7 @@ public partial class MainVM : ObservableObject
         ActivePanel.SelectedTab = file;
         file.Panel = ActivePanel;
         ActiveEditor = file as EditorVM;
+        ActiveFile = file;
     }
 
     [RelayCommand]
@@ -503,6 +510,36 @@ public partial class MainVM : ObservableObject
     private void UpdateActiveEditor()
     {
         ActiveEditor = ActivePanel?.SelectedTab as EditorVM;
+        ActiveFile = ActivePanel?.SelectedTab;
+        UpdateBreadcrumbs();
+    }
+
+    public void UpdateBreadcrumbs()
+    {
+        ActiveFile?.UpdateBreadcrumbs();
+
+        if (RootNode != null)
+        {
+            UpdateBreadcrumbsRecursive(RootNode);
+        }
+    }
+
+    private void UpdateBreadcrumbsRecursive(LayoutRootVM node)
+    {
+        if (node is PanelVM panel)
+        {
+            foreach (var tab in panel.Tabs)
+            {
+                tab.UpdateBreadcrumbs();
+            }
+        }
+        else if (node is SplitContainerVM container)
+        {
+            foreach (var child in container.Children)
+            {
+                UpdateBreadcrumbsRecursive(child);
+            }
+        }
     }
 
     partial void OnActiveEditorChanged(EditorVM? oldValue, EditorVM? newValue)
@@ -783,6 +820,8 @@ public partial class MainVM : ObservableObject
         // Сбрасываем разметку редактора и вкладки
         RootNode = null;
         ActivePanel = null;
+        ActiveEditor = null;
+        ActiveFile = null;
 
         // 2. Загружаем файловую структуру выбранной директории
         _projectRootDir = directoryPath;

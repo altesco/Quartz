@@ -359,7 +359,7 @@
             </Border>
         </DataTemplate>
 
-        <DataTemplate DataType="vm:EditorVM">
+        <DataTemplate DataType="vm:EditorVM" x:DataType="vm:EditorVM">
             <Grid RowDefinitions="Auto,*" Background="{DynamicResource WindowBackgroundColor}" >
 
                 <Grid.Styles>
@@ -445,12 +445,165 @@
                             Classes="Icon"
                             Content="{LucideIconContent ArrowRight, Size=18}"/>
                     </StackPanel>
-                    <TextBlock
+                    <StackPanel
                         Grid.Column="1"
+                        Orientation="Horizontal"
                         HorizontalAlignment="Center"
-                        Text="some / folder / example.pcby"
-                        FontSize="14"
-                        VerticalAlignment="Center" />
+                        VerticalAlignment="Center"
+                        Spacing="4">
+
+                        <ItemsControl ItemsSource="{Binding BreadcrumbFolders}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal" Spacing="4" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="{x:Type vm:DirectoryVM}" x:DataType="vm:DirectoryVM">
+                                    <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                                        <shadui:SimpleDropdown
+                                            Classes="Ghost Breadcrumb"
+                                            PopupPlacement="BottomEdgeAlignedLeft"
+                                            PopupHorizontalOffset="-12"
+                                            PopupVerticalOffset="-12"
+                                            TriggerContent="{Binding Header}"
+                                            HorizontalAlignment="Center"
+                                            VerticalAlignment="Center">
+                                            <Interaction.Behaviors>
+                                                <beh:BreadcrumbTreeBehavior />
+                                            </Interaction.Behaviors>
+                                            <Grid MaxWidth="450">
+                                                <ScrollViewer
+                                                    HorizontalScrollBarVisibility="Disabled"
+                                                    VerticalScrollBarVisibility="Auto">
+                                                    <TreeView
+                                                        ItemsSource="{Binding Children}"
+                                                        Background="Transparent"
+                                                        BorderThickness="0"
+                                                        Padding="0"
+                                                        ScrollViewer.VerticalScrollBarVisibility="Disabled">
+                                                        <TreeView.Styles>
+                                                            <FluentTheme />
+                                                            <Style Selector="TreeViewItem" x:DataType="vm:FileStructVM">
+                                                                <Setter Property="Padding" Value="4,2" />
+                                                            </Style>
+                                                        </TreeView.Styles>
+                                                <TreeView.DataTemplates>
+                                                    <TreeDataTemplate DataType="{x:Type vm:DirectoryVM}" x:DataType="vm:DirectoryVM" ItemsSource="{Binding Children}">
+                                                        <Grid ColumnDefinitions="Auto,*">
+                                                            <LucideIcon Classes.opened="{Binding $parent[TreeViewItem].IsExpanded}" Size="18">
+                                                                <LucideIcon.Styles>
+                                                                    <Style Selector="LucideIcon">
+                                                                        <Setter Property="Kind" Value="Folder" />
+                                                                    </Style>
+                                                                    <Style Selector="LucideIcon.opened">
+                                                                        <Setter Property="Kind" Value="FolderOpen" />
+                                                                    </Style>
+                                                                </LucideIcon.Styles>
+                                                            </LucideIcon>
+                                                            <TextBlock 
+                                                                Grid.Column="1"
+                                                                Margin="6,0,0,0"
+                                                                VerticalAlignment="Center" 
+                                                                Text="{Binding Header}"
+                                                                TextTrimming="CharacterEllipsis" />
+                                                        </Grid>
+                                                    </TreeDataTemplate>
+
+                                                    <DataTemplate DataType="{x:Type vm:LayerVM}" x:DataType="vm:LayerVM">
+                                                        <Grid ColumnDefinitions="Auto,*">
+                                                            <LucideIcon 
+                                                                Kind="CircuitBoard" 
+                                                                Size="19"
+                                                                Foreground="{DynamicResource IconLayyColor}"/>
+                                                            <TextBlock
+                                                                Grid.Column="1"
+                                                                Margin="6,0,0,0"
+                                                                VerticalAlignment="Center" 
+                                                                Text="{Binding Header}"
+                                                                TextTrimming="CharacterEllipsis"/>
+                                                        </Grid>
+                                                    </DataTemplate>
+
+                                                    <DataTemplate DataType="{x:Type vm:BoardVM}" x:DataType="vm:BoardVM">
+                                                        <Grid ColumnDefinitions="Auto,*">
+                                                            <LucideIcon 
+                                                                Kind="Layers" 
+                                                                Size="18" 
+                                                                Foreground="{DynamicResource IconPcbyColor}" />
+                                                            <TextBlock
+                                                                Grid.Column="1"
+                                                                Margin="6,0,0,0"
+                                                                VerticalAlignment="Center" 
+                                                                Text="{Binding Header}"
+                                                                TextTrimming="CharacterEllipsis" />
+                                                        </Grid>
+                                                    </DataTemplate>
+
+                                                    <DataTemplate DataType="{x:Type vm:StylesFileVM}" x:DataType="vm:StylesFileVM">
+                                                        <Grid ColumnDefinitions="Auto,*">
+                                                            <LucideIcon 
+                                                                Kind="PencilSparkles" 
+                                                                Size="18" 
+                                                                Foreground="{DynamicResource IconStlyColor}" />
+                                                            <TextBlock
+                                                                Grid.Column="1"
+                                                                Margin="6,0,0,0"
+                                                                VerticalAlignment="Center" 
+                                                                Text="{Binding Header}"
+                                                                TextTrimming="CharacterEllipsis" />
+                                                        </Grid>
+                                                    </DataTemplate>
+
+                                                    <DataTemplate DataType="{x:Type vm:PlainFileVM}" x:DataType="vm:PlainFileVM">
+                                                        <Grid ColumnDefinitions="Auto,*">
+                                                            <LucideIcon 
+                                                                Kind="File" 
+                                                                Size="18" 
+                                                                Foreground="{DynamicResource MutedColor}" />
+                                                            <TextBlock
+                                                                Grid.Column="1"
+                                                                Margin="6,0,0,0"
+                                                                VerticalAlignment="Center" 
+                                                                Text="{Binding Header}"
+                                                                TextTrimming="CharacterEllipsis" />
+                                                        </Grid>
+                                                    </DataTemplate>
+
+                                                    <DataTemplate DataType="{x:Type vm:FileVM}" x:DataType="vm:FileVM">
+                                                        <Grid ColumnDefinitions="Auto,*">
+                                                            <LucideIcon 
+                                                                Kind="File" 
+                                                                Size="18" 
+                                                                Foreground="{DynamicResource MutedColor}" />
+                                                            <TextBlock
+                                                                Grid.Column="1"
+                                                                Margin="6,0,0,0"
+                                                                VerticalAlignment="Center" 
+                                                                Text="{Binding Header}"
+                                                                TextTrimming="CharacterEllipsis" />
+                                                        </Grid>
+                                                    </DataTemplate>
+                                                </TreeView.DataTemplates>
+                                            </TreeView>
+                                        </ScrollViewer>
+                                    </Grid>
+                                </shadui:SimpleDropdown>
+
+                                        <TextBlock
+                                            Text="/"
+                                            Foreground="{DynamicResource MutedColor}"
+                                            VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <Button
+                            Classes="Ghost"
+                            Content="{Binding Header}"
+                            VerticalAlignment="Center" />
+                    </StackPanel>
                     <Button
                         Grid.Column="2"
                         Classes="Icon"
@@ -1095,7 +1248,7 @@
             Classes="overlay-splitter"
             IsVisible="{Binding IsHorizontalSplitterVisible}" />
 
-        <Canvas Grid.Column="0" Grid.Row="0" Grid.ColumnSpan="3" Grid.RowSpan="3">
+        <Canvas Grid.Column="0" Grid.Row="0" Grid.ColumnSpan="3" Grid.RowSpan="3" IsHitTestVisible="False">
             <Border
                 Canvas.Left="{Binding FakeFileX}"
                 Canvas.Top="{Binding FakeFileY}"

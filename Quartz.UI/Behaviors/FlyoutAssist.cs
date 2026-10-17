@@ -1,3 +1,4 @@
+using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
@@ -39,8 +40,16 @@ namespace Quartz.UI.Behaviors
 
         private static void ApplyOffset(Control element)
         {
-            var popup = element.Parent as Popup ?? element.FindAncestorOfType<Popup>();
-            if (popup == null) return;
+            var popup = element as Popup
+                        ?? element.Parent as Popup
+                        ?? element.FindAncestorOfType<Popup>()
+                        ?? (element as Visual)?.FindDescendantOfType<Popup>();
+
+            if (popup == null)
+            {
+                element.Loaded += (s, ev) => ApplyOffset(element);
+                return;
+            }
 
             popup.Opened -= OnPopupOpened;
             popup.Opened += OnPopupOpened;
@@ -50,9 +59,10 @@ namespace Quartz.UI.Behaviors
 
         private static void OnPopupOpened(object? sender, System.EventArgs e)
         {
-            if (sender is Popup popup && popup.Child is Control element)
+            if (sender is Popup popup)
             {
-                ApplyPopupOffset(element, popup);
+                var child = popup.Child as Control ?? popup;
+                ApplyPopupOffset(child, popup);
             }
         }
 
@@ -148,14 +158,47 @@ namespace Quartz.UI.Behaviors
                 return;
             }
 
+            double? hOffset = null;
+            double? vOffset = null;
+
             if (element.IsSet(HorizontalOffsetProperty))
+                hOffset = GetHorizontalOffset(element);
+            else if (popup.IsSet(HorizontalOffsetProperty))
+                hOffset = GetHorizontalOffset(popup);
+            else if (popup.PlacementTarget is Control target && target.IsSet(HorizontalOffsetProperty))
+                hOffset = GetHorizontalOffset(target);
+            else if (popup.FindAncestorOfType<Control>() is Control ancestor && ancestor.IsSet(HorizontalOffsetProperty))
+                hOffset = GetHorizontalOffset(ancestor);
+            else
             {
-                popup.HorizontalOffset = GetHorizontalOffset(element);
+                var desc = (element as Visual)?.GetVisualDescendants().OfType<Control>().FirstOrDefault(c => c.IsSet(HorizontalOffsetProperty));
+                if (desc != null)
+                    hOffset = GetHorizontalOffset(desc);
             }
 
             if (element.IsSet(VerticalOffsetProperty))
+                vOffset = GetVerticalOffset(element);
+            else if (popup.IsSet(VerticalOffsetProperty))
+                vOffset = GetVerticalOffset(popup);
+            else if (popup.PlacementTarget is Control target && target.IsSet(VerticalOffsetProperty))
+                vOffset = GetVerticalOffset(target);
+            else if (popup.FindAncestorOfType<Control>() is Control ancestor && ancestor.IsSet(VerticalOffsetProperty))
+                vOffset = GetVerticalOffset(ancestor);
+            else
             {
-                popup.VerticalOffset = GetVerticalOffset(element);
+                var desc = (element as Visual)?.GetVisualDescendants().OfType<Control>().FirstOrDefault(c => c.IsSet(VerticalOffsetProperty));
+                if (desc != null)
+                    vOffset = GetVerticalOffset(desc);
+            }
+
+            if (hOffset.HasValue)
+            {
+                popup.HorizontalOffset = hOffset.Value;
+            }
+
+            if (vOffset.HasValue)
+            {
+                popup.VerticalOffset = vOffset.Value;
             }
         }
     }

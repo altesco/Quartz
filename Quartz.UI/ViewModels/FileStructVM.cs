@@ -31,6 +31,15 @@ public abstract partial class FileStructVM : ObservableObject
     public DirectoryVM? Parent { get; set; }
 
     [RelayCommand]
+    public void OpenFile()
+    {
+        if (this is FileVM file)
+        {
+            MainVM.OpenFileTab(file);
+        }
+    }
+
+    [RelayCommand]
     protected void TapStart(PointerPressedEventArgs? e)
     {
         if (e is null)
@@ -153,6 +162,8 @@ public abstract partial class FileStructVM : ObservableObject
                 targetDir.Children.Move(oldIndex: currentIndex, newIndex: currentIndex - 1);
                 currentIndex--;
             }
+
+            MainVM.UpdateBreadcrumbs();
         }
 
         MainVM.ResetDragStatus();
