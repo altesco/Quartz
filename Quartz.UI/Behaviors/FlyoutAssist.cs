@@ -1,7 +1,9 @@
+using System;
 using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
+using Avalonia.LogicalTree;
 using Avalonia.VisualTree;
 
 namespace Quartz.UI.Behaviors
@@ -26,7 +28,81 @@ namespace Quartz.UI.Behaviors
         {
             HorizontalOffsetProperty.Changed.AddClassHandler<Control>(OnOffsetChanged);
             VerticalOffsetProperty.Changed.AddClassHandler<Control>(OnOffsetChanged);
-            Control.LoadedEvent.AddClassHandler<ToolTip>((tip, _) => ApplyOffset(tip));
+
+            // Обработчики для мгновенной настройки Popup тултипа ДО первого его открытия:
+            Popup.ChildProperty.Changed.AddClassHandler<Popup>(OnPopupChildChanged);
+            Popup.PlacementTargetProperty.Changed.AddClassHandler<Popup>(OnPopupPlacementTargetChanged);
+            Popup.IsOpenProperty.Changed.AddClassHandler<Popup>(OnPopupIsOpenChanged);
+            Control.LoadedEvent.AddClassHandler<ToolTip>((tip, _) => OnToolTipLoaded(tip));
+        }
+
+        private static void OnPopupChildChanged(Popup popup, AvaloniaPropertyChangedEventArgs e)
+        {
+            if (e.NewValue is ToolTip tip || popup.Child is ToolTip)
+            {
+                ConfigureToolTipPopup(popup, (e.NewValue as ToolTip) ?? (popup.Child as ToolTip));
+            }
+        }
+
+        private static void OnPopupPlacementTargetChanged(Popup popup, AvaloniaPropertyChangedEventArgs e)
+        {
+            if (popup.Child is ToolTip tip)
+            {
+                ConfigureToolTipPopup(popup, tip);
+            }
+        }
+
+        private static void OnPopupIsOpenChanged(Popup popup, AvaloniaPropertyChangedEventArgs e)
+        {
+            if (e.NewValue is true && popup.Child is ToolTip tip)
+            {
+                ConfigureToolTipPopup(popup, tip);
+            }
+        }
+
+        private static void OnToolTipLoaded(ToolTip tip)
+        {
+            tip.IsHitTestVisible = false;
+            var popup = FindPopupFromToolTip(tip);
+            if (popup != null)
+            {
+                ConfigureToolTipPopup(popup, tip);
+            }
+        }
+
+        private static Popup? FindPopupFromToolTip(ToolTip tip)
+        {
+            if (tip.Parent is Popup p1) return p1;
+            if (((ILogical)tip).LogicalParent is Popup p2) return p2;
+            if (tip.Parent is PopupRoot pr && pr.Parent is Popup p3) return p3;
+            if (TopLevel.GetTopLevel(tip) is PopupRoot pr2 && pr2.Parent is Popup p4) return p4;
+            return tip.FindLogicalAncestorOfType<Popup>() ?? tip.FindAncestorOfType<Popup>();
+        }
+
+        public static void ConfigureToolTipPopup(Popup popup, ToolTip? tip = null)
+        {
+            tip ??= popup.Child as ToolTip;
+
+            // Принудительно включаем OverlayLayer для ToolTip ВСЕГДА ДО первого открытия!
+            // Это предотвращает создание отдельного нативного окна X11/Wayland под курсором,
+            // из-за которого кнопка теряла ховер (PointerLeave) и тултип сразу закрывался при первом показе.
+            popup.ShouldUseOverlayLayer = true;
+            popup.IsHitTestVisible = false;
+            popup.OverlayDismissEventPassThrough = true;
+
+            if (tip != null)
+            {
+                tip.IsHitTestVisible = false;
+            }
+
+            if (popup.PlacementTarget is Control target)
+            {
+                popup.OverlayInputPassThroughElement = target;
+                ApplyToolTipOffsets(popup, target);
+            }
+
+            popup.Opened -= OnPopupOpened;
+            popup.Opened += OnPopupOpened;
         }
 
         private static void OnOffsetChanged(Control element, AvaloniaPropertyChangedEventArgs e)
@@ -61,6 +137,10 @@ namespace Quartz.UI.Behaviors
         {
             if (sender is Popup popup)
             {
+                if (popup.Child is ToolTip tip)
+                {
+                    ConfigureToolTipPopup(popup, tip);
+                }
                 var child = popup.Child as Control ?? popup;
                 ApplyPopupOffset(child, popup);
             }
@@ -68,93 +148,9 @@ namespace Quartz.UI.Behaviors
 
         private static void ApplyPopupOffset(Control element, Popup popup)
         {
-            if (element is ToolTip)
+            if (element is ToolTip tip)
             {
-                var target = popup.PlacementTarget as Control;
-
-                if (target != null && target.IsSet(ToolTip.VerticalOffsetProperty))
-                {
-                    popup.VerticalOffset = ToolTip.GetVerticalOffset(target);
-                }
-                else
-                {
-                    PlacementMode placement = PlacementMode.Bottom;
-
-                    if (target != null && target.IsSet(ToolTip.PlacementProperty))
-                    {
-                        placement = ToolTip.GetPlacement(target);
-                    }
-                    else if (popup.Placement != PlacementMode.Pointer)
-                    {
-                        placement = popup.Placement;
-                    }
-
-                    switch (placement)
-                    {
-                        case PlacementMode.Right:
-                        case PlacementMode.RightEdgeAlignedTop:
-                        case PlacementMode.RightEdgeAlignedBottom:
-                            popup.VerticalOffset = -6;
-                            break;
-
-                        case PlacementMode.Left:
-                        case PlacementMode.LeftEdgeAlignedTop:
-                        case PlacementMode.LeftEdgeAlignedBottom:
-                            popup.VerticalOffset = -6;
-                            break;
-
-                        case PlacementMode.Top:
-                        case PlacementMode.TopEdgeAlignedLeft:
-                        case PlacementMode.TopEdgeAlignedRight:
-                            popup.VerticalOffset = 12;
-                            break;
-
-                        case PlacementMode.Bottom:
-                        case PlacementMode.BottomEdgeAlignedLeft:
-                        case PlacementMode.BottomEdgeAlignedRight:
-                        default:
-                            popup.VerticalOffset = -12;
-                            break;
-                    }
-                }
-
-                if (target != null && target.IsSet(ToolTip.HorizontalOffsetProperty))
-                {
-                    popup.HorizontalOffset = ToolTip.GetHorizontalOffset(target);
-                }
-                else
-                {
-                    PlacementMode placement = PlacementMode.Bottom;
-
-                    if (target != null && target.IsSet(ToolTip.PlacementProperty))
-                    {
-                        placement = ToolTip.GetPlacement(target);
-                    }
-                    else if (popup.Placement != PlacementMode.Pointer)
-                    {
-                        placement = popup.Placement;
-                    }
-
-                    switch (placement)
-                    {
-                        case PlacementMode.Right:
-                        case PlacementMode.RightEdgeAlignedTop:
-                        case PlacementMode.RightEdgeAlignedBottom:
-                            popup.HorizontalOffset = -6;
-                            break;
-
-                        case PlacementMode.Left:
-                        case PlacementMode.LeftEdgeAlignedTop:
-                        case PlacementMode.LeftEdgeAlignedBottom:
-                            popup.HorizontalOffset = 6;
-                            break;
-
-                        default:
-                            popup.HorizontalOffset = 0;
-                            break;
-                    }
-                }
-
+                ConfigureToolTipPopup(popup, tip);
                 return;
             }
 
@@ -199,6 +195,92 @@ namespace Quartz.UI.Behaviors
             if (vOffset.HasValue)
             {
                 popup.VerticalOffset = vOffset.Value;
+            }
+        }
+
+        private static void ApplyToolTipOffsets(Popup popup, Control target)
+        {
+            if (target.IsSet(ToolTip.VerticalOffsetProperty))
+            {
+                popup.VerticalOffset = ToolTip.GetVerticalOffset(target);
+            }
+            else
+            {
+                PlacementMode placement = PlacementMode.Bottom;
+
+                if (target.IsSet(ToolTip.PlacementProperty))
+                {
+                    placement = ToolTip.GetPlacement(target);
+                }
+                else if (popup.Placement != PlacementMode.Pointer)
+                {
+                    placement = popup.Placement;
+                }
+
+                switch (placement)
+                {
+                    case PlacementMode.Right:
+                    case PlacementMode.RightEdgeAlignedTop:
+                    case PlacementMode.RightEdgeAlignedBottom:
+                        popup.VerticalOffset = -6;
+                        break;
+
+                    case PlacementMode.Left:
+                    case PlacementMode.LeftEdgeAlignedTop:
+                    case PlacementMode.LeftEdgeAlignedBottom:
+                        popup.VerticalOffset = -6;
+                        break;
+
+                    case PlacementMode.Top:
+                    case PlacementMode.TopEdgeAlignedLeft:
+                    case PlacementMode.TopEdgeAlignedRight:
+                        popup.VerticalOffset = 12;
+                        break;
+
+                    case PlacementMode.Bottom:
+                    case PlacementMode.BottomEdgeAlignedLeft:
+                    case PlacementMode.BottomEdgeAlignedRight:
+                    default:
+                        popup.VerticalOffset = -12;
+                        break;
+                }
+            }
+
+            if (target.IsSet(ToolTip.HorizontalOffsetProperty))
+            {
+                popup.HorizontalOffset = ToolTip.GetHorizontalOffset(target);
+            }
+            else
+            {
+                PlacementMode placement = PlacementMode.Bottom;
+
+                if (target.IsSet(ToolTip.PlacementProperty))
+                {
+                    placement = ToolTip.GetPlacement(target);
+                }
+                else if (popup.Placement != PlacementMode.Pointer)
+                {
+                    placement = popup.Placement;
+                }
+
+                switch (placement)
+                {
+                    case PlacementMode.Right:
+                    case PlacementMode.RightEdgeAlignedTop:
+                    case PlacementMode.RightEdgeAlignedBottom:
+                        popup.HorizontalOffset = -6;
+                        break;
+
+                    case PlacementMode.Left:
+                    case PlacementMode.LeftEdgeAlignedTop:
+                    case PlacementMode.LeftEdgeAlignedBottom:
+                        popup.HorizontalOffset = 6;
+                        break;
+
+                    default:
+                        popup.HorizontalOffset = 0;
+                        break;
+                }
             }
         }
     }

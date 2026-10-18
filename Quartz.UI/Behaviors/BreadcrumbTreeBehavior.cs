@@ -9,6 +9,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.LogicalTree;
 using Avalonia.Media;
+using Avalonia.Styling;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Avalonia.Xaml.Interactivity;
@@ -20,6 +21,8 @@ namespace Quartz.UI.Behaviors;
 
 public class BreadcrumbTreeBehavior : Behavior<Control>
 {
+    public Thickness? PopupPadding { get; set; }
+
     private Point _pressedPoint;
     private bool _pressedOnChevron;
     private Window? _window;
@@ -124,15 +127,47 @@ public class BreadcrumbTreeBehavior : Behavior<Control>
         if (_window != null)
         {
             _windowBoundsSub = _window.GetObservable(Visual.BoundsProperty).Subscribe(OnWindowBoundsChanged);
+            _window.ActualThemeVariantChanged += OnThemeChanged;
             UpdateConstraints();
+        }
+
+        var dropdown = GetDropdown();
+        if (dropdown != null)
+        {
+            dropdown.ActualThemeVariantChanged += OnThemeChanged;
         }
     }
 
     private void TeardownWindowSubscription()
     {
+        if (_window != null)
+        {
+            _window.ActualThemeVariantChanged -= OnThemeChanged;
+        }
+
+        var dropdown = GetDropdown();
+        if (dropdown != null)
+        {
+            dropdown.ActualThemeVariantChanged -= OnThemeChanged;
+        }
+
         _windowBoundsSub?.Dispose();
         _windowBoundsSub = null;
         _window = null;
+    }
+
+    private void OnThemeChanged(object? sender, EventArgs e)
+    {
+        var targetTheme = GetCurrentThemeVariant();
+        var border = FindPopupBorder();
+        if (border != null)
+        {
+            if (TopLevel.GetTopLevel(border) is TopLevel tl)
+            {
+                tl.RequestedThemeVariant = targetTheme;
+            }
+            UpdateBorderColors(border);
+        }
     }
 
     private void OnWindowBoundsChanged(Rect bounds)
@@ -192,11 +227,43 @@ public class BreadcrumbTreeBehavior : Behavior<Control>
         }
     }
 
+    private ThemeVariant GetCurrentThemeVariant()
+    {
+        var dropdown = GetDropdown();
+        if (dropdown != null && dropdown.ActualThemeVariant != ThemeVariant.Default)
+            return dropdown.ActualThemeVariant;
+
+        var window = _window ?? FindWindow();
+        if (window != null && window.ActualThemeVariant != ThemeVariant.Default)
+            return window.ActualThemeVariant;
+
+        if (Avalonia.Application.Current != null && Avalonia.Application.Current.ActualThemeVariant != ThemeVariant.Default)
+            return Avalonia.Application.Current.ActualThemeVariant;
+
+        return ThemeVariant.Dark;
+    }
+
     private void ApplyPopupStyling()
     {
+        var targetTheme = GetCurrentThemeVariant();
+
+        var popup = FindPopup();
+        if (popup != null)
+        {
+            popup.HorizontalOffset = -12;
+            popup.VerticalOffset = -12;
+            popup.Placement = PlacementMode.BottomEdgeAlignedLeft;
+            popup.PlacementConstraintAdjustment = PopupPositionerConstraintAdjustment.SlideY | PopupPositionerConstraintAdjustment.FlipY;
+        }
+
         var border = FindPopupBorder();
         if (border != null)
         {
+            if (TopLevel.GetTopLevel(border) is TopLevel tl)
+            {
+                tl.RequestedThemeVariant = targetTheme;
+            }
+
             if (_styledBorder != null && _styledBorder != border)
             {
                 _styledBorder.ActualThemeVariantChanged -= OnBorderThemeChanged;
@@ -220,8 +287,11 @@ public class BreadcrumbTreeBehavior : Behavior<Control>
                 border.CornerRadius = new CornerRadius(4);
             }
 
-            // Padding 8,4 matching context menu / tooltip requirement
-            border.Padding = new Thickness(8, 4);
+            // Only override padding if explicitly configured in behavior; otherwise respect style/XAML
+            if (PopupPadding.HasValue)
+            {
+                border.Padding = PopupPadding.Value;
+            }
 
             // Zero out any template margins on intermediate containers
             if (border.Child is StackPanel sp)
@@ -240,15 +310,6 @@ public class BreadcrumbTreeBehavior : Behavior<Control>
 
             border.ActualThemeVariantChanged -= OnBorderThemeChanged;
             border.ActualThemeVariantChanged += OnBorderThemeChanged;
-        }
-
-        var popup = FindPopup();
-        if (popup != null)
-        {
-            popup.HorizontalOffset = -12;
-            popup.VerticalOffset = -12;
-            popup.Placement = PlacementMode.BottomEdgeAlignedLeft;
-            popup.PlacementConstraintAdjustment = PopupPositionerConstraintAdjustment.SlideY | PopupPositionerConstraintAdjustment.FlipY;
         }
 
         var dropdown = GetDropdown();
@@ -270,22 +331,28 @@ public class BreadcrumbTreeBehavior : Behavior<Control>
 
     private void UpdateBorderColors(Border border)
     {
-        var borderBrush = ResolveBrush(border, "BorderColor60");
+        var targetTheme = GetCurrentThemeVariant();
+        if (TopLevel.GetTopLevel(border) is TopLevel tl)
+        {
+            tl.RequestedThemeVariant = targetTheme;
+        }
+
+        var borderBrush = ResolveBrush(border, "BorderColor60", targetTheme);
         if (borderBrush != null)
         {
             border.BorderBrush = borderBrush;
         }
 
-        var cardBgBrush = ResolveBrush(border, "CardBackgroundColor");
+        var cardBgBrush = ResolveBrush(border, "CardBackgroundColor", targetTheme);
         if (cardBgBrush != null)
         {
             border.Background = cardBgBrush;
         }
     }
 
-    private static IBrush? ResolveBrush(IResourceHost host, string key)
+    private static IBrush? ResolveBrush(IResourceHost host, string key, ThemeVariant targetTheme)
     {
-        if (host.TryFindResource(key, out var resource))
+        if (host is IResourceNode node && node.TryGetResource(key, targetTheme, out var resource))
         {
             if (resource is IBrush brush)
                 return brush;
@@ -293,12 +360,24 @@ public class BreadcrumbTreeBehavior : Behavior<Control>
                 return new SolidColorBrush(color);
         }
 
-        if (Avalonia.Application.Current != null && Avalonia.Application.Current.TryFindResource(key, out var appRes))
+        if (Avalonia.Application.Current is IResourceNode appNode && appNode.TryGetResource(key, targetTheme, out var appRes))
         {
             if (appRes is IBrush appBrush)
                 return appBrush;
             if (appRes is Color appColor)
                 return new SolidColorBrush(appColor);
+        }
+
+        if (host.TryFindResource(key, out var fallback))
+        {
+            if (fallback is IBrush b) return b;
+            if (fallback is Color c) return new SolidColorBrush(c);
+        }
+
+        if (Avalonia.Application.Current != null && Avalonia.Application.Current.TryFindResource(key, out var globalFallback))
+        {
+            if (globalFallback is IBrush gb) return gb;
+            if (globalFallback is Color gc) return new SolidColorBrush(gc);
         }
 
         return null;
@@ -326,14 +405,20 @@ public class BreadcrumbTreeBehavior : Behavior<Control>
         // This ensures the popup stays anchored at the bottom-left of the trigger and does not shift left.
         double maxAllowedWidth = Math.Max(100, windowWidth - targetLeft - 60);
         double menuWidth = Math.Min(450, maxAllowedWidth);
-        double contentWidth = Math.Max(50, menuWidth - 18); // 18px = 16px padding + 2px border
+
+        var border = FindPopupBorder();
+        double hPad = border != null ? border.Padding.Left + border.Padding.Right : 8;
+        double vPad = border != null ? border.Padding.Top + border.Padding.Bottom : 8;
+        double bThickX = border != null ? border.BorderThickness.Left + border.BorderThickness.Right : 2;
+        double bThickY = border != null ? border.BorderThickness.Top + border.BorderThickness.Bottom : 2;
+        double contentWidth = Math.Max(50, menuWidth - hPad - bThickX);
 
         // Height constraint: 60px margin from bottom of the window, capped at 450
         double maxAllowedHeight = targetBottom > 0
             ? Math.Max(100, windowHeight - targetBottom - 60)
             : Math.Max(100, windowHeight - 120);
         double menuHeight = Math.Min(450, maxAllowedHeight);
-        double contentHeight = Math.Max(50, menuHeight - 10); // 10px = 8px padding + 2px border
+        double contentHeight = Math.Max(50, menuHeight - vPad - bThickY);
 
         // Set popup width and placement properties on SimpleDropdown
         dropdown.PopupWidth = menuWidth + 24; // 24px = 12px margin on each side for box shadow
@@ -351,7 +436,7 @@ public class BreadcrumbTreeBehavior : Behavior<Control>
             popup.PlacementConstraintAdjustment = PopupPositionerConstraintAdjustment.SlideY | PopupPositionerConstraintAdjustment.FlipY;
         }
 
-        var border = FindPopupBorder();
+        border ??= FindPopupBorder();
         if (border != null)
         {
             border.Width = menuWidth;
@@ -470,6 +555,18 @@ public class BreadcrumbTreeBehavior : Behavior<Control>
     private void HookTreeView()
     {
         var treeView = FindTreeView();
+        if (treeView != null && treeView.ItemContainerTheme == null)
+        {
+            if (treeView.TryFindResource("QuartzTreeViewItemTheme", out var themeObj) && themeObj is ControlTheme ct)
+            {
+                treeView.ItemContainerTheme = ct;
+            }
+            else if (Avalonia.Application.Current != null && Avalonia.Application.Current.TryFindResource("QuartzTreeViewItemTheme", out var appThemeObj) && appThemeObj is ControlTheme appCt)
+            {
+                treeView.ItemContainerTheme = appCt;
+            }
+        }
+
         if (treeView == null || treeView == _hookedTreeView) return;
 
         UnhookTreeView();

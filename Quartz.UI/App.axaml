@@ -4,12 +4,135 @@
              xmlns:themes="clr-namespace:ShadUI;assembly=ShadUI"
              xmlns:shadui="clr-namespace:ShadUI;assembly=ShadUI"
              xmlns:local="clr-namespace:Quartz.UI.Behaviors"
+             xmlns:converters="using:Avalonia.Controls.Converters"
              RequestedThemeVariant="Default">
 
     <Application.Resources>
         <ResourceDictionary>
-            <x:Double x:Key="TreeViewItemIndent">5</x:Double>
+            <x:Double x:Key="TreeViewItemIndent">24</x:Double>
+            <x:Double x:Key="TreeViewItemExpandCollapseChevronSize">16</x:Double>
+            <Thickness x:Key="TreeViewItemExpandCollapseChevronMargin">0</Thickness>
             <CornerRadius x:Key="SmCornerRadius">4</CornerRadius>
+
+            <!-- ДАЕМ УНИКАЛЬНЫЙ КЛЮЧ: QuartzTreeViewItemTheme -->
+            <ControlTheme x:Key="QuartzTreeViewItemTheme" TargetType="TreeViewItem">
+                <Setter Property="Padding" Value="6,0" />
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderBrush" Value="Transparent" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="Foreground" Value="{DynamicResource ForegroundColor}" />
+                <Setter Property="MinHeight" Value="24" />
+                <Setter Property="FontSize" Value="14" />
+                <Setter Property="CornerRadius" Value="{DynamicResource SmCornerRadius}" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+                <Setter Property="Template">
+                    <ControlTemplate>
+                        <StackPanel>
+                            <Border Name="PART_LayoutRoot"
+                                    Classes="TreeViewItemLayoutRoot"
+                                    Focusable="True"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="{TemplateBinding CornerRadius}"
+                                    MinHeight="{TemplateBinding MinHeight}"
+                                    Padding="{TemplateBinding Padding}"
+                                    Margin="0,1"
+                                    VerticalAlignment="Center"
+                                    ClipToBounds="False"
+                                    TemplatedControl.IsTemplateFocusTarget="True">
+                                <Panel ClipToBounds="False">
+                                    <local:TreeIndentGuide />
+                                    <Grid Name="PART_Header"
+                                          ColumnDefinitions="Auto, *"
+                                          MinHeight="24"
+                                          VerticalAlignment="Center">
+                                        <Grid.Margin>
+                                            <MultiBinding Converter="{x:Static converters:TreeViewItemIndentConverter.Instance}">
+                                                <Binding Path="Level" RelativeSource="{RelativeSource TemplatedParent}" />
+                                                <DynamicResource ResourceKey="TreeViewItemIndent" />
+                                            </MultiBinding>
+                                        </Grid.Margin>
+                                        <Panel Name="PART_ExpandCollapseChevronContainer"
+                                               Margin="0"
+                                               Width="18"
+                                               Height="24"
+                                               VerticalAlignment="Center">
+                                            <ToggleButton Name="PART_ExpandCollapseChevron"
+                                                          Width="16"
+                                                          Height="16"
+                                                          MinWidth="0"
+                                                          MinHeight="0"
+                                                          Margin="0"
+                                                          Padding="0"
+                                                          Cursor="Hand"
+                                                          Focusable="False"
+                                                          VerticalAlignment="Center"
+                                                          HorizontalAlignment="Center"
+                                                          IsChecked="{TemplateBinding IsExpanded, Mode=TwoWay}">
+                                                <ToggleButton.Template>
+                                                    <ControlTemplate TargetType="ToggleButton">
+                                                        <Panel Background="Transparent" x:CompileBindings="False">
+                                                            <LucideIcon HorizontalAlignment="Center"
+                                                                        VerticalAlignment="Center"
+                                                                        Kind="ChevronRight"
+                                                                        Size="16"
+                                                                        Foreground="{DynamicResource MutedColor}"
+                                                                        IsVisible="{Binding !IsChecked, RelativeSource={RelativeSource TemplatedParent}}" />
+                                                            <LucideIcon HorizontalAlignment="Center"
+                                                                        VerticalAlignment="Center"
+                                                                        Kind="ChevronDown"
+                                                                        Size="16"
+                                                                        Foreground="{DynamicResource MutedColor}"
+                                                                        IsVisible="{Binding IsChecked, RelativeSource={RelativeSource TemplatedParent}}" />
+                                                        </Panel>
+                                                    </ControlTemplate>
+                                                </ToggleButton.Template>
+                                            </ToggleButton>
+                                        </Panel>
+                                        <ContentPresenter Name="PART_HeaderPresenter"
+                                                          Grid.Column="1"
+                                                          Focusable="False"
+                                                          Background="Transparent"
+                                                          Content="{TemplateBinding Header}"
+                                                          ContentTemplate="{TemplateBinding HeaderTemplate}"
+                                                          HorizontalAlignment="{TemplateBinding HorizontalAlignment}"
+                                                          VerticalAlignment="Center"
+                                                          Margin="4,0,0,0" />
+                                    </Grid>
+                                </Panel>
+                            </Border>
+                            <ItemsPresenter Name="PART_ItemsPresenter"
+                                            IsVisible="{TemplateBinding IsExpanded}"
+                                            ItemsPanel="{TemplateBinding ItemsPanel}" />
+                        </StackPanel>
+                    </ControlTemplate>
+                </Setter>
+
+                <!-- Наведение курсора -->
+                <Style Selector="^ /template/ Border#PART_LayoutRoot:pointerover">
+                    <Setter Property="Background" Value="{DynamicResource GhostHoverColor}" />
+                </Style>
+
+                <!-- Выделенный элемент -->
+                <Style Selector="^:selected /template/ Border#PART_LayoutRoot">
+                    <Setter Property="Background" Value="{DynamicResource GhostColor}" />
+                </Style>
+
+                <Style Selector="^:selected /template/ Border#PART_LayoutRoot:pointerover">
+                    <Setter Property="Background" Value="{DynamicResource GhostHoverColor}" />
+                </Style>
+
+                <!-- Пустой узел (файл): скрываем стрелку, оставляем контейнер 18px для выравнивания -->
+                <Style Selector="^:empty /template/ ToggleButton#PART_ExpandCollapseChevron">
+                    <Setter Property="IsVisible" Value="False" />
+                </Style>
+                <Style Selector="^:empty /template/ Panel#PART_ExpandCollapseChevronContainer">
+                    <Setter Property="Width" Value="18" />
+                </Style>
+            </ControlTheme>
+
+            <ControlTheme x:Key="{x:Type TreeViewItem}" TargetType="TreeViewItem" BasedOn="{StaticResource QuartzTreeViewItemTheme}" />
 
             <ControlTheme x:Key="ShadMenuItemTheme" TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}" />
             <ControlTheme x:Key="ShadFlyoutPresenterTheme" TargetType="MenuFlyoutPresenter" BasedOn="{StaticResource {x:Type MenuFlyoutPresenter}}" />
@@ -80,26 +203,31 @@
                 <Setter Property="Padding" Value="8,4" />
                 <Setter Property="FontSize" Value="12" />
                 <Setter Property="Foreground" Value="{DynamicResource ForegroundColor}" />
+                <Setter Property="IsHitTestVisible" Value="False" />
 
                 <!-- компенсация теней настраивается через FlyoutAssist с учетом Placement -->
                 <Setter Property="local:FlyoutAssist.VerticalOffset" Value="-12" />
 
                 <Setter Property="Template">
                     <ControlTemplate TargetType="ToolTip">
-                        <!-- Отступ 12 во все стороны для красивой тени -->
-                        <Border Name="LayoutRoot"
-                                Background="{DynamicResource CardBackgroundColor}"
-                                BorderBrush="{DynamicResource BorderColor60}"
-                                BorderThickness="1"
-                                CornerRadius="{DynamicResource SmCornerRadius}"
-                                Padding="{TemplateBinding Padding}"
-                                Margin="12"
-                                BoxShadow="0 6 12 0 #40000000">
-                            <ContentPresenter Name="PART_ContentPresenter"
-                                              Content="{TemplateBinding Content}"
-                                              ContentTemplate="{TemplateBinding ContentTemplate}"
-                                              RecognizesAccessKey="True" />
-                        </Border>
+                        <Panel Background="Transparent" IsHitTestVisible="False">
+                            <!-- Отступ 12 во все стороны для красивой тени -->
+                            <Border Name="LayoutRoot"
+                                    IsHitTestVisible="False"
+                                    Background="{DynamicResource CardBackgroundColor}"
+                                    BorderBrush="{DynamicResource BorderColor60}"
+                                    BorderThickness="1"
+                                    CornerRadius="{DynamicResource SmCornerRadius}"
+                                    Padding="{TemplateBinding Padding}"
+                                    Margin="12"
+                                    BoxShadow="0 6 12 0 #40000000">
+                                <ContentPresenter Name="PART_ContentPresenter"
+                                                  IsHitTestVisible="False"
+                                                  Content="{TemplateBinding Content}"
+                                                  ContentTemplate="{TemplateBinding ContentTemplate}"
+                                                  RecognizesAccessKey="True" />
+                            </Border>
+                        </Panel>
                     </ControlTemplate>
                 </Setter>
             </ControlTheme>
@@ -134,6 +262,7 @@
         <!-- 3. Прибиваем тему гвоздями для всех ToolTip -->
         <Style Selector="ToolTip">
             <Setter Property="Theme" Value="{DynamicResource QuartzToolTipTheme}" />
+            <Setter Property="IsHitTestVisible" Value="False" />
         </Style>
 
         <!-- 4. Стилизация всплывающего меню SimpleDropdown как у контекстного меню (QuartzFlyoutTheme) -->
@@ -151,7 +280,7 @@
             <Setter Property="CornerRadius" Value="{DynamicResource SmCornerRadius}" />
             <Setter Property="Margin" Value="12" />
             <Setter Property="BoxShadow" Value="0 6 12 0 #40000000" />
-            <Setter Property="Padding" Value="8,4" />
+            <Setter Property="Padding" Value="3" />
         </Style>
 
         <Style Selector="shadui|SimpleDropdown /template/ Popup#PART_Popup StackPanel">
@@ -205,6 +334,7 @@
         </Style>
 
         <Style Selector="TreeView">
+            <Setter Property="ItemContainerTheme" Value="{StaticResource QuartzTreeViewItemTheme}" />
             <Setter Property="SelectionMode" Value="Multiple" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
@@ -213,10 +343,43 @@
         </Style>
 
         <Style Selector="TreeViewItem">
-            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="Theme" Value="{StaticResource QuartzTreeViewItemTheme}" />
+            <Setter Property="CornerRadius" Value="{DynamicResource SmCornerRadius}" />
             <Setter Property="MinHeight" Value="24" />
             <Setter Property="FontSize" Value="14" />
+            <Setter Property="Padding" Value="6,0" />
+            <Setter Property="VerticalAlignment" Value="Center" />
             <Setter Property="Foreground" Value="{DynamicResource ForegroundColor}" />
+        </Style>
+
+        <Style Selector="shadui|SimpleDropdown TreeViewItem">
+            <Setter Property="Theme" Value="{StaticResource QuartzTreeViewItemTheme}" />
+            <Setter Property="Padding" Value="6,0" />
+        </Style>
+
+        <Style Selector="Popup TreeViewItem">
+            <Setter Property="Theme" Value="{StaticResource QuartzTreeViewItemTheme}" />
+            <Setter Property="Padding" Value="6,0" />
+        </Style>
+
+        <Style Selector="TreeViewItem /template/ Panel#PART_ExpandCollapseChevronContainer">
+            <Setter Property="Margin" Value="0" />
+            <Setter Property="Width" Value="18" />
+            <Setter Property="Height" Value="24" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+
+        <Style Selector="TreeViewItem:empty /template/ Panel#PART_ExpandCollapseChevronContainer">
+            <Setter Property="Margin" Value="0" />
+            <Setter Property="Width" Value="18" />
+            <Setter Property="Height" Value="24" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+
+        <Style Selector="TreeViewItem /template/ Border#PART_LayoutRoot">
+            <Setter Property="Margin" Value="0,1" />
+            <Setter Property="local:TreeIndentGuideAssist.ShowGuides" Value="True" />
+            <Setter Property="ClipToBounds" Value="False" />
         </Style>
 
         <!-- Наведение курсора (проверяем наведение именно на строку LayoutRoot, а не на весь TreeViewItem) -->
@@ -236,9 +399,11 @@
 
         <!-- Шаблон стрелочки: видимость иконок управляется напрямую через IsChecked кнопки -->
         <Style Selector="TreeViewItem /template/ ToggleButton#PART_ExpandCollapseChevron">
-            <Setter Property="Width" Value="20" />
-            <Setter Property="Height" Value="20" />
-            <Setter Property="Margin" Value="0,0,-8,0" />
+            <Setter Property="Width" Value="16" />
+            <Setter Property="Height" Value="16" />
+            <Setter Property="Margin" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Cursor" Value="Hand" />
             <Setter Property="Template">
                 <ControlTemplate TargetType="ToggleButton">
                     <Panel Background="Transparent" x:CompileBindings="False">
@@ -247,14 +412,16 @@
                         <LucideIcon HorizontalAlignment="Center"
                                     VerticalAlignment="Center"
                                     Kind="ChevronRight"
-                                    Size="20"
+                                    Size="16"
+                                    Foreground="{DynamicResource MutedColor}"
                                     IsVisible="{Binding !IsChecked, RelativeSource={RelativeSource TemplatedParent}}" />
 
                         <!-- Открыто: видно, когда IsChecked = True -->
                         <LucideIcon HorizontalAlignment="Center"
                                     VerticalAlignment="Center"
                                     Kind="ChevronDown"
-                                    Size="20"
+                                    Size="16"
+                                    Foreground="{DynamicResource MutedColor}"
                                     IsVisible="{Binding IsChecked, RelativeSource={RelativeSource TemplatedParent}}" />
 
                     </Panel>
@@ -278,5 +445,25 @@
             <Setter Property="Background" Value="Transparent" />
         </Style>
 
+        <Style Selector="shadui|SimpleDropdown /template/ ContentPresenter">
+            <Setter Property="ContentTemplate">
+                <DataTemplate>
+                    <TextBlock Text="{Binding}" />
+                </DataTemplate>
+            </Setter>
+        </Style>
+
+        <Style Selector="shadui|SimpleDropdown, shadui|SimpleDropdown.Ghost, shadui|SimpleDropdown.Primary, shadui|SimpleDropdown.Secondary, shadui|SimpleDropdown.Outline">
+            <Setter Property="FontWeight" Value="Normal" />
+            <Setter Property="FontSize" Value="{Binding $parent[TemplatedControl].FontSize}" />
+        </Style>
+
+        <Style Selector="ItemsControl shadui|SimpleDropdown, ItemsControl shadui|SimpleDropdown.Ghost">
+            <Setter Property="FontSize" Value="{Binding $parent[ItemsControl].FontSize}" />
+        </Style>
+
+        <Style Selector="shadui|SimpleDropdown.Ghost /template/ Border#HoverBackground">
+            <Setter Property="Background" Value="{DynamicResource GhostColor}" />
+        </Style>
     </Application.Styles>
 </Application>

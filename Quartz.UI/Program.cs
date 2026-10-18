@@ -1,6 +1,4 @@
 using Avalonia;
-using Avalonia.X11; // added for X11PlatformOptions
-using Avalonia.Win32; // added for Win32PlatformOptions
 using System;
 
 namespace Quartz.UI;
@@ -42,7 +40,7 @@ sealed class Program
             {
                 OverlayPopups = true // Заставляет поп-апы рендериться внутри окна
             })
-            // На всякий случай для Windows, если тестируете там
+            // На всякий случай для Windows, если тестируется там
             .With(new Win32PlatformOptions
             {
                 OverlayPopups = true

@@ -14,6 +14,7 @@
     xmlns:shadui="using:ShadUI"
     xmlns:sys="clr-namespace:System;assembly=netstandard"
     xmlns:themes="clr-namespace:ShadUI;assembly=ShadUI"
+    xmlns:local="clr-namespace:Quartz.UI.Behaviors"
     Title="Quartz.UI"
     d:DesignHeight="450"
     d:DesignWidth="800"
@@ -264,7 +265,7 @@
                                         <DataTemplate DataType="vm:FileVM">
                                             <LucideIcon Kind="File"
                                                         Size="18"
-                                                        Foreground="{DynamicResource MutedColor}" />
+                                                        Foreground="{DynamicResource ForegroundColor}" />
                                         </DataTemplate>
 
                                     </ContentControl.DataTemplates>
@@ -450,17 +451,41 @@
                         Orientation="Horizontal"
                         HorizontalAlignment="Center"
                         VerticalAlignment="Center"
-                        Spacing="4">
+                        Spacing="0">
 
-                        <ItemsControl ItemsSource="{Binding BreadcrumbFolders}">
+                        <StackPanel.Styles>
+
+                            <Style Selector="Button.Ghost">
+                                <Setter Property="Padding" Value="6,3" />
+                                <Setter Property="Height" Value="NaN" />
+                                <Setter Property="CornerRadius" Value="{DynamicResource SmCornerRadius}" />
+                            </Style>
+
+                            <Style Selector="shadui|SimpleDropdown.Ghost">
+                                <Setter Property="Padding" Value="6,3" />
+                                <Setter Property="Height" Value="NaN" />
+                                <Setter Property="CornerRadius" Value="{DynamicResource SmCornerRadius}" />
+                                <Setter Property="FontWeight" Value="Normal" />
+                                <Setter Property="Cursor" Value="Hand" />
+                                <Setter Property="FontSize" Value="{Binding $parent[ItemsControl].FontSize}" />
+                            </Style>
+
+                            <Style Selector="shadui|SimpleDropdown.Ghost /template/ Border#HoverBackground">
+                                <Setter Property="Background" Value="{DynamicResource GhostColor}" />
+                            </Style>
+
+                        </StackPanel.Styles>
+
+                        <ItemsControl ItemsSource="{Binding BreadcrumbFolders}" FontSize="13">
+
                             <ItemsControl.ItemsPanel>
                                 <ItemsPanelTemplate>
-                                    <StackPanel Orientation="Horizontal" Spacing="4" />
+                                    <StackPanel Orientation="Horizontal" Spacing="0" />
                                 </ItemsPanelTemplate>
                             </ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate DataType="{x:Type vm:DirectoryVM}" x:DataType="vm:DirectoryVM">
-                                    <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                                    <StackPanel Orientation="Horizontal" Spacing="0" VerticalAlignment="Center">
                                         <shadui:SimpleDropdown
                                             Classes="Ghost Breadcrumb"
                                             PopupPlacement="BottomEdgeAlignedLeft"
@@ -477,15 +502,22 @@
                                                     HorizontalScrollBarVisibility="Disabled"
                                                     VerticalScrollBarVisibility="Auto">
                                                     <TreeView
+                                                        ItemContainerTheme="{StaticResource QuartzTreeViewItemTheme}"
                                                         ItemsSource="{Binding Children}"
                                                         Background="Transparent"
                                                         BorderThickness="0"
                                                         Padding="0"
+                                                        Margin="0"
                                                         ScrollViewer.VerticalScrollBarVisibility="Disabled">
+                                                        <TreeView.Resources>
+                                                            <x:Double x:Key="TreeViewItemIndent">24</x:Double>
+                                                            <x:Double x:Key="TreeViewItemExpandCollapseChevronSize">16</x:Double>
+                                                            <Thickness x:Key="TreeViewItemExpandCollapseChevronMargin">0</Thickness>
+                                                        </TreeView.Resources>
                                                         <TreeView.Styles>
-                                                            <FluentTheme />
-                                                            <Style Selector="TreeViewItem" x:DataType="vm:FileStructVM">
-                                                                <Setter Property="Padding" Value="4,2" />
+                                                            <Style Selector="TreeViewItem">
+                                                                <Setter Property="Theme" Value="{StaticResource QuartzTreeViewItemTheme}" />
+                                                                <Setter Property="Padding" Value="6,0" />
                                                             </Style>
                                                         </TreeView.Styles>
                                                 <TreeView.DataTemplates>
@@ -559,8 +591,7 @@
                                                         <Grid ColumnDefinitions="Auto,*">
                                                             <LucideIcon 
                                                                 Kind="File" 
-                                                                Size="18" 
-                                                                Foreground="{DynamicResource MutedColor}" />
+                                                                Size="18" />
                                                             <TextBlock
                                                                 Grid.Column="1"
                                                                 Margin="6,0,0,0"
@@ -574,8 +605,7 @@
                                                         <Grid ColumnDefinitions="Auto,*">
                                                             <LucideIcon 
                                                                 Kind="File" 
-                                                                Size="18" 
-                                                                Foreground="{DynamicResource MutedColor}" />
+                                                                Size="18" />
                                                             <TextBlock
                                                                 Grid.Column="1"
                                                                 Margin="6,0,0,0"
@@ -589,17 +619,19 @@
                                         </ScrollViewer>
                                     </Grid>
                                 </shadui:SimpleDropdown>
-
-                                        <TextBlock
-                                            Text="/"
+                                        <LucideIcon
+                                            Kind="ChevronRight"
+                                            Width="16"
+                                            Size="16"
                                             Foreground="{DynamicResource MutedColor}"
-                                            VerticalAlignment="Center" />
+                                            VerticalAlignment="Center"/>
                                     </StackPanel>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
 
                         <Button
+                            FontSize="13"
                             Classes="Ghost"
                             Content="{Binding Header}"
                             VerticalAlignment="Center" />
@@ -865,13 +897,19 @@
 
             <TreeView 
                 Grid.Row="1"
+                ItemContainerTheme="{StaticResource QuartzTreeViewItemTheme}"
                 ItemsSource="{Binding FileTree}" 
                 Background="{DynamicResource SidebarBackgroundColor}"
                 BorderThickness="0,0,1,0"
                 IsVisible="{Binding IsExplorerTabActive}">
 
+                <TreeView.Resources>
+                    <x:Double x:Key="TreeViewItemIndent">24</x:Double>
+                    <x:Double x:Key="TreeViewItemExpandCollapseChevronSize">16</x:Double>
+                    <Thickness x:Key="TreeViewItemExpandCollapseChevronMargin">0</Thickness>
+                </TreeView.Resources>
+
                 <TreeView.Styles>
-                    <FluentTheme/>
                     <Style Selector="TreeViewItem">
                         <Setter Property="Interaction.Behaviors">
                             <BehaviorCollectionTemplate>
@@ -972,8 +1010,7 @@
                             <Grid ColumnDefinitions="Auto,*">
                                 <LucideIcon 
                                     Kind="File" 
-                                    Size="18" 
-                                    Foreground="{DynamicResource MutedColor}" />
+                                    Size="18"  />
                                 <TextBlock
                                     Grid.Column="1"
                                     Margin="6,0,0,0"
@@ -989,8 +1026,7 @@
                             <Grid ColumnDefinitions="Auto,*">
                                 <LucideIcon 
                                     Kind="File" 
-                                    Size="18" 
-                                    Foreground="{DynamicResource MutedColor}" />
+                                    Size="18"  />
                                 <TextBlock
                                     Grid.Column="1"
                                     Margin="6,0,0,0"
@@ -1137,11 +1173,16 @@
 
                 <TreeView
                     x:Name="ErrorsTreeView"
+                    ItemContainerTheme="{StaticResource QuartzTreeViewItemTheme}"
                     ItemsSource="{Binding ProjectErrors}"
                     Grid.Row="1"
                     IsVisible="{Binding IsProblemsTabActive}">
+                    <TreeView.Resources>
+                        <x:Double x:Key="TreeViewItemIndent">24</x:Double>
+                        <x:Double x:Key="TreeViewItemExpandCollapseChevronSize">16</x:Double>
+                        <Thickness x:Key="TreeViewItemExpandCollapseChevronMargin">0</Thickness>
+                    </TreeView.Resources>
                     <TreeView.Styles>
-                        <FluentTheme/>
                         <Style Selector="TreeViewItem">
                             <Setter Property="IsExpanded" Value="True"/>
                         </Style>
@@ -1150,7 +1191,7 @@
 
                         <!-- Шаблон 1: Корневой узел (ФАЙЛ) -->
                         <TreeDataTemplate DataType="vm:FileVM" ItemsSource="{Binding Errors}">
-                            <StackPanel Orientation="Horizontal" Spacing="6" Background="Transparent">
+                            <StackPanel Orientation="Horizontal" Spacing="6" Background="Transparent" VerticalAlignment="Center">
                                 <ContentControl
                                     Content="{Binding}"
                                     VerticalAlignment="Center">
@@ -1160,13 +1201,15 @@
                                         <DataTemplate DataType="vm:BoardVM">
                                             <LucideIcon Kind="Layers"
                                                         Size="18"
+                                                        VerticalAlignment="Center"
                                                         Foreground="{DynamicResource IconPcbyColor}" />
                                         </DataTemplate>
 
                                         <!-- Файл слоя (.layy) -->
                                         <DataTemplate DataType="vm:LayerVM">
                                             <LucideIcon Kind="CircuitBoard"
-                                                        Size="19"
+                                                        Size="18"
+                                                        VerticalAlignment="Center"
                                                         Foreground="{DynamicResource IconLayyColor}" />
                                         </DataTemplate>
 
@@ -1174,6 +1217,7 @@
                                         <DataTemplate DataType="vm:StylesFileVM">
                                             <LucideIcon Kind="PencilSparkles"
                                                         Size="18"
+                                                        VerticalAlignment="Center"
                                                         Foreground="{DynamicResource IconStlyColor}" />
                                         </DataTemplate>
 
@@ -1181,30 +1225,33 @@
                                         <DataTemplate DataType="vm:FileVM">
                                             <LucideIcon Kind="File"
                                                         Size="18"
-                                                        Foreground="{DynamicResource MutedColor}" />
+                                                        VerticalAlignment="Center" />
                                         </DataTemplate>
 
                                     </ContentControl.DataTemplates>
                                 </ContentControl>
-                                <TextBlock Text="{Binding Header}" />
+                                <TextBlock Text="{Binding Header}" VerticalAlignment="Center" />
                                 <TextBlock
                                     Text="{Binding Errors.Count, StringFormat='({0})'}"
-                                    Foreground="{DynamicResource MutedColor}" />
+                                    Foreground="{DynamicResource MutedColor}"
+                                    VerticalAlignment="Center" />
                             </StackPanel>
                         </TreeDataTemplate>
 
                         <!-- Шаблон 2: Дочерний узел (ОШИБКА) -->
                         <DataTemplate DataType="models:EditorError">
-                            <Grid ColumnDefinitions="Auto,*,Auto" HorizontalAlignment="Stretch" Background="Transparent">
-                                <LucideIcon Kind="CircleX" Size="18" Foreground="{DynamicResource ErrorColor}" />
+                            <Grid ColumnDefinitions="Auto,*,Auto" HorizontalAlignment="Stretch" VerticalAlignment="Center" Background="Transparent">
+                                <LucideIcon Kind="CircleX" Size="16" VerticalAlignment="Center" Foreground="{DynamicResource ErrorColor}" />
                                 <TextBlock
                                     Grid.Column="1"
                                     Text="{Binding Message}"
-                                    Margin="4,0,6,0"
+                                    Margin="6,0"
+                                    VerticalAlignment="Center"
                                     TextTrimming="CharacterEllipsis" />
                                 <TextBlock
                                     Grid.Column="2"
                                     Margin="6,0"
+                                    VerticalAlignment="Center"
                                     Foreground="{DynamicResource MutedColor}">
                                     <TextBlock.Text>
                                         <MultiBinding StringFormat="[Строка {0}, столбец {1}]">

@@ -142,7 +142,10 @@ public partial class MainVM : ObservableObject
         }
     }
 
-    public ObservableCollection<FileStructVM> FileTree { get; } = [];
+    private DirectoryVM? _projectRootDirectory;
+    public DirectoryVM? ProjectRootDirectory => _projectRootDirectory;
+    private static readonly ObservableCollection<FileStructVM> _emptyTree = [];
+    public ObservableCollection<FileStructVM> FileTree => _projectRootDirectory?.Children ?? _emptyTree;
 
     private readonly Dictionary<string, LayerVM> _projectLayers = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, StylesFileVM> _projectStyles = new(StringComparer.OrdinalIgnoreCase);
@@ -810,7 +813,8 @@ public partial class MainVM : ObservableObject
         // 1. Очищаем состояние предыдущего проекта
         _projectLayers.Clear();
         _projectStyles.Clear();
-        FileTree.Clear();
+        _projectRootDirectory = null;
+        OnPropertyChanged(nameof(FileTree));
         ProjectErrors.Clear();
         OnPropertyChanged(nameof(TotalErrorCount));
         OnPropertyChanged(nameof(ProjectName));
@@ -827,8 +831,8 @@ public partial class MainVM : ObservableObject
         _projectRootDir = directoryPath;
         OnPropertyChanged(nameof(ProjectName));
         OnPropertyChanged(nameof(SidebarHeaderTitle));
-        var rootDirVM = LoadDirectories(_projectRootDir, parent: null);
-        FileTree.Add(rootDirVM);
+        _projectRootDirectory = LoadDirectories(_projectRootDir, parent: null);
+        OnPropertyChanged(nameof(FileTree));
 
         // 3. Если в проекте есть плата, запускаем расчет
         if (CurrentBoard != null)

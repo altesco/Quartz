@@ -277,13 +277,14 @@ namespace Quartz.UI.Behaviors
                 }
             }
 
-            // 1. Управление YamlIndentationRenderer (только для YAML файлов и если нет сверхдлинных строк)
-            if (isYaml && !hasExcessiveLines)
+            // 1. Управление YamlIndentationRenderer (если нет сверхдлинных строк)
+            if (!hasExcessiveLines)
             {
                 if (_indentationRenderer == null && AssociatedObject.TextArea?.TextView != null)
                 {
                     _indentationRenderer = new YamlIndentationRenderer(AssociatedObject);
                     AssociatedObject.TextArea.TextView.BackgroundRenderers.Add(_indentationRenderer);
+                    UpdateIndentationLineColor();
                 }
             }
             else
@@ -395,13 +396,24 @@ namespace Quartz.UI.Behaviors
             }
             textView.CurrentLineBorder = new Pen(Brushes.Transparent, 0);
 
-            // 4. Линии YAML
-            if (_indentationRenderer != null && TryGetThemeColor("BorderColor60", targetTheme, out var borderColor))
+            // 4. Линии отступов
+            UpdateIndentationLineColor();
+
+            textView.Redraw();
+        }
+
+        private void UpdateIndentationLineColor()
+        {
+            if (_indentationRenderer == null) return;
+            var targetTheme = Avalonia.Application.Current?.ActualThemeVariant ?? ThemeVariant.Dark;
+            if (TryGetThemeColor("BorderColor60", targetTheme, out var borderColor))
             {
                 _indentationRenderer.UpdateLineColor(borderColor);
             }
-
-            textView.Redraw();
+            else if (TryGetThemeColor("BorderColor", targetTheme, out var fallbackColor))
+            {
+                _indentationRenderer.UpdateLineColor(fallbackColor);
+            }
         }
 
         // --- МОЙ СОБСТВЕННЫЙ ПОИСКОВИК РЕСУРСОВ ---
@@ -677,7 +689,7 @@ namespace Quartz.UI.Behaviors
     public class YamlIndentationRenderer : IBackgroundRenderer
     {
         private readonly TextEditor _editor;
-        private Pen _linePen = new(Brushes.Transparent, 1.0);
+        private Pen _linePen = new(new SolidColorBrush(Color.FromArgb(120, 128, 128, 128)), 1.0);
 
         public YamlIndentationRenderer(TextEditor editor) => _editor = editor;
         public KnownLayer Layer => KnownLayer.Background;
@@ -694,6 +706,7 @@ namespace Quartz.UI.Behaviors
 
             var options = _editor.Options;
             int indentationSize = options.IndentationSize;
+            if (indentationSize <= 0) indentationSize = 2;
 
             foreach (VisualLine visualLine in textView.VisualLines)
             {
@@ -707,6 +720,7 @@ namespace Quartz.UI.Behaviors
                 {
                     char c = _editor.Document.GetCharAt(lineOffset + i);
                     if (c == ' ') leadingSpaces++;
+                    else if (c == '\t') leadingSpaces += indentationSize;
                     else break;
                 }
 
