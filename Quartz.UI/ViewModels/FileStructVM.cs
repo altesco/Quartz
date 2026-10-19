@@ -30,6 +30,12 @@ public abstract partial class FileStructVM : ObservableObject
     public string Header => Path.GetFileName(FilePath);
     public DirectoryVM? Parent { get; set; }
 
+    [ObservableProperty]
+    private bool _isExpanded;
+
+    [ObservableProperty]
+    private bool _isSelected;
+
     [RelayCommand]
     public void OpenFile()
     {
@@ -48,8 +54,6 @@ public abstract partial class FileStructVM : ObservableObject
         MainVM.TappedFile = this;
         MainVM.DragStartX = e.GetPosition(null).X;
         MainVM.DragStartY = e.GetPosition(null).Y;
-
-        e.Pointer.Capture(null);
     }
 
     [RelayCommand]

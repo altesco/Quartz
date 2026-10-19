@@ -57,6 +57,81 @@ public partial class MainWindow : Window
         ErrorsTreeView.AddHandler(PointerPressedEvent, OnErrorsTreeViewPointerPressed, RoutingStrategies.Tunnel);
         ErrorsTreeView.AddHandler(DoubleTappedEvent, OnErrorsTreeViewDoubleTapped, RoutingStrategies.Bubble, handledEventsToo: true);
         ErrorsTreeView.AddHandler(KeyDownEvent, OnErrorsTreeViewKeyDown, RoutingStrategies.Bubble);
+
+        SidebarTreeView.AddHandler(PointerPressedEvent, OnSidebarTreeViewPointerPressed, RoutingStrategies.Tunnel);
+        SidebarTreeView.AddHandler(PointerReleasedEvent, OnSidebarTreeViewPointerReleased, RoutingStrategies.Tunnel);
+        SidebarTreeView.AddHandler(DoubleTappedEvent, OnSidebarTreeViewDoubleTapped, RoutingStrategies.Bubble, handledEventsToo: true);
+        SidebarTreeView.AddHandler(KeyDownEvent, OnSidebarTreeViewKeyDown, RoutingStrategies.Bubble);
+    }
+
+    private void OnSidebarTreeViewPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        var point = e.GetCurrentPoint(SidebarTreeView);
+        if (!point.Properties.IsLeftButtonPressed)
+            return;
+
+        if (e.Source is not Avalonia.Visual visualSource)
+            return;
+
+        if (visualSource.FindAncestorOfType<ToggleButton>() != null)
+            return;
+
+        var treeViewItem = visualSource.FindAncestorOfType<TreeViewItem>(includeSelf: true);
+        if (treeViewItem?.DataContext is FileStructVM fileStruct && DataContext is MainVM mainVm)
+        {
+            mainVm.TappedFile = fileStruct;
+            var pos = e.GetPosition(null);
+            mainVm.DragStartX = pos.X;
+            mainVm.DragStartY = pos.Y;
+
+            if (fileStruct is FileVM fileVm)
+            {
+                mainVm.OpenFileTab(fileVm);
+            }
+        }
+    }
+
+    private void OnSidebarTreeViewPointerReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        if (DataContext is not MainVM mainVm)
+            return;
+
+        if (mainVm.DraggedFile != null)
+        {
+            if (e.Source is Avalonia.Visual visualSource)
+            {
+                var treeViewItem = visualSource.FindAncestorOfType<TreeViewItem>(includeSelf: true);
+                if (treeViewItem?.DataContext is FileStructVM target)
+                {
+                    target.TapEndCommand.Execute(null);
+                    return;
+                }
+            }
+        }
+
+        mainVm.ResetDragStatus();
+    }
+
+    private void OnSidebarTreeViewDoubleTapped(object? sender, TappedEventArgs e)
+    {
+        if (e.Source is not Avalonia.Visual visualSource || visualSource.FindAncestorOfType<ToggleButton>() != null)
+            return;
+
+        var treeViewItem = visualSource.FindAncestorOfType<TreeViewItem>(includeSelf: true);
+        if (treeViewItem?.DataContext is FileVM fileVm && DataContext is MainVM mainVm)
+        {
+            mainVm.OpenFileTab(fileVm);
+            e.Handled = true;
+        }
+    }
+
+    private void OnSidebarTreeViewKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter && SidebarTreeView.SelectedItem is FileVM fileVm && DataContext is MainVM mainVm)
+        {
+            mainVm.OpenFileTab(fileVm);
+            e.Handled = true;
+        }
     }
 
     private void OnErrorsTreeViewPointerPressed(object? sender, PointerPressedEventArgs e)
@@ -71,7 +146,7 @@ public partial class MainWindow : Window
         if (visualSource.FindAncestorOfType<ToggleButton>() != null)
             return;
 
-        var treeViewItem = visualSource.FindAncestorOfType<TreeViewItem>();
+        var treeViewItem = visualSource.FindAncestorOfType<TreeViewItem>(includeSelf: true);
         if (treeViewItem == null)
             return;
 
@@ -83,7 +158,7 @@ public partial class MainWindow : Window
         if (e.Source is not Avalonia.Visual visualSource || visualSource.FindAncestorOfType<ToggleButton>() != null)
             return;
 
-        var treeViewItem = visualSource.FindAncestorOfType<TreeViewItem>();
+        var treeViewItem = visualSource.FindAncestorOfType<TreeViewItem>(includeSelf: true);
         if (treeViewItem == null)
             return;
 

@@ -724,10 +724,14 @@ namespace Quartz.UI.Behaviors
                     else break;
                 }
 
-                for (int i = indentationSize; i <= leadingSpaces; i += indentationSize)
+                // Линии отступов рисуются строго внутри отступа (пробелов) ДО первой буквы (i < leadingSpaces),
+                // чтобы буквы не перекрывали вертикальную линию (например, перед width:).
+                for (int i = indentationSize; i < leadingSpaces; i += indentationSize)
                 {
+                    if (i >= visualLine.VisualLength) break;
+
                     var position = visualLine.GetVisualPosition(i, VisualYPosition.TextTop);
-                    double x = position.X - textView.ScrollOffset.X;
+                    double x = Math.Round(position.X - textView.ScrollOffset.X) + 0.5;
 
                     double topY = visualLine.VisualTop - textView.ScrollOffset.Y;
                     double bottomY = topY + visualLine.Height;

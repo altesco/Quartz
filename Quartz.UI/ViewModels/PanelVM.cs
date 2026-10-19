@@ -26,6 +26,21 @@ public partial class PanelVM : LayoutRootVM
 
     public PanelVM(MainVM mainVM) => _mainVM = mainVM;
 
+    partial void OnSelectedTabChanged(FileVM? oldValue, FileVM? newValue)
+    {
+        if (newValue != null)
+        {
+            if (newValue is EditorVM editor)
+            {
+                editor.LoadDocumentIfEmpty();
+            }
+            newValue.UpdateBreadcrumbs();
+            _mainVM.ActivePanel = this;
+            _mainVM.ActiveFile = newValue;
+            _mainVM.ActiveEditor = newValue as EditorVM;
+        }
+    }
+
     [RelayCommand]
     private void TabReplace(PointerPressedEventArgs? e)
     {

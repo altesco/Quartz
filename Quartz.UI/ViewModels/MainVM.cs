@@ -769,7 +769,7 @@ public partial class MainVM : ObservableObject
         if (e?.Source is not Visual visualSource)
             return;
 
-        var treeViewItem = visualSource.FindAncestorOfType<TreeViewItem>();
+        var treeViewItem = visualSource.FindAncestorOfType<TreeViewItem>(includeSelf: true);
         if (treeViewItem?.DataContext is not FileStructVM dc)
             return;
 
@@ -782,7 +782,7 @@ public partial class MainVM : ObservableObject
         if (e?.Source is not Visual visualSource)
             return;
 
-        var treeViewItem = visualSource.FindAncestorOfType<TreeViewItem>();
+        var treeViewItem = visualSource.FindAncestorOfType<TreeViewItem>(includeSelf: true);
         if (treeViewItem?.DataContext is not FileStructVM dc)
             return;
 
@@ -805,6 +805,41 @@ public partial class MainVM : ObservableObject
         if (ActivePanel?.SelectedTab is EditorVM editor)
         {
             editor.Save();
+        }
+    }
+
+    [RelayCommand]
+    private void CloseActiveTab()
+    {
+        if (ActivePanel?.SelectedTab is { } tab)
+        {
+            tab.RemoveTab();
+        }
+    }
+
+    [RelayCommand]
+    private void CloseSavedTabsInActivePanel()
+    {
+        if (ActivePanel == null) return;
+        var tabsToClose = ActivePanel.Tabs
+            .Where(t => !t.IsModified && !t.IsPinned)
+            .ToList();
+        foreach (var tab in tabsToClose)
+        {
+            tab.RemoveTab();
+        }
+    }
+
+    [RelayCommand]
+    private void CloseAllTabsInActivePanel()
+    {
+        if (ActivePanel == null) return;
+        var tabsToClose = ActivePanel.Tabs
+            .Where(t => !t.IsPinned)
+            .ToList();
+        foreach (var tab in tabsToClose)
+        {
+            tab.RemoveTab();
         }
     }
 

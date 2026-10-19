@@ -75,6 +75,7 @@ public abstract partial class EditorVM : FileVM
         if (Document != null)
         {
             Document.TextChanged += DocumentOnTextChanged;
+            Document.UndoStack.PropertyChanged += UndoStackOnPropertyChanged;
         }
 
         _timer = new Timer(Delay)
@@ -90,16 +91,38 @@ public abstract partial class EditorVM : FileVM
         if (oldValue != null)
         {
             oldValue.TextChanged -= DocumentOnTextChanged;
+            oldValue.UndoStack.PropertyChanged -= UndoStackOnPropertyChanged;
         }
 
         if (newValue != null)
+        {
             newValue.TextChanged += DocumentOnTextChanged;
+            newValue.UndoStack.PropertyChanged += UndoStackOnPropertyChanged;
+            IsModified = !newValue.UndoStack.IsOriginalFile;
+        }
+        else
+        {
+            IsModified = false;
+        }
+    }
+
+    private void UndoStackOnPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(UndoStack.IsOriginalFile) && Document != null)
+        {
+            IsModified = !Document.UndoStack.IsOriginalFile;
+        }
     }
 
     private void DocumentOnTextChanged(object? sender, EventArgs e)
     {
         _timer.Stop();
         _timer.Start();
+
+        if (Document != null)
+        {
+            IsModified = !Document.UndoStack.IsOriginalFile;
+        }
     }
 
     private void OnTimerElapsed(object? sender, ElapsedEventArgs e)
@@ -185,11 +208,14 @@ public abstract partial class EditorVM : FileVM
                 {
                     Document.Text = text;
                     Document.UndoStack.ClearAll();
+                    Document.UndoStack.MarkAsOriginalFile();
                 }
                 else
                 {
                     Document = new TextDocument(text);
+                    Document.UndoStack.MarkAsOriginalFile();
                 }
+                IsModified = false;
             }
             catch (Exception ex)
             {
@@ -210,6 +236,8 @@ public abstract partial class EditorVM : FileVM
         try
         {
             File.WriteAllText(FilePath, Document.Text);
+            Document.UndoStack.MarkAsOriginalFile();
+            IsModified = false;
         }
         catch (Exception ex)
         {

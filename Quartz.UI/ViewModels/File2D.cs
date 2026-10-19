@@ -12,10 +12,21 @@ public abstract partial class File2D : EditorVM
 
     public CanvasVM? Canvas { get; set; }
 
-    [RelayCommand]
-    private void OpenCanvas()
+    public override bool CanOpenCanvas => this is LayerVM;
+
+    public override void OpenCanvas()
     {
+        if (Canvas != null && Panel != null && Panel.Tabs.Contains(Canvas))
+        {
+            Panel.SelectedTab = Canvas;
+            return;
+        }
+
         Canvas = new CanvasVM(owner: this);
         Panel?.Tabs.Add(Canvas);
+        if (Panel != null)
+        {
+            Panel.SelectedTab = Canvas;
+        }
     }
 }

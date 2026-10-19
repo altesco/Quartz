@@ -37,6 +37,9 @@
 
     <Window.KeyBindings>
         <KeyBinding Gesture="Ctrl+S" Command="{Binding SaveCurrentFileCommand}" />
+        <KeyBinding Gesture="Ctrl+W" Command="{Binding CloseActiveTabCommand}" />
+        <KeyBinding Gesture="Ctrl+Shift+U" Command="{Binding CloseSavedTabsInActivePanelCommand}" />
+        <KeyBinding Gesture="Ctrl+Shift+W" Command="{Binding CloseAllTabsInActivePanelCommand}" />
     </Window.KeyBindings>
 
     <Interaction.Behaviors>
@@ -145,12 +148,71 @@
                                 </ControlTemplate>
                             </Setter>
                         
-                            <Setter Property="ContextFlyout" x:DataType="vm:File2D">
+                            <Setter Property="ContextFlyout" x:DataType="vm:FileVM">
                                 <Setter.Value>
                                     <MenuFlyout>
+                                        <MenuItem 
+                                            Header="Открыть холст" 
+                                            Icon="{LucideIconContent LayoutDashboard, Size=18}"
+                                            Command="{Binding OpenCanvasCommand}"
+                                            IsVisible="{Binding CanOpenCanvas}" />
 
-                                        <!-- Контент твоего меню -->
-                                        <MenuItem Header="Открыть холст" Command="{Binding OpenCanvasCommand}" />
+                                        <Separator IsVisible="{Binding CanOpenCanvas}" />
+
+                                        <MenuItem 
+                                            Header="Закрыть" 
+                                            Icon="{LucideIconContent X, Size=18}"
+                                            Command="{Binding RemoveTabCommand}"
+                                            InputGesture="Ctrl+W" />
+                                        <MenuItem 
+                                            Header="Закрыть другие" 
+                                            Icon="{LucideIconContent CopyX, Size=18}"
+                                            Command="{Binding CloseOtherTabsCommand}" />
+                                        <MenuItem 
+                                            Header="Закрыть сохраненные" 
+                                            Icon="{LucideIconContent FileCheck, Size=18}"
+                                            Command="{Binding CloseSavedTabsCommand}"
+                                            InputGesture="Ctrl+Shift+U" />
+                                        <MenuItem 
+                                            Header="Закрыть все" 
+                                            Icon="{LucideIconContent FileX, Size=18}"
+                                            Command="{Binding CloseAllTabsCommand}"
+                                            InputGesture="Ctrl+Shift+W" />
+
+                                        <Separator />
+
+                                        <MenuItem 
+                                            Header="Закрепить" 
+                                            Icon="{LucideIconContent Pin, Size=18}"
+                                            Command="{Binding TogglePinCommand}"
+                                            IsVisible="{Binding !IsPinned}" />
+                                        <MenuItem 
+                                            Header="Открепить" 
+                                            Icon="{LucideIconContent PinOff, Size=18}"
+                                            Command="{Binding TogglePinCommand}"
+                                            IsVisible="{Binding IsPinned}" />
+
+                                        <Separator />
+
+                                        <MenuItem 
+                                            Header="Копировать путь" 
+                                            Icon="{LucideIconContent Copy, Size=18}"
+                                            Command="{Binding CopyPathCommand}" />
+                                        <MenuItem 
+                                            Header="Копировать относительный путь" 
+                                            Icon="{LucideIconContent CopySlash, Size=18}"
+                                            Command="{Binding CopyRelativePathCommand}" />
+
+                                        <Separator />
+
+                                        <MenuItem 
+                                            Header="Показать в проводнике" 
+                                            Icon="{LucideIconContent FolderClosed, Size=18}"
+                                            Command="{Binding ShowInExplorerCommand}" />
+                                        <MenuItem 
+                                            Header="Показать в файловом менеджере" 
+                                            Icon="{LucideIconContent FolderTree, Size=18}"
+                                            Command="{Binding ShowInFileManagerCommand}" />
                                     </MenuFlyout>
                                 </Setter.Value>
                             </Setter>
@@ -177,19 +239,76 @@
 
                         </Style>
 
-                        <Style Selector="TabItem Button.Icon">
+                        <!-- Базовое состояние кнопки закрытия вкладки: скрыта, крестик всегда PrimaryColor -->
+                        <Style Selector="TabItem Button.TabClose">
                             <Setter Property="Opacity" Value="0" />
                             <Setter Property="IsHitTestVisible" Value="False" />
+                            <Setter Property="Foreground" Value="{DynamicResource PrimaryColor}" />
                         </Style>
 
-                        <Style Selector="TabItem:selected Button.Icon">
+                        <Style Selector="TabItem Button.TabClose:not(.pinned) LucideIcon">
+                            <Setter Property="Foreground" Value="{DynamicResource PrimaryColor}" />
+                        </Style>
+
+                        <Style Selector="TabItem Button.TabClose:not(.pinned):pointerover LucideIcon">
+                            <Setter Property="Foreground" Value="{DynamicResource PrimaryColor}" />
+                        </Style>
+
+                        <Style Selector="TabItem Button.TabClose:not(.pinned):pressed LucideIcon">
+                            <Setter Property="Foreground" Value="{DynamicResource PrimaryColor}" />
+                        </Style>
+
+                        <!-- Если файл сохранен (!.dirty) и не закреплен (!.pinned): крестик виден у активной вкладки -->
+                        <Style Selector="TabItem:selected Button.TabClose:not(.dirty):not(.pinned)">
                             <Setter Property="Opacity" Value="1" />
                             <Setter Property="IsHitTestVisible" Value="True" />
                         </Style>
 
-                        <Style Selector="TabItem:pointerover Button.Icon">
+                        <!-- Если файл сохранен (!.dirty) и не закреплен (!.pinned): крестик виден при наведении на вкладку -->
+                        <Style Selector="TabItem:pointerover Button.TabClose:not(.dirty):not(.pinned)">
                             <Setter Property="Opacity" Value="1" />
                             <Setter Property="IsHitTestVisible" Value="True" />
+                        </Style>
+
+                        <!-- Если файл НЕ сохранен (.dirty) и не закреплен (!.pinned): крестик скрыт, но кнопка активна для наведения/клика -->
+                        <Style Selector="TabItem Button.TabClose.dirty:not(.pinned)">
+                            <Setter Property="Opacity" Value="0" />
+                            <Setter Property="IsHitTestVisible" Value="True" />
+                            <Setter Property="Background" Value="Transparent" />
+                        </Style>
+
+                        <!-- При наведении прямо на кнопку закрытия у несохраненного незакрепленного файла: показываем крестик -->
+                        <Style Selector="TabItem Button.TabClose.dirty:not(.pinned):pointerover">
+                            <Setter Property="Opacity" Value="1" />
+                        </Style>
+
+                        <!-- Закрепленная вкладка (.pinned): кнопка ВСЕГДА видна -->
+                        <Style Selector="TabItem Button.TabClose.pinned">
+                            <Setter Property="Opacity" Value="1" />
+                            <Setter Property="IsHitTestVisible" Value="True" />
+                        </Style>
+
+                        <Style Selector="TabItem Button.TabClose.pinned LucideIcon">
+                            <Setter Property="Foreground" Value="{Binding $parent[TabItem].Foreground}" />
+                        </Style>
+
+                        <Style Selector="TabItem Button.TabClose.pinned:pointerover LucideIcon">
+                            <Setter Property="Foreground" Value="{DynamicResource ForegroundColor}" />
+                        </Style>
+
+                        <!-- Кружок биндится к цвету header у tabitem -->
+                        <Style Selector="TabItem Ellipse.DirtyDot">
+                            <Setter Property="Fill" Value="{Binding $parent[TabItem].Foreground}" />
+                        </Style>
+
+                        <!-- При наведении на область кнопки закрытия: кружочек скрывается -->
+                        <Style Selector="TabItem Panel:pointerover > Ellipse.DirtyDot">
+                            <Setter Property="Opacity" Value="0" />
+                        </Style>
+
+                        <!-- Закрепленная несохраненная вкладка: булавка имеет margin 0,0,3,1 -->
+                        <Style Selector="TabItem Button.TabClose.pinned-dirty LucideIcon">
+                            <Setter Property="Margin" Value="0,0,3,1" />
                         </Style>
 
                         <Style Selector="TabItem.last-child /template/ Border#PART_RightLine">
@@ -294,19 +413,55 @@
                                 </ContentControl>
 
 
-                                <Button
-                                    Grid.Column="2"
-                                    Padding="0"
-                                    Width="22"
-                                    Height="22"
-                                    VerticalAlignment="Center"
-                                    Classes="Icon"
-                                    Command="{Binding RemoveTabCommand}"
-                                     HorizontalContentAlignment="Center"
-                                      VerticalContentAlignment="Center"
-                                    Foreground="{DynamicResource ForegroundColor}"
-                                    Content="{LucideIconContent X, Size=16}">
-                                </Button>
+                                <Panel Grid.Column="2"
+                                       Width="22"
+                                       Height="22"
+                                       VerticalAlignment="Center">
+                                    <!-- Сплошной кружочек для несохраненного файла (биндится к цвету header у tabitem) -->
+                                    <Ellipse Name="PART_DirtyDot"
+                                             Classes="DirtyDot"
+                                             Width="8"
+                                             Height="8"
+                                             HorizontalAlignment="Center"
+                                             VerticalAlignment="Center"
+                                             Fill="{Binding $parent[TabItem].Foreground}"
+                                             IsHitTestVisible="False"
+                                             IsVisible="{Binding IsUnpinnedAndModified}" />
+
+                                    <!-- Кнопка закрытия / открепления вкладки -->
+                                    <Button
+                                        Name="PART_CloseTabButton"
+                                        Padding="0"
+                                        Width="22"
+                                        Height="22"
+                                        VerticalAlignment="Center"
+                                        HorizontalAlignment="Center"
+                                        Classes="Icon TabClose"
+                                        Classes.dirty="{Binding IsUnpinnedAndModified}"
+                                        Classes.pinned="{Binding IsPinned}"
+                                        Classes.pinned-dirty="{Binding IsPinnedAndModified}"
+                                        Command="{Binding TabActionButtonCommand}"
+                                        HorizontalContentAlignment="Center"
+                                        VerticalContentAlignment="Center"
+                                        Foreground="{DynamicResource PrimaryColor}">
+                                        <Panel Width="22" Height="22">
+                                            <LucideIcon Kind="X" Size="16" IsVisible="{Binding !IsPinned}" Foreground="{DynamicResource PrimaryColor}" />
+                                            <LucideIcon Kind="Pin" Size="15" IsVisible="{Binding IsPinned}" />
+
+                                            <!-- Маленький кружочек справа снизу от иконки Pin с контуром цвета фона TabItem -->
+                                            <Ellipse Name="PART_PinnedDirtyDot"
+                                                     Classes="PinnedDirtyDot"
+                                                     Width="4"
+                                                     Height="4"
+                                                     HorizontalAlignment="Right"
+                                                     VerticalAlignment="Bottom"
+                                                     Margin="0,0,3,3"
+                                                     Fill="{Binding $parent[TabItem].Foreground}"
+                                                     IsHitTestVisible="False"
+                                                     IsVisible="{Binding IsPinnedAndModified}" />
+                                        </Panel>
+                                    </Button>
+                                </Panel>
 
                             </Grid>
                         </DataTemplate>
@@ -645,9 +800,11 @@
 
                                 <MenuItem 
                                     Header="Открыть холст" 
-                                    Icon="{LucideIconContent LayoutDashboard, Size=18}" />
+                                    Icon="{LucideIconContent LayoutDashboard, Size=18}"
+                                    Command="{Binding OpenCanvasCommand}"
+                                    IsVisible="{Binding CanOpenCanvas}" />
 
-                                <Separator/>
+                                <Separator IsVisible="{Binding CanOpenCanvas}"/>
 
                                 <MenuItem 
                                     Header="Сохранить" 
@@ -667,13 +824,13 @@
 
                                 <Separator/>
 
-                                <MenuItem Header="Копировать путь" Icon="{LucideIconContent Copy, Size=18}"/>
-                                <MenuItem Header="Копировать относительный путь" Icon="{LucideIconContent CopySlash, Size=18}"/>
+                                <MenuItem Header="Копировать путь" Icon="{LucideIconContent Copy, Size=18}" Command="{Binding CopyPathCommand}"/>
+                                <MenuItem Header="Копировать относительный путь" Icon="{LucideIconContent CopySlash, Size=18}" Command="{Binding CopyRelativePathCommand}"/>
 
                                 <Separator/>
 
-                                <MenuItem Header="Показать в проводнике" Icon="{LucideIconContent FolderClosed, Size=18}"/>
-                                <MenuItem Header="Показать в файловом менеджере" Icon="{LucideIconContent FolderTree, Size=18}"/>
+                                <MenuItem Header="Показать в проводнике" Icon="{LucideIconContent FolderClosed, Size=18}" Command="{Binding ShowInExplorerCommand}"/>
+                                <MenuItem Header="Показать в файловом менеджере" Icon="{LucideIconContent FolderTree, Size=18}" Command="{Binding ShowInFileManagerCommand}"/>
 
                                 <Separator/>
 
@@ -896,6 +1053,7 @@
             </Border>
 
             <TreeView 
+                x:Name="SidebarTreeView"
                 Grid.Row="1"
                 ItemContainerTheme="{StaticResource QuartzTreeViewItemTheme}"
                 ItemsSource="{Binding FileTree}" 
@@ -911,28 +1069,14 @@
 
                 <TreeView.Styles>
                     <Style Selector="TreeViewItem">
-                        <Setter Property="Interaction.Behaviors">
-                            <BehaviorCollectionTemplate>
-                                <BehaviorCollection>
-                                    <RoutedEventTriggerBehavior RoutedEvent="{x:Static InputElement.PointerPressedEvent}"
-                                                                RoutingStrategies="Tunnel">
-                                        <InvokeCommandAction Command="{Binding FileReplaceCommand}"
-                                                            PassEventArgsToCommand="True" />
-                                    </RoutedEventTriggerBehavior>
-                                    <RoutedEventTriggerBehavior RoutedEvent="{x:Static InputElement.PointerReleasedEvent}"
-                                                                RoutingStrategies="Tunnel">
-                                        <InvokeCommandAction Command="{Binding FileReplacedCommand}"
-                                                            PassEventArgsToCommand="True" />
-                                    </RoutedEventTriggerBehavior>
-                                </BehaviorCollection>
-                            </BehaviorCollectionTemplate>
-                        </Setter>
+                        <Setter Property="IsExpanded" Value="{Binding $self.((vm:FileStructVM)DataContext).IsExpanded, Mode=TwoWay}" />
+                        <Setter Property="IsSelected" Value="{Binding $self.((vm:FileStructVM)DataContext).IsSelected, Mode=TwoWay}" />
                     </Style>
                 </TreeView.Styles>
 
                 <TreeView.DataTemplates>
                     <TreeDataTemplate DataType="{x:Type vm:DirectoryVM}" ItemsSource="{Binding Children}">
-                        <Grid>
+                        <Grid Background="Transparent">
                             <Grid ColumnDefinitions="Auto,*">
                                 <LucideIcon Classes.opened="{Binding $parent[TreeViewItem].IsExpanded}" Size="18">
                                     <LucideIcon.Styles>
@@ -955,7 +1099,7 @@
                     </TreeDataTemplate>
 
                     <DataTemplate DataType="{x:Type vm:LayerVM}">
-                        <Grid>
+                        <Grid Background="Transparent">
                             <Grid ColumnDefinitions="Auto,*">
                                 <LucideIcon 
                                     Kind="CircuitBoard" 
@@ -972,7 +1116,7 @@
                     </DataTemplate>
 
                     <DataTemplate DataType="{x:Type vm:BoardVM}">
-                        <Grid>
+                        <Grid Background="Transparent">
                             <Grid ColumnDefinitions="Auto,*">
                                 <LucideIcon 
                                     Kind="Layers" 
@@ -981,7 +1125,7 @@
                                 <TextBlock
                                     Grid.Column="1"
                                     Margin="6,0,0,0"
-                                    VerticalAlignment="Center"
+                                    VerticalAlignment="Center" 
                                     Text="{Binding Header}"
                                     TextTrimming="CharacterEllipsis" />
                             </Grid>
@@ -989,7 +1133,7 @@
                     </DataTemplate>
 
                     <DataTemplate DataType="{x:Type vm:StylesFileVM}">
-                        <Grid>
+                        <Grid Background="Transparent">
                             <Grid ColumnDefinitions="Auto,*" >
                                 <LucideIcon 
                                     Kind="PencilSparkles" 
@@ -998,7 +1142,7 @@
                                 <TextBlock
                                     Grid.Column="1"
                                     Margin="6,0,0,0"
-                                    VerticalAlignment="Center"
+                                    VerticalAlignment="Center" 
                                     Text="{Binding Header}"
                                     TextTrimming="CharacterEllipsis" />
                             </Grid>
@@ -1006,7 +1150,7 @@
                     </DataTemplate>
 
                     <DataTemplate DataType="{x:Type vm:PlainFileVM}">
-                        <Grid>
+                        <Grid Background="Transparent">
                             <Grid ColumnDefinitions="Auto,*">
                                 <LucideIcon 
                                     Kind="File" 
@@ -1022,7 +1166,7 @@
                     </DataTemplate>
 
                     <DataTemplate DataType="{x:Type vm:FileVM}">
-                        <Grid>
+                        <Grid Background="Transparent">
                             <Grid ColumnDefinitions="Auto,*">
                                 <LucideIcon 
                                     Kind="File" 
