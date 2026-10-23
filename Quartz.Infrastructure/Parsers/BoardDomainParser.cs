@@ -77,7 +77,9 @@ public class BoardDomainParser : IBoardDomainParser
                 out var boardErrors,
                 layersMap: layersMap,
                 availableLayerPaths: availableLayerPaths,
-                stylesMap: mergedStyles);
+                availableStylePaths: availableStylePaths,
+                stylesMap: mergedStyles,
+                yamlText: yamlText);
 
             errors.AddRange(boardErrors);
 

@@ -38,6 +38,7 @@ namespace Quartz.UI.Behaviors
 
         private static void OnPopupChildChanged(Popup popup, AvaloniaPropertyChangedEventArgs e)
         {
+            popup.ShouldUseOverlayLayer = true;
             if (e.NewValue is ToolTip tip || popup.Child is ToolTip)
             {
                 ConfigureToolTipPopup(popup, (e.NewValue as ToolTip) ?? (popup.Child as ToolTip));
@@ -46,6 +47,7 @@ namespace Quartz.UI.Behaviors
 
         private static void OnPopupPlacementTargetChanged(Popup popup, AvaloniaPropertyChangedEventArgs e)
         {
+            popup.ShouldUseOverlayLayer = true;
             if (popup.Child is ToolTip tip)
             {
                 ConfigureToolTipPopup(popup, tip);
@@ -54,6 +56,7 @@ namespace Quartz.UI.Behaviors
 
         private static void OnPopupIsOpenChanged(Popup popup, AvaloniaPropertyChangedEventArgs e)
         {
+            popup.ShouldUseOverlayLayer = true;
             if (e.NewValue is true && popup.Child is ToolTip tip)
             {
                 ConfigureToolTipPopup(popup, tip);
@@ -148,6 +151,8 @@ namespace Quartz.UI.Behaviors
 
         private static void ApplyPopupOffset(Control element, Popup popup)
         {
+            popup.ShouldUseOverlayLayer = true;
+
             if (element is ToolTip tip)
             {
                 ConfigureToolTipPopup(popup, tip);

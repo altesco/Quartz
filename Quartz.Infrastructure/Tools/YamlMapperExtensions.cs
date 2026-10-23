@@ -755,7 +755,8 @@ public static class YamlMapperExtensions
     IReadOnlyDictionary<string, Style> stylesMap,
     out List<EditorError> errors,
     IReadOnlyDictionary<string, Via>? viasMap = null,
-    IReadOnlyCollection<string>? availableStylePaths = null)
+    IReadOnlyCollection<string>? availableStylePaths = null,
+    string? yamlText = null)
     {
         var localErrors = new List<EditorError>();
 
@@ -772,10 +773,18 @@ public static class YamlMapperExtensions
             {
                 if (string.IsNullOrWhiteSpace(importPath)) continue;
 
+                var normImport = YamlParserHelpers.NormalizePath(importPath);
                 if (availableStylePaths != null &&
-                    !availableStylePaths.Contains(importPath, StringComparer.OrdinalIgnoreCase))
+                    !availableStylePaths.Any(p => string.Equals(YamlParserHelpers.NormalizePath(p), normImport, StringComparison.OrdinalIgnoreCase)))
                 {
-                    localErrors.AddError($"Файл стилей '{importPath}' не найден в проекте");
+                    var (line, col, len) = YamlParserHelpers.FindItemPosition(yamlText, "imports", importPath);
+                    localErrors.Add(new EditorError
+                    {
+                        Message = $"Файл стилей '{importPath}' не найден в проекте",
+                        Line = line,
+                        Column = col,
+                        Length = len
+                    });
                 }
             }
         }
@@ -878,7 +887,8 @@ public static class YamlMapperExtensions
     IReadOnlyDictionary<string, LayerModel>? layersMap,
     IReadOnlyCollection<string>? availableLayerPaths = null,
     IReadOnlyCollection<string>? availableStylePaths = null,
-    IReadOnlyDictionary<string, Style>? stylesMap = null)
+    IReadOnlyDictionary<string, Style>? stylesMap = null,
+    string? yamlText = null)
     {
         var localErrors = new List<EditorError>();
         stylesMap ??= new Dictionary<string, Style>();
@@ -890,10 +900,18 @@ public static class YamlMapperExtensions
             {
                 if (string.IsNullOrWhiteSpace(layerPath)) continue;
 
+                var normLayer = YamlParserHelpers.NormalizePath(layerPath);
                 if (availableLayerPaths != null &&
-                    !availableLayerPaths.Contains(layerPath, StringComparer.OrdinalIgnoreCase))
+                    !availableLayerPaths.Any(p => string.Equals(YamlParserHelpers.NormalizePath(p), normLayer, StringComparison.OrdinalIgnoreCase)))
                 {
-                    localErrors.AddError($"Файл слоя '{layerPath}' не найден в проекте");
+                    var (line, col, len) = YamlParserHelpers.FindItemPosition(yamlText, "layers", layerPath);
+                    localErrors.Add(new EditorError
+                    {
+                        Message = $"Файл слоя '{layerPath}' не найден в проекте",
+                        Line = line,
+                        Column = col,
+                        Length = len
+                    });
                 }
             }
         }
@@ -905,10 +923,18 @@ public static class YamlMapperExtensions
             {
                 if (string.IsNullOrWhiteSpace(importPath)) continue;
 
+                var normImport = YamlParserHelpers.NormalizePath(importPath);
                 if (availableStylePaths != null &&
-                    !availableStylePaths.Contains(importPath, StringComparer.OrdinalIgnoreCase))
+                    !availableStylePaths.Any(p => string.Equals(YamlParserHelpers.NormalizePath(p), normImport, StringComparison.OrdinalIgnoreCase)))
                 {
-                    localErrors.AddError($"Файл стилей '{importPath}' не найден в проекте");
+                    var (line, col, len) = YamlParserHelpers.FindItemPosition(yamlText, "imports", importPath);
+                    localErrors.Add(new EditorError
+                    {
+                        Message = $"Файл стилей '{importPath}' не найден в проекте",
+                        Line = line,
+                        Column = col,
+                        Length = len
+                    });
                 }
             }
         }

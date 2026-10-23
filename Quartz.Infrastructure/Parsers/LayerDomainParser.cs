@@ -115,8 +115,8 @@ public class LayerDomainParser : ILayerDomainParser
             var mergedStyles = YamlParserHelpers.MergeStyles(externalStyles, localStyles, out var mergeErrors);
             errors.AddRange(mergeErrors);
 
-            // Передаем availableStylePaths последним аргументом:
-            var layerDomain = dto.ToDomain(componentsMap, netsMap, mergedStyles, out var layerErrors, viasMap, availableStylePaths);
+            // Передаем availableStylePaths и yamlText:
+            var layerDomain = dto.ToDomain(componentsMap, netsMap, mergedStyles, out var layerErrors, viasMap, availableStylePaths, yamlText);
             errors.AddRange(layerErrors);
 
             return layerDomain;

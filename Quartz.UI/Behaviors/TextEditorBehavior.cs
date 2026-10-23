@@ -10,8 +10,10 @@ using Avalonia.VisualTree;
 using Avalonia.Xaml.Interactivity;
 using AvaloniaEdit;
 using AvaloniaEdit.Document;
+using AvaloniaEdit.Indentation;
 using AvaloniaEdit.Rendering;
 using AvaloniaEdit.TextMate;
+using Quartz.UI.CodeCompletion;
 using Quartz.UI.Services;
 using Quartz.UI.Tools;
 using TextMateSharp.Grammars;
@@ -26,6 +28,37 @@ namespace Quartz.UI.Behaviors
         private TextDocument? _trackedDocument;
         private string? _currentScope;
         private ViewModels.EditorVM? _subscribedVm;
+        private QuartzCompletionWindow? _completionWindow;
+        private readonly DispatcherTimer _completionTimer;
+        private const int CompletionDelayMs = 400;
+
+        private static readonly bool IsWayland =
+            OperatingSystem.IsLinux() && !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("WAYLAND_DISPLAY"));
+        private Key? _currentPressedKey;
+        private bool _hasReceivedTextInputForCurrentKey;
+        private bool _triggerOnNewLine;
+
+        public TextEditorBehavior()
+        {
+            _completionTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(CompletionDelayMs)
+            };
+            _completionTimer.Tick += OnCompletionTimerTick;
+        }
+
+        private void OnCompletionTimerTick(object? sender, EventArgs e)
+        {
+            _completionTimer.Stop();
+            if (_completionWindow == null && AssociatedObject?.TextArea?.IsFocused == true)
+            {
+                ShowCompletion(forced: false);
+            }
+            else
+            {
+                _triggerOnNewLine = false;
+            }
+        }
 
         private void HookVm(ViewModels.EditorVM? newVm)
         {
@@ -115,9 +148,19 @@ namespace Quartz.UI.Behaviors
             ConfigureEditorForCurrentFile();
             HookVm(AssociatedObject.DataContext as ViewModels.EditorVM);
 
-            if (AssociatedObject.TextArea?.Caret != null)
+            if (AssociatedObject.TextArea != null)
             {
-                AssociatedObject.TextArea.Caret.PositionChanged += OnCaretPositionChanged;
+                AssociatedObject.TextArea.IndentationStrategy = new YamlIndentationStrategy(AssociatedObject);
+                if (AssociatedObject.TextArea.Caret != null)
+                {
+                    AssociatedObject.TextArea.Caret.PositionChanged += OnCaretPositionChanged;
+                }
+                AssociatedObject.TextArea.TextEntered += OnTextAreaTextEntered;
+                AssociatedObject.TextArea.LostFocus += OnTextAreaLostFocus;
+                AssociatedObject.TextArea.AddHandler(
+                    InputElement.PointerPressedEvent,
+                    OnTextAreaPointerPressed,
+                    RoutingStrategies.Tunnel);
             }
             UpdateCaretPosition();
 
@@ -146,6 +189,11 @@ namespace Quartz.UI.Behaviors
             AssociatedObject.AddHandler(
                 InputElement.KeyDownEvent,
                 OnEditorKeyDown,
+                RoutingStrategies.Tunnel);
+
+            AssociatedObject.AddHandler(
+                InputElement.KeyUpEvent,
+                OnEditorKeyUp,
                 RoutingStrategies.Tunnel);
 
             LinuxX11PinchGestureService.PinchGesture -= OnLinuxPinchGesture;
@@ -559,7 +607,15 @@ namespace Quartz.UI.Behaviors
 
             if (e.KeyModifiers.HasFlag(KeyModifiers.Control))
             {
-                if (e.Key is Key.OemPlus or Key.Add)
+                _triggerOnNewLine = false;
+                if (e.Key == Key.Space)
+                {
+                    _completionTimer.Stop();
+                    e.Handled = true;
+                    ShowCompletion(forced: true);
+                    return;
+                }
+                else if (e.Key is Key.OemPlus or Key.Add)
                 {
                     double newSize = Math.Clamp(AssociatedObject.FontSize + ZoomStep, MinFontSize, MaxFontSize);
                     AssociatedObject.FontSize = Math.Round(newSize, 2);
@@ -576,6 +632,308 @@ namespace Quartz.UI.Behaviors
                     AssociatedObject.FontSize = 14.0;
                     e.Handled = true;
                 }
+                else
+                {
+                    _completionTimer.Stop();
+                    _completionWindow?.Close();
+                }
+            }
+            else if (e.Key is Key.Escape)
+            {
+                _triggerOnNewLine = false;
+                _completionTimer.Stop();
+                _completionWindow?.Close();
+            }
+            else if (e.Key is Key.Enter)
+            {
+                _currentPressedKey = null;
+                _hasReceivedTextInputForCurrentKey = false;
+                if (_completionWindow == null)
+                {
+                    _triggerOnNewLine = true;
+                    _completionTimer.Stop();
+                    _completionTimer.Start();
+                }
+            }
+            else if (e.Key is Key.Tab)
+            {
+                _triggerOnNewLine = false;
+                _completionTimer.Stop();
+            }
+            else if (e.Key is Key.Up or Key.Down or Key.PageUp or Key.PageDown)
+            {
+                _triggerOnNewLine = false;
+                _completionTimer.Stop();
+            }
+            else if (e.Key is Key.Left or Key.Right or Key.Home or Key.End)
+            {
+                _triggerOnNewLine = false;
+                _completionTimer.Stop();
+                _completionWindow?.Close();
+            }
+            else if (e.Key is Key.Back or Key.Delete)
+            {
+                _triggerOnNewLine = false;
+                _completionTimer.Stop();
+                if (_completionWindow == null)
+                {
+                    _completionTimer.Start();
+                }
+            }
+            else if (e.Key is not Key.LeftShift and not Key.RightShift and not Key.LeftCtrl and not Key.RightCtrl and not Key.LeftAlt and not Key.RightAlt and not Key.LWin and not Key.RWin and not Key.CapsLock and not Key.NumLock and not Key.Scroll)
+            {
+                _triggerOnNewLine = false;
+                if (IsWayland &&
+                    _currentPressedKey == e.Key &&
+                    _hasReceivedTextInputForCurrentKey &&
+                    !e.Handled &&
+                    !string.IsNullOrEmpty(e.KeySymbol) &&
+                    !char.IsControl(e.KeySymbol[0]) &&
+                    !e.KeyModifiers.HasFlag(KeyModifiers.Control) &&
+                    !e.KeyModifiers.HasFlag(KeyModifiers.Alt) &&
+                    AssociatedObject.TextArea != null &&
+                    !AssociatedObject.IsReadOnly)
+                {
+                    // На Wayland Avalonia.Wayland отправляет только RawKeyEventArgs на таймере повтора клавиш (OnKeyRepeatTick)
+                    // и не генерирует RawTextInputEventArgs. Вставляем повторяемый символ напрямую.
+                    AssociatedObject.TextArea.PerformTextInput(e.KeySymbol);
+                    e.Handled = true;
+                    return;
+                }
+
+                if (_currentPressedKey != e.Key)
+                {
+                    _currentPressedKey = e.Key;
+                    _hasReceivedTextInputForCurrentKey = false;
+                }
+
+                // При непрерывном наборе или зажатии клавиши сбрасываем таймер задержки на каждом повторе ввода.
+                // Окно автодополнения появится строго через 400мс после того, как клавишу отпустили.
+                if (_completionWindow == null)
+                {
+                    _completionTimer.Stop();
+                    _completionTimer.Start();
+                }
+            }
+        }
+
+        private void OnTextAreaPointerPressed(object? sender, PointerPressedEventArgs e)
+        {
+            _triggerOnNewLine = false;
+            _currentPressedKey = null;
+            _hasReceivedTextInputForCurrentKey = false;
+            _completionTimer.Stop();
+            _completionWindow?.Close();
+        }
+
+        private void OnEditorKeyUp(object? sender, KeyEventArgs e)
+        {
+            if (_currentPressedKey == e.Key)
+            {
+                _currentPressedKey = null;
+                _hasReceivedTextInputForCurrentKey = false;
+            }
+        }
+
+        private void OnTextAreaLostFocus(object? sender, RoutedEventArgs e)
+        {
+            _triggerOnNewLine = false;
+            _currentPressedKey = null;
+            _hasReceivedTextInputForCurrentKey = false;
+        }
+
+        private void OnTextAreaTextEntered(object? sender, TextInputEventArgs e)
+        {
+            if (_triggerOnNewLine)
+            {
+                if (string.IsNullOrWhiteSpace(e.Text))
+                {
+                    // Перенос строки и/или автоматические пробелы отступа.
+                    // Не сбрасываем _triggerOnNewLine и не останавливаем таймер!
+                    return;
+                }
+                _triggerOnNewLine = false;
+            }
+
+            _hasReceivedTextInputForCurrentKey = true;
+
+            if (string.IsNullOrEmpty(e.Text)) return;
+            if (AssociatedObject == null || AssociatedObject.IsReadOnly) return;
+
+            // Если окно автодополнения уже открыто, не перезапускаем таймер:
+            // AvaloniaEdit фильтрует список на лету
+            if (_completionWindow != null) return;
+
+            char c = e.Text[0];
+
+            // Автодополнение срабатывает при наборе букв, цифр, знака подчеркивания или триггерных символов
+            if (char.IsLetterOrDigit(c) || c is '_' or '!' or '-' or ':')
+            {
+                // Сбрасываем и перезапускаем таймер задержки (400мс).
+                // При непрерывном наборе или зажатии клавиши (ffffffffff) таймер постоянно сбрасывается
+                // и не блокирует повтор ввода в системе. Окно появится только после паузы в 400мс.
+                _completionTimer.Stop();
+                _completionTimer.Start();
+            }
+            else if (c == ' ')
+            {
+                // Проверяем, стоит ли пробел после триггера списка ('-') или ключа (':')
+                var doc = AssociatedObject.Document;
+                int caret = AssociatedObject.TextArea.Caret.Offset;
+                if (doc != null && caret >= 2)
+                {
+                    char prev = doc.GetCharAt(caret - 2);
+                    if (prev is '-' or ':')
+                    {
+                        _completionTimer.Stop();
+                        _completionTimer.Start();
+                        return;
+                    }
+                }
+                _completionTimer.Stop();
+            }
+            else
+            {
+                _completionTimer.Stop();
+            }
+        }
+
+        public void ShowCompletion(bool forced)
+        {
+            if (AssociatedObject?.TextArea == null || AssociatedObject.Document == null) return;
+            if (AssociatedObject.IsReadOnly) return;
+
+            var textArea = AssociatedObject.TextArea;
+            var doc = AssociatedObject.Document;
+            int caretOffset = textArea.Caret.Offset;
+            if (caretOffset < 0 || caretOffset > doc.TextLength) return;
+
+            var caretLine = doc.GetLineByOffset(caretOffset);
+            var textBeforeCaretOnLine = doc.GetText(caretLine.Offset, caretOffset - caretLine.Offset);
+            var trimmedBefore = textBeforeCaretOnLine.TrimStart();
+            bool isListLine = trimmedBefore.StartsWith("-");
+
+            int startOffset = caretOffset;
+            string currentWord = "";
+
+            if (isListLine)
+            {
+                // Для строк списка (например, "  -", "  - ", "  - !", "  - !res", "  - top")
+                // Находим позицию дефиса и начало значения после него
+                int dashIndex = textBeforeCaretOnLine.IndexOf('-');
+                int valueStartIndex = dashIndex + 1;
+                while (valueStartIndex < textBeforeCaretOnLine.Length && textBeforeCaretOnLine[valueStartIndex] == ' ')
+                {
+                    valueStartIndex++;
+                }
+
+                int valueStartOffset = caretLine.Offset + valueStartIndex;
+
+                if (caretOffset <= valueStartOffset)
+                {
+                    // Курсор стоит на дефисе или сразу после него/пробелов ("  -" или "  - ")
+                    startOffset = caretOffset;
+                    currentWord = "";
+                }
+                else
+                {
+                    // Пользователь уже набирает слово после дефиса (например, "!" или имя тега/файла)
+                    startOffset = caretOffset;
+                    while (startOffset > valueStartOffset)
+                    {
+                        char prev = doc.GetCharAt(startOffset - 1);
+                        if (char.IsLetterOrDigit(prev) || prev is '_' or '-' or '!')
+                        {
+                            startOffset--;
+                        }
+                        else
+                        {
+                            break;
+                        }
+                    }
+                    currentWord = doc.GetText(startOffset, caretOffset - startOffset);
+                }
+            }
+            else
+            {
+                // Обычная строка (ключ или значение свойства)
+                while (startOffset > 0)
+                {
+                    char prev = doc.GetCharAt(startOffset - 1);
+                    if (char.IsLetterOrDigit(prev) || prev is '_' or '-' or '!')
+                    {
+                        startOffset--;
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+                currentWord = doc.GetText(startOffset, caretOffset - startOffset);
+            }
+
+            // Если автодополнение не вызвано принудительно (Ctrl+Space), не открываем для пустых слов без спец. триггера
+            if (!forced && string.IsNullOrEmpty(currentWord))
+            {
+                bool isTrigger = false;
+                if (_triggerOnNewLine)
+                {
+                    isTrigger = true;
+                }
+                else if (isListLine)
+                {
+                    var afterTrim = trimmedBefore.TrimEnd();
+                    if (afterTrim == "-")
+                        isTrigger = true;
+                }
+
+                if (!isTrigger && caretOffset > 0)
+                {
+                    char lastChar = doc.GetCharAt(caretOffset - 1);
+                    if (lastChar is ':' or '.' or '-' or '!')
+                        isTrigger = true;
+                }
+
+                if (!isTrigger)
+                {
+                    _triggerOnNewLine = false;
+                    return;
+                }
+            }
+
+            _triggerOnNewLine = false;
+
+            var completions = CompletionProvider.GetCompletions(AssociatedObject, currentWord, caretOffset);
+            if (completions == null || completions.Count == 0) return;
+
+            _completionWindow?.Close();
+
+            _completionWindow = new QuartzCompletionWindow(textArea)
+            {
+                StartOffset = startOffset,
+                FontFamily = AssociatedObject.FontFamily
+            };
+
+            _completionWindow.CompletionList.FontFamily = AssociatedObject.FontFamily;
+            _completionWindow.CompletionList.IsFiltering = true;
+
+            foreach (var item in completions)
+            {
+                _completionWindow.CompletionList.CompletionData.Add(item);
+            }
+
+            _completionWindow.Closed += (s, e) => _completionWindow = null;
+
+            _completionWindow.Show();
+
+            if (!string.IsNullOrEmpty(currentWord))
+            {
+                _completionWindow.CompletionList.SelectItem(currentWord);
+            }
+
+            if (_completionWindow.CompletionList.SelectedItem == null)
+            {
+                _completionWindow.SelectFirstItem();
             }
         }
 
@@ -590,16 +948,29 @@ namespace Quartz.UI.Behaviors
                 AssociatedObject.GestureRecognizers.Remove(_pinchRecognizer);
                 AssociatedObject.RemoveHandler(InputElement.PointerWheelChangedEvent, OnPointerWheelChanged);
                 AssociatedObject.RemoveHandler(InputElement.KeyDownEvent, OnEditorKeyDown);
+                AssociatedObject.RemoveHandler(InputElement.KeyUpEvent, OnEditorKeyUp);
                 AssociatedObject.RemoveHandler(InputElement.PinchEvent, OnPinchGesture);
                 AssociatedObject.RemoveHandler(InputElement.PinchEndedEvent, OnPinchGestureEnded);
                 AssociatedObject.RemoveHandler(InputElement.PointerTouchPadGestureMagnifyEvent, OnTouchPadGestureMagnify);
 
                 LinuxX11PinchGestureService.PinchGesture -= OnLinuxPinchGesture;
 
-                if (AssociatedObject.TextArea?.Caret != null)
+                if (AssociatedObject.TextArea != null)
                 {
-                    AssociatedObject.TextArea.Caret.PositionChanged -= OnCaretPositionChanged;
+                    if (AssociatedObject.TextArea.Caret != null)
+                    {
+                        AssociatedObject.TextArea.Caret.PositionChanged -= OnCaretPositionChanged;
+                    }
+                    AssociatedObject.TextArea.TextEntered -= OnTextAreaTextEntered;
+                    AssociatedObject.TextArea.LostFocus -= OnTextAreaLostFocus;
+                    AssociatedObject.TextArea.RemoveHandler(
+                        InputElement.PointerPressedEvent,
+                        OnTextAreaPointerPressed);
                 }
+
+                _completionTimer.Stop();
+                _completionWindow?.Close();
+                _completionWindow = null;
 
                 HookDocument(null);
                 HookVm(null);
@@ -738,6 +1109,71 @@ namespace Quartz.UI.Behaviors
 
                     drawingContext.DrawLine(_linePen, new Point(x, topY), new Point(x, bottomY));
                 }
+            }
+        }
+    }
+
+    public class YamlIndentationStrategy : IIndentationStrategy
+    {
+        private readonly TextEditor _editor;
+
+        public YamlIndentationStrategy(TextEditor editor) => _editor = editor;
+
+        public void IndentLine(TextDocument document, DocumentLine line)
+        {
+            if (document == null || line == null) return;
+            var previousLine = line.PreviousLine;
+            if (previousLine == null) return;
+
+            string prevText = document.GetText(previousLine.Offset, previousLine.Length);
+            string prevTrimmed = prevText.Trim();
+            if (prevTrimmed.StartsWith("#") || string.IsNullOrWhiteSpace(prevTrimmed))
+            {
+                for (var p = previousLine.PreviousLine; p != null; p = p.PreviousLine)
+                {
+                    var t = document.GetText(p.Offset, p.Length).Trim();
+                    if (!string.IsNullOrWhiteSpace(t) && !t.StartsWith("#"))
+                    {
+                        prevText = document.GetText(p.Offset, p.Length);
+                        prevTrimmed = t;
+                        break;
+                    }
+                }
+            }
+
+            int prevIndent = 0;
+            while (prevIndent < prevText.Length && (prevText[prevIndent] == ' ' || prevText[prevIndent] == '\t'))
+            {
+                prevIndent++;
+            }
+
+            int indentSize = _editor.Options?.IndentationSize ?? 2;
+            if (indentSize <= 0) indentSize = 2;
+            int newIndent = prevIndent;
+
+            if (prevTrimmed.EndsWith(':') ||
+                prevTrimmed.StartsWith("- !") ||
+                (prevTrimmed.StartsWith("- ") && prevTrimmed.Contains(':')))
+            {
+                newIndent = prevIndent + indentSize;
+            }
+
+            string indentString = new string(' ', newIndent);
+            string currentLineText = document.GetText(line.Offset, line.Length);
+            int currentIndentLen = 0;
+            while (currentIndentLen < currentLineText.Length && (currentLineText[currentIndentLen] == ' ' || currentLineText[currentIndentLen] == '\t'))
+            {
+                currentIndentLen++;
+            }
+
+            document.Replace(line.Offset, currentIndentLen, indentString);
+        }
+
+        public void IndentLines(TextDocument document, int begin, int end)
+        {
+            for (int i = begin; i <= end; i++)
+            {
+                IndentLine(document, document.GetLineByNumber(i));
             }
         }
     }

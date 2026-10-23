@@ -1,9 +1,11 @@
+using System.IO;
 using System.Reflection;
 using Quartz.Core.Enums;
-using Quartz.Core.Models.BoardEntities.Styles;
-using Quartz.Infrastructure.Dtos.Styles;
 using Quartz.Core.Models;
 using Quartz.Core.Models.BoardEntities;
+using Quartz.Core.Models.BoardEntities.Styles;
+using Quartz.Infrastructure.Dtos.Styles;
+using YamlDotNet.RepresentationModel;
 
 namespace Quartz.Infrastructure.Tools;
 
@@ -261,5 +263,61 @@ public static class YamlParserHelpers
                 prop.SetValue(target, sourceValue);
             }
         }
+    }
+
+    public static string NormalizePath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return string.Empty;
+        return path.Replace('\\', '/').TrimStart('.', '/');
+    }
+
+    public static (int Line, int Column, int Length) FindItemPosition(string? yamlText, string targetKey, string itemValue)
+    {
+        if (string.IsNullOrWhiteSpace(yamlText) || string.IsNullOrWhiteSpace(itemValue))
+            return (1, 1, Math.Max(1, itemValue?.Length ?? 1));
+
+        // 1. Попытка через YamlStream AST (точный поиск по узлам YamlDotNet)
+        try
+        {
+            var yaml = new YamlStream();
+            using var reader = new StringReader(yamlText);
+            yaml.Load(reader);
+
+            if (yaml.Documents.Count > 0 && yaml.Documents[0].RootNode is YamlMappingNode rootMapping)
+            {
+                var keyNode = new YamlScalarNode(targetKey);
+                if (rootMapping.Children.TryGetValue(keyNode, out var seqNode) && seqNode is YamlSequenceNode sequence)
+                {
+                    foreach (var child in sequence.Children)
+                    {
+                        if (child is YamlScalarNode scalar && string.Equals(scalar.Value, itemValue, StringComparison.OrdinalIgnoreCase))
+                        {
+                            int line = Math.Max(1, (int)scalar.Start.Line);
+                            int col = Math.Max(1, (int)scalar.Start.Column);
+                            int len = (int)(scalar.End.Column - scalar.Start.Column);
+                            if (len <= 0) len = scalar.Value?.Length ?? 1;
+                            return (line, col, Math.Max(1, len));
+                        }
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // Ошибки парсинга игнорируем
+        }
+
+        // 2. Fallback: построчный поиск в исходном тексте документа
+        var lines = yamlText.Split('\n');
+        for (int i = 0; i < lines.Length; i++)
+        {
+            int idx = lines[i].IndexOf(itemValue, StringComparison.OrdinalIgnoreCase);
+            if (idx >= 0)
+            {
+                return (i + 1, idx + 1, itemValue.Length);
+            }
+        }
+
+        return (1, 1, Math.Max(1, itemValue.Length));
     }
 }

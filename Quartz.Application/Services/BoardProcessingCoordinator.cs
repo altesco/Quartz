@@ -82,8 +82,13 @@ public class BoardProcessingCoordinator : IBoardProcessingCoordinator
         var layerIndex = 0;
         foreach (var path in activeLayerPaths)
         {
-            if (!layerTexts.TryGetValue(path, out var layerText))
+            var normalizedPath = NormalizePath(path);
+            var match = layerTexts.FirstOrDefault(kvp =>
+                string.Equals(NormalizePath(kvp.Key), normalizedPath, StringComparison.OrdinalIgnoreCase));
+            if (match.Value == null)
                 continue;
+
+            var layerText = match.Value;
 
             var layerSyntaxErrors = _syntaxParser.ValidateSyntax(layerText);
             if (layerSyntaxErrors.Count > 0)
