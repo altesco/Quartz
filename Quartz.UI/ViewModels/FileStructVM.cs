@@ -28,10 +28,16 @@ public abstract partial class FileStructVM : ObservableObject
     }
 
     public string Header => Path.GetFileName(FilePath);
+    public virtual bool IsDirectory => false;
     public DirectoryVM? Parent { get; set; }
 
     [ObservableProperty]
     private bool _isExpanded;
+
+    partial void OnIsExpandedChanged(bool value)
+    {
+        MainVM?.NotifyFolderExpandedChanged();
+    }
 
     [ObservableProperty]
     private bool _isSelected;

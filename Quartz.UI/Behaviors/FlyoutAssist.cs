@@ -192,6 +192,56 @@ namespace Quartz.UI.Behaviors
                     vOffset = GetVerticalOffset(desc);
             }
 
+            // Автоматическая компенсация смещения теней с учетом Placement:
+            if (!hOffset.HasValue)
+            {
+                switch (popup.Placement)
+                {
+                    case PlacementMode.BottomEdgeAlignedLeft:
+                    case PlacementMode.TopEdgeAlignedLeft:
+                        hOffset = -12;
+                        break;
+                    case PlacementMode.BottomEdgeAlignedRight:
+                    case PlacementMode.TopEdgeAlignedRight:
+                        hOffset = 12;
+                        break;
+                    case PlacementMode.Bottom:
+                    case PlacementMode.Top:
+                    case PlacementMode.Center:
+                    default:
+                        hOffset = 0;
+                        break;
+                }
+            }
+            else if (hOffset.Value == -12 && (popup.Placement == PlacementMode.Bottom || popup.Placement == PlacementMode.Top || popup.Placement == PlacementMode.Center))
+            {
+                // Если пришло унаследованное -12, но выравнивание центрированное — сбрасываем в 0 для точного центрирования
+                hOffset = 0;
+            }
+            else if (hOffset.Value == -12 && (popup.Placement == PlacementMode.BottomEdgeAlignedRight || popup.Placement == PlacementMode.TopEdgeAlignedRight))
+            {
+                // Если выравнивание по правому краю, компенсация тени должна быть +12, а не -12
+                hOffset = 12;
+            }
+
+            if (!vOffset.HasValue)
+            {
+                switch (popup.Placement)
+                {
+                    case PlacementMode.Top:
+                    case PlacementMode.TopEdgeAlignedLeft:
+                    case PlacementMode.TopEdgeAlignedRight:
+                        vOffset = 12;
+                        break;
+                    case PlacementMode.Bottom:
+                    case PlacementMode.BottomEdgeAlignedLeft:
+                    case PlacementMode.BottomEdgeAlignedRight:
+                    default:
+                        vOffset = -12;
+                        break;
+                }
+            }
+
             if (hOffset.HasValue)
             {
                 popup.HorizontalOffset = hOffset.Value;

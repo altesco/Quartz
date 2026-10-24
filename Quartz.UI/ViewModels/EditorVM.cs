@@ -301,10 +301,6 @@ public abstract partial class EditorVM : FileVM
         try
         {
             await File.WriteAllTextAsync(localPath, Document.Text);
-            FilePath = localPath;
-            Document.UndoStack.MarkAsOriginalFile();
-            IsModified = false;
-            UpdateBreadcrumbs();
         }
         catch (Exception ex)
         {

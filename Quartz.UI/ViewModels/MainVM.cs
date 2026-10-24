@@ -149,6 +149,56 @@ public partial class MainVM : ObservableObject
 
     private string? _projectRootDir;
     public string? ProjectRootDir => _projectRootDir;
+    public bool HasOpenFolder => !string.IsNullOrWhiteSpace(_projectRootDir) && _projectRootDirectory != null;
+
+    public bool IsAnyFolderExpanded
+    {
+        get
+        {
+            if (_projectRootDirectory == null) return false;
+            return CheckAnyFolderExpanded(_projectRootDirectory);
+        }
+    }
+
+    private static bool CheckAnyFolderExpanded(DirectoryVM dir)
+    {
+        if (dir.IsExpanded) return true;
+        foreach (var child in dir.Children)
+        {
+            if (child is DirectoryVM subDir && CheckAnyFolderExpanded(subDir))
+                return true;
+        }
+        return false;
+    }
+
+    public string ExpandAllToolTip => IsAnyFolderExpanded ? "Свернуть все" : "Развернуть все";
+
+    public void NotifyFolderExpandedChanged()
+    {
+        OnPropertyChanged(nameof(IsAnyFolderExpanded));
+        OnPropertyChanged(nameof(ExpandAllToolTip));
+    }
+
+    [RelayCommand]
+    public void ToggleExpandAll()
+    {
+        if (_projectRootDirectory == null) return;
+        bool shouldExpand = !IsAnyFolderExpanded;
+        SetExpandedRecursive(_projectRootDirectory, shouldExpand);
+        NotifyFolderExpandedChanged();
+    }
+
+    private static void SetExpandedRecursive(DirectoryVM dir, bool isExpanded)
+    {
+        dir.IsExpanded = isExpanded;
+        foreach (var child in dir.Children)
+        {
+            if (child is DirectoryVM subDir)
+            {
+                SetExpandedRecursive(subDir, isExpanded);
+            }
+        }
+    }
 
     public ObservableCollection<FileVM> ProjectErrors { get; } = [];
 
@@ -165,12 +215,18 @@ public partial class MainVM : ObservableObject
         };
         _navDebounceTimer.Tick += OnNavDebounceTimerTick;
 
+        _fsDebounceTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(100)
+        };
+        _fsDebounceTimer.Tick += OnFsDebounceTimerTick;
+
         ProjectErrors.CollectionChanged += OnProjectErrorsCollectionChanged;
 
-        _projectRootDir = Path.Combine("/", "home", "alexandr", "Games", "Проект");
-        if (Directory.Exists(_projectRootDir))
+        var defaultProjectDir = Path.Combine("/", "home", "alexandr", "Games", "Проект");
+        if (Directory.Exists(defaultProjectDir))
         {
-            LoadProjectFromDirectory(_projectRootDir);
+            LoadProjectFromDirectory(defaultProjectDir);
         }
     }
 
@@ -853,6 +909,58 @@ public partial class MainVM : ObservableObject
     }
 
     [RelayCommand]
+    private async Task OpenSingleFile()
+    {
+        var selectedPath = await _folderDialogService.OpenFileAsync("Открыть файл");
+        if (string.IsNullOrWhiteSpace(selectedPath) || !File.Exists(selectedPath))
+            return;
+
+        CloseProject();
+
+        var file = LoadFile(selectedPath, parent: null);
+        if (file != null)
+        {
+            OpenFileTab(file);
+
+            if (CurrentBoard != null)
+            {
+                _ = CurrentBoard.ProcessBoardProject();
+            }
+        }
+    }
+
+    [RelayCommand]
+    public void CloseProject()
+    {
+        StopFileWatcher();
+
+        _projectLayers.Clear();
+        _projectStyles.Clear();
+        _projectRootDir = null;
+        _projectRootDirectory = null;
+        CurrentBoard = null;
+
+        ProjectErrors.Clear();
+
+        RootNode = null;
+        ActivePanel = null;
+        ActiveEditor = null;
+        ActiveFile = null;
+
+        _navigationHistory.Clear();
+        _currentHistoryIndex = -1;
+        UpdateCanNavigate();
+
+        OnPropertyChanged(nameof(ProjectRootDir));
+        OnPropertyChanged(nameof(HasOpenFolder));
+        OnPropertyChanged(nameof(ProjectName));
+        OnPropertyChanged(nameof(SidebarHeaderTitle));
+        OnPropertyChanged(nameof(FileTree));
+        OnPropertyChanged(nameof(TotalErrorCount));
+        NotifyFolderExpandedChanged();
+    }
+
+    [RelayCommand]
     private void SaveCurrentFile()
     {
         if (ActivePanel?.SelectedTab is EditorVM editor)
@@ -1096,6 +1204,7 @@ public partial class MainVM : ObservableObject
     public void LoadProjectFromDirectory(string directoryPath)
     {
         // 1. Очищаем состояние предыдущего проекта
+        StopFileWatcher();
         _projectLayers.Clear();
         _projectStyles.Clear();
         _projectRootDirectory = null;
@@ -1118,12 +1227,19 @@ public partial class MainVM : ObservableObject
 
         // 2. Загружаем файловую структуру выбранной директории
         _projectRootDir = directoryPath;
+        _projectRootDirectory = LoadDirectories(_projectRootDir, parent: null);
+
+        OnPropertyChanged(nameof(ProjectRootDir));
+        OnPropertyChanged(nameof(HasOpenFolder));
         OnPropertyChanged(nameof(ProjectName));
         OnPropertyChanged(nameof(SidebarHeaderTitle));
-        _projectRootDirectory = LoadDirectories(_projectRootDir, parent: null);
         OnPropertyChanged(nameof(FileTree));
+        NotifyFolderExpandedChanged();
 
-        // 3. Если в проекте есть плата, запускаем расчет
+        // 3. Запускаем наблюдение за файловой системой
+        StartFileWatcher(directoryPath);
+
+        // 4. Если в проекте есть плата, запускаем расчет
         if (CurrentBoard != null)
         {
             _ = CurrentBoard.ProcessBoardProject();
@@ -1230,5 +1346,582 @@ public partial class MainVM : ObservableObject
             return Path.GetFileName(fullPath);
 
         return Path.GetRelativePath(_projectRootDir, fullPath).Replace('\\', '/');
+    }
+
+    // --- НАБЛЮДЕНИЕ ЗА ФАЙЛОВОЙ СИСТЕМОЙ (FILE SYSTEM WATCHER) ---
+
+    private static readonly StringComparison PathComparison =
+        OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+    private static readonly StringComparer PathComparer =
+        OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+
+    private FileSystemWatcher? _fileWatcher;
+    private readonly DispatcherTimer _fsDebounceTimer;
+    private readonly HashSet<string> _pendingChangedPaths = new(PathComparer);
+    private readonly Dictionary<string, string> _pendingRenames = new(PathComparer);
+    private readonly object _fsLock = new();
+
+    private void StartFileWatcher(string dirPath)
+    {
+        StopFileWatcher();
+
+        try
+        {
+            _fileWatcher = new FileSystemWatcher(dirPath)
+            {
+                IncludeSubdirectories = true,
+                NotifyFilter = NotifyFilters.FileName |
+                               NotifyFilters.DirectoryName |
+                               NotifyFilters.CreationTime |
+                               NotifyFilters.LastWrite
+            };
+
+            _fileWatcher.Created += OnFileSystemChanged;
+            _fileWatcher.Deleted += OnFileSystemChanged;
+            _fileWatcher.Renamed += OnFileSystemRenamed;
+            _fileWatcher.Error += OnFileSystemError;
+
+            _fileWatcher.EnableRaisingEvents = true;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Не удалось запустить FileSystemWatcher: {ex.Message}");
+        }
+    }
+
+    private void StopFileWatcher()
+    {
+        _fsDebounceTimer.Stop();
+        lock (_fsLock)
+        {
+            _pendingChangedPaths.Clear();
+            _pendingRenames.Clear();
+        }
+
+        if (_fileWatcher != null)
+        {
+            try
+            {
+                _fileWatcher.EnableRaisingEvents = false;
+                _fileWatcher.Created -= OnFileSystemChanged;
+                _fileWatcher.Deleted -= OnFileSystemChanged;
+                _fileWatcher.Renamed -= OnFileSystemRenamed;
+                _fileWatcher.Error -= OnFileSystemError;
+                _fileWatcher.Dispose();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Ошибка при остановке FileSystemWatcher: {ex.Message}");
+            }
+            finally
+            {
+                _fileWatcher = null;
+            }
+        }
+    }
+
+    private static bool IsIgnoredPath(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return true;
+
+        var name = Path.GetFileName(path);
+        if (string.IsNullOrEmpty(name)) return true;
+
+        if (name.StartsWith('.')) return true;
+        if (name.EndsWith('~') || name.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase)) return true;
+
+        var parts = path.Split(new[] { '/', '\\' }, StringSplitOptions.RemoveEmptyEntries);
+        foreach (var part in parts)
+        {
+            if (part.StartsWith('.')) return true;
+        }
+
+        return false;
+    }
+
+    private void OnFileSystemChanged(object sender, FileSystemEventArgs e)
+    {
+        if (IsIgnoredPath(e.FullPath)) return;
+
+        lock (_fsLock)
+        {
+            _pendingChangedPaths.Add(e.FullPath);
+        }
+
+        Dispatcher.UIThread.Post(() =>
+        {
+            _fsDebounceTimer.Stop();
+            _fsDebounceTimer.Start();
+        }, DispatcherPriority.Background);
+    }
+
+    private void OnFileSystemRenamed(object sender, RenamedEventArgs e)
+    {
+        bool oldIgnored = IsIgnoredPath(e.OldFullPath);
+        bool newIgnored = IsIgnoredPath(e.FullPath);
+
+        if (oldIgnored && newIgnored) return;
+
+        lock (_fsLock)
+        {
+            if (!oldIgnored && !newIgnored)
+            {
+                _pendingRenames[e.OldFullPath] = e.FullPath;
+            }
+            if (!oldIgnored) _pendingChangedPaths.Add(e.OldFullPath);
+            if (!newIgnored) _pendingChangedPaths.Add(e.FullPath);
+        }
+
+        Dispatcher.UIThread.Post(() =>
+        {
+            _fsDebounceTimer.Stop();
+            _fsDebounceTimer.Start();
+        }, DispatcherPriority.Background);
+    }
+
+    private void OnFileSystemError(object sender, ErrorEventArgs e)
+    {
+        Debug.WriteLine($"FileSystemWatcher error: {e.GetException()?.Message}");
+        if (!string.IsNullOrEmpty(_projectRootDir))
+        {
+            lock (_fsLock)
+            {
+                _pendingChangedPaths.Add(_projectRootDir);
+            }
+            Dispatcher.UIThread.Post(() =>
+            {
+                _fsDebounceTimer.Stop();
+                _fsDebounceTimer.Start();
+            }, DispatcherPriority.Background);
+        }
+    }
+
+    private void OnFsDebounceTimerTick(object? sender, EventArgs e)
+    {
+        _fsDebounceTimer.Stop();
+
+        if (_projectRootDirectory == null || string.IsNullOrWhiteSpace(_projectRootDir))
+            return;
+
+        List<string> pathsToProcess;
+        Dictionary<string, string> renamesToProcess;
+        lock (_fsLock)
+        {
+            pathsToProcess = _pendingChangedPaths.ToList();
+            _pendingChangedPaths.Clear();
+            renamesToProcess = new Dictionary<string, string>(_pendingRenames, PathComparer);
+            _pendingRenames.Clear();
+        }
+
+        bool treeChanged = false;
+
+        // 1. Сначала обрабатываем переименования
+        if (renamesToProcess.Count > 0)
+        {
+            if (ProcessPendingRenames(renamesToProcess))
+            {
+                treeChanged = true;
+            }
+        }
+
+        if (pathsToProcess.Count == 0 && !treeChanged) return;
+
+        // 2. Находим директории, которые требуют синхронизации
+        var affectedDirs = new HashSet<DirectoryVM>();
+
+        foreach (var path in pathsToProcess)
+        {
+            var node = FindNodeByPath(_projectRootDirectory, path);
+            if (node is DirectoryVM dirNode)
+            {
+                affectedDirs.Add(dirNode);
+                if (dirNode.Parent != null)
+                    affectedDirs.Add(dirNode.Parent);
+            }
+            else if (node is FileVM fileNode)
+            {
+                if (fileNode.Parent != null)
+                    affectedDirs.Add(fileNode.Parent);
+                else
+                    affectedDirs.Add(_projectRootDirectory);
+            }
+            else
+            {
+                var parentDirPath = Path.GetDirectoryName(path);
+                if (!string.IsNullOrEmpty(parentDirPath))
+                {
+                    var parentDirVM = FindDirectoryByPath(_projectRootDirectory, parentDirPath);
+                    if (parentDirVM != null)
+                    {
+                        affectedDirs.Add(parentDirVM);
+                    }
+                    else if (path.StartsWith(_projectRootDir, PathComparison))
+                    {
+                        affectedDirs.Add(_projectRootDirectory);
+                    }
+                }
+                else
+                {
+                    affectedDirs.Add(_projectRootDirectory);
+                }
+            }
+        }
+
+        var sortedDirs = affectedDirs
+            .OrderBy(d => d.FilePath.Length)
+            .ToList();
+
+        foreach (var dir in sortedDirs)
+        {
+            if (SyncDirectory(dir))
+            {
+                treeChanged = true;
+            }
+        }
+
+        if (treeChanged)
+        {
+            NotifyFolderExpandedChanged();
+
+            if (CurrentBoard != null)
+            {
+                ReloadCurrentProject();
+            }
+        }
+    }
+
+    private bool ProcessPendingRenames(Dictionary<string, string> renames)
+    {
+        if (_projectRootDirectory == null) return false;
+        bool changed = false;
+
+        foreach (var (oldPath, newPath) in renames)
+        {
+            var node = FindNodeByPath(_projectRootDirectory, oldPath);
+            if (node == null) continue;
+
+            if (node is FileVM file)
+            {
+                string oldRel = GetRelativePath(oldPath);
+                string newRel = GetRelativePath(newPath);
+
+                if (file is LayerVM layer)
+                {
+                    _projectLayers.Remove(oldRel);
+                    _projectLayers[newRel] = layer;
+                }
+                else if (file is StylesFileVM styles)
+                {
+                    _projectStyles.Remove(oldRel);
+                    _projectStyles[newRel] = styles;
+                }
+                else if (file is BoardVM && CurrentBoard == file)
+                {
+                    // Путь к плате обновился
+                }
+
+                file.FilePath = newPath;
+                file.UpdateBreadcrumbs();
+
+                if (file.Parent != null)
+                {
+                    file.Parent.Children.Remove(file);
+                    InsertChildSorted(file.Parent.Children, file);
+                }
+
+                changed = true;
+            }
+            else if (node is DirectoryVM dir)
+            {
+                dir.UpdatePathRecursive(oldPath, newPath);
+                dir.FilePath = newPath;
+
+                UpdateRegisteredPathsAfterDirRename(oldPath, newPath);
+                UpdateBreadcrumbsRecursive(dir);
+
+                if (dir.Parent != null)
+                {
+                    dir.Parent.Children.Remove(dir);
+                    InsertChildSorted(dir.Parent.Children, dir);
+                }
+
+                changed = true;
+            }
+        }
+
+        return changed;
+    }
+
+    private void UpdateRegisteredPathsAfterDirRename(string oldDirPath, string newDirPath)
+    {
+        string oldRelDir = GetRelativePath(oldDirPath).TrimEnd('/', '\\');
+        string newRelDir = GetRelativePath(newDirPath).TrimEnd('/', '\\');
+
+        var layersToUpdate = _projectLayers
+            .Where(kv => kv.Key.StartsWith(oldRelDir + "/", StringComparison.OrdinalIgnoreCase) ||
+                         kv.Key.StartsWith(oldRelDir + "\\", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        foreach (var (oldRel, layer) in layersToUpdate)
+        {
+            _projectLayers.Remove(oldRel);
+            string suffix = oldRel.Substring(oldRelDir.Length);
+            string newRel = newRelDir + suffix;
+            _projectLayers[newRel] = layer;
+        }
+
+        var stylesToUpdate = _projectStyles
+            .Where(kv => kv.Key.StartsWith(oldRelDir + "/", StringComparison.OrdinalIgnoreCase) ||
+                         kv.Key.StartsWith(oldRelDir + "\\", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        foreach (var (oldRel, style) in stylesToUpdate)
+        {
+            _projectStyles.Remove(oldRel);
+            string suffix = oldRel.Substring(oldRelDir.Length);
+            string newRel = newRelDir + suffix;
+            _projectStyles[newRel] = style;
+        }
+    }
+
+    private static void UpdateBreadcrumbsRecursive(DirectoryVM dir)
+    {
+        foreach (var child in dir.Children)
+        {
+            if (child is FileVM file)
+            {
+                file.UpdateBreadcrumbs();
+            }
+            else if (child is DirectoryVM subDir)
+            {
+                UpdateBreadcrumbsRecursive(subDir);
+            }
+        }
+    }
+
+    private static string NormalizePath(string path)
+    {
+        return Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
+    }
+
+    private static FileStructVM? FindNodeByPath(DirectoryVM root, string path)
+    {
+        string normPath = NormalizePath(path);
+        if (string.Equals(NormalizePath(root.FilePath), normPath, PathComparison))
+            return root;
+
+        foreach (var child in root.Children)
+        {
+            if (string.Equals(NormalizePath(child.FilePath), normPath, PathComparison))
+                return child;
+
+            if (child is DirectoryVM dir)
+            {
+                var found = FindNodeByPath(dir, path);
+                if (found != null)
+                    return found;
+            }
+        }
+
+        return null;
+    }
+
+    private static DirectoryVM? FindDirectoryByPath(DirectoryVM root, string path)
+    {
+        string normPath = NormalizePath(path);
+        if (string.Equals(NormalizePath(root.FilePath), normPath, PathComparison))
+            return root;
+
+        foreach (var child in root.Children)
+        {
+            if (child is DirectoryVM dir)
+            {
+                if (string.Equals(NormalizePath(dir.FilePath), normPath, PathComparison))
+                    return dir;
+
+                var found = FindDirectoryByPath(dir, path);
+                if (found != null)
+                    return found;
+            }
+        }
+
+        return null;
+    }
+
+    private static void InsertChildSorted(ObservableCollection<FileStructVM> children, FileStructVM item)
+    {
+        bool isDir = item is DirectoryVM;
+
+        for (int i = 0; i < children.Count; i++)
+        {
+            var current = children[i];
+            bool currentIsDir = current is DirectoryVM;
+
+            if (isDir)
+            {
+                if (!currentIsDir)
+                {
+                    children.Insert(i, item);
+                    return;
+                }
+
+                if (string.Compare(item.Header, current.Header, StringComparison.OrdinalIgnoreCase) < 0)
+                {
+                    children.Insert(i, item);
+                    return;
+                }
+            }
+            else
+            {
+                if (currentIsDir)
+                {
+                    continue;
+                }
+
+                if (string.Compare(item.Header, current.Header, StringComparison.OrdinalIgnoreCase) < 0)
+                {
+                    children.Insert(i, item);
+                    return;
+                }
+            }
+        }
+
+        children.Add(item);
+    }
+
+    private void CleanupRemovedNode(FileStructVM node)
+    {
+        if (node is DirectoryVM dir)
+        {
+            foreach (var child in dir.Children.ToList())
+            {
+                CleanupRemovedNode(child);
+            }
+        }
+        else if (node is FileVM file)
+        {
+            string relPath = GetRelativePath(file.FilePath);
+
+            if (file is LayerVM)
+            {
+                _projectLayers.Remove(relPath);
+            }
+            else if (file is StylesFileVM)
+            {
+                _projectStyles.Remove(relPath);
+            }
+            else if (file is BoardVM && CurrentBoard == file)
+            {
+                CurrentBoard = null;
+            }
+
+            if (ProjectErrors.Contains(file))
+            {
+                ProjectErrors.Remove(file);
+                OnPropertyChanged(nameof(TotalErrorCount));
+            }
+        }
+    }
+
+    private bool SyncDirectory(DirectoryVM dir)
+    {
+        if (!Directory.Exists(dir.FilePath))
+        {
+            if (dir == _projectRootDirectory)
+            {
+                CloseProject();
+                return true;
+            }
+
+            if (dir.Parent != null)
+            {
+                dir.Parent.Children.Remove(dir);
+                CleanupRemovedNode(dir);
+                return true;
+            }
+
+            return false;
+        }
+
+        string[] actualDirPaths;
+        string[] actualFilePaths;
+
+        try
+        {
+            actualDirPaths = Directory.GetDirectories(dir.FilePath)
+                .Where(d => !IsIgnoredPath(d))
+                .ToArray();
+            actualFilePaths = Directory.GetFiles(dir.FilePath)
+                .Where(f => !IsIgnoredPath(f))
+                .ToArray();
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Ошибка доступа к директории {dir.FilePath}: {ex.Message}");
+            return false;
+        }
+
+        bool changed = false;
+
+        // 1. Проверяем удаленные поддиректории
+        var removedDirs = dir.Children
+            .OfType<DirectoryVM>()
+            .Where(existingDir => !actualDirPaths.Any(p => string.Equals(NormalizePath(p), NormalizePath(existingDir.FilePath), PathComparison)))
+            .ToList();
+
+        foreach (var removedDir in removedDirs)
+        {
+            dir.Children.Remove(removedDir);
+            CleanupRemovedNode(removedDir);
+            changed = true;
+        }
+
+        // 2. Проверяем удаленные файлы
+        var removedFiles = dir.Children
+            .OfType<FileVM>()
+            .Where(existingFile => !actualFilePaths.Any(p => string.Equals(NormalizePath(p), NormalizePath(existingFile.FilePath), PathComparison)))
+            .ToList();
+
+        foreach (var removedFile in removedFiles)
+        {
+            dir.Children.Remove(removedFile);
+            CleanupRemovedNode(removedFile);
+            changed = true;
+        }
+
+        // 3. Проверяем новые поддиректории
+        foreach (var dirPath in actualDirPaths)
+        {
+            bool exists = dir.Children
+                .OfType<DirectoryVM>()
+                .Any(existingDir => string.Equals(NormalizePath(existingDir.FilePath), NormalizePath(dirPath), PathComparison));
+
+            if (!exists)
+            {
+                var newDir = LoadDirectories(dirPath, dir);
+                InsertChildSorted(dir.Children, newDir);
+                changed = true;
+            }
+        }
+
+        // 4. Проверяем новые файлы
+        foreach (var filePath in actualFilePaths)
+        {
+            bool exists = dir.Children
+                .OfType<FileVM>()
+                .Any(existingFile => string.Equals(NormalizePath(existingFile.FilePath), NormalizePath(filePath), PathComparison));
+
+            if (!exists)
+            {
+                var newFile = LoadFile(filePath, dir);
+                if (newFile != null)
+                {
+                    InsertChildSorted(dir.Children, newFile);
+                    changed = true;
+                }
+            }
+        }
+
+        return changed;
     }
 }

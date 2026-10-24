@@ -121,6 +121,10 @@ public partial class MainWindow : Window
             {
                 mainVm.OpenFileTab(fileVm);
             }
+            else if (fileStruct is DirectoryVM dirVm)
+            {
+                dirVm.IsExpanded = !dirVm.IsExpanded;
+            }
         }
     }
 
@@ -156,6 +160,11 @@ public partial class MainWindow : Window
             mainVm.OpenFileTab(fileVm);
             e.Handled = true;
         }
+        else if (treeViewItem?.DataContext is DirectoryVM dirVm)
+        {
+            dirVm.IsExpanded = !dirVm.IsExpanded;
+            e.Handled = true;
+        }
     }
 
     private void OnSidebarTreeViewKeyDown(object? sender, KeyEventArgs e)
@@ -163,6 +172,11 @@ public partial class MainWindow : Window
         if (e.Key == Key.Enter && SidebarTreeView.SelectedItem is FileVM fileVm && DataContext is MainVM mainVm)
         {
             mainVm.OpenFileTab(fileVm);
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Enter && SidebarTreeView.SelectedItem is DirectoryVM dirVm)
+        {
+            dirVm.IsExpanded = !dirVm.IsExpanded;
             e.Handled = true;
         }
     }

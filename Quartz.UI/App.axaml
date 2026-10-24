@@ -344,8 +344,7 @@
                 <Setter Property="TextBlock.FontSize" Value="14" />
                 <Setter Property="TextBlock.FontWeight" Value="Normal" />
 
-                <!-- компенсация теней -->
-                <Setter Property="local:FlyoutAssist.HorizontalOffset" Value="-12" />
+                <!-- компенсация теней настраивается через FlyoutAssist с учетом Placement -->
                 <Setter Property="local:FlyoutAssist.VerticalOffset" Value="-12" />
 
                 <Setter Property="Template">

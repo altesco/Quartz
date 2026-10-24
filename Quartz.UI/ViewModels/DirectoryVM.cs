@@ -9,6 +9,8 @@ public class DirectoryVM : FileStructVM
     {
     }
 
+    public override bool IsDirectory => true;
+
     public ObservableCollection<FileStructVM> Children { get; } = [];
 
     public void UpdatePathRecursive(string oldParentPath, string newParentPath)

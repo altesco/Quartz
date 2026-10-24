@@ -682,9 +682,11 @@
                                             PopupPlacement="BottomEdgeAlignedLeft"
                                             PopupHorizontalOffset="-12"
                                             PopupVerticalOffset="-12"
-                                            TriggerContent="{Binding Header}"
                                             HorizontalAlignment="Center"
                                             VerticalAlignment="Center">
+                                            <shadui:SimpleDropdown.TriggerContent>
+                                                <TextBlock Text="{Binding Header}" />
+                                            </shadui:SimpleDropdown.TriggerContent>
                                             <Interaction.Behaviors>
                                                 <beh:BreadcrumbTreeBehavior PopupPadding="4, 3" />
                                             </Interaction.Behaviors>
@@ -825,8 +827,9 @@
                         <Button
                             FontSize="13"
                             Classes="Ghost"
-                            Content="{Binding Header}"
-                            VerticalAlignment="Center" />
+                            VerticalAlignment="Center">
+                            <TextBlock Text="{Binding Header}" />
+                        </Button>
                     </StackPanel>
                     <Button
                         Grid.Column="2"
@@ -1097,31 +1100,72 @@
                         Margin="6,0,0,0" 
                         Spacing="3"
                         IsVisible="{Binding IsExplorerTabActive}">
-                        <Button 
-                            Classes="Icon" 
-                            Content="{LucideIconContent FolderInput, Size=18}"
-                            Command="{Binding OpenProjectCommand}"
-                            ToolTip.Tip="Открыть папку"
-                            ToolTip.Placement="Bottom" />
                         <Button
                             Classes="Icon"
-                            Content="{LucideIconContent FilePlus, Size=18}">
+                            Content="{LucideIconContent FilePlus, Size=18}"
+                            ToolTip.Tip="Создать файл"
+                            ToolTip.Placement="Bottom"
+                            IsVisible="{Binding HasOpenFolder}">
                             <Button.Flyout>
-                                <MenuFlyout Placement="BottomEdgeAlignedLeft">
-                                    <MenuItem Header="Редактировать" >
+                                <MenuFlyout Placement="Bottom">
+                                    <MenuItem Header="Добавить слой">
+                                        <MenuItem.Icon>
+                                            <LucideIcon Kind="CircuitBoard" Size="18" Foreground="{DynamicResource IconLayyColor}" />
+                                        </MenuItem.Icon>
                                     </MenuItem>
-
-                                    <MenuItem Header="Дублировать"/>
-
-                                    <!-- Разделитель -->
-                                    <Separator/>
-
-                                    <MenuItem Header="Удалить"  Foreground="Red"/>
+                                    <MenuItem Header="Добавить плату">
+                                        <MenuItem.Icon>
+                                            <LucideIcon Kind="Layers" Size="18" Foreground="{DynamicResource IconPcbyColor}" />
+                                        </MenuItem.Icon>
+                                    </MenuItem>
+                                    <MenuItem Header="Добавить файл стилей">
+                                        <MenuItem.Icon>
+                                            <LucideIcon Kind="PencilSparkles" Size="18" Foreground="{DynamicResource IconStlyColor}" />
+                                        </MenuItem.Icon>
+                                    </MenuItem>
                                 </MenuFlyout>
                             </Button.Flyout>
                         </Button>
-                        <Button Classes="Icon" Content="{LucideIconContent FolderPlus, Size=18}" />
-                        <Button Classes="Icon" Content="{LucideIconContent ChevronsDownUp, Size=18}" />
+                        <Button 
+                            Classes="Icon" 
+                            Content="{LucideIconContent FolderPlus, Size=18}"
+                            ToolTip.Tip="Создать папку"
+                            ToolTip.Placement="Bottom"
+                            IsVisible="{Binding HasOpenFolder}" />
+                        <Button 
+                            Classes="Icon"
+                            Command="{Binding ToggleExpandAllCommand}"
+                            ToolTip.Tip="{Binding ExpandAllToolTip}"
+                            ToolTip.Placement="Bottom"
+                            IsVisible="{Binding HasOpenFolder}">
+                            <Panel>
+                                <LucideIcon Kind="ChevronsDownUp" Size="18" IsVisible="{Binding IsAnyFolderExpanded}" />
+                                <LucideIcon Kind="ChevronsUpDown" Size="18" IsVisible="{Binding !IsAnyFolderExpanded}" />
+                            </Panel>
+                        </Button>
+                        <Button 
+                            Classes="Icon"
+                            Content="{LucideIconContent Ellipsis, Size=18}"
+                            ToolTip.Tip="Дополнительно"
+                            ToolTip.Placement="Bottom">
+                            <Button.Flyout>
+                                <MenuFlyout Placement="Bottom">
+                                    <MenuItem 
+                                        Header="Закрыть папку"
+                                        Icon="{LucideIconContent FolderX, Size=18}"
+                                        Command="{Binding CloseProjectCommand}"
+                                        IsVisible="{Binding HasOpenFolder}" />
+                                    <MenuItem 
+                                        Header="Открыть папку"
+                                        Icon="{LucideIconContent FolderInput, Size=18}"
+                                        Command="{Binding OpenProjectCommand}" />
+                                    <MenuItem 
+                                        Header="Открыть файл"
+                                        Icon="{LucideIconContent File, Size=18}"
+                                        Command="{Binding OpenSingleFileCommand}" />
+                                </MenuFlyout>
+                            </Button.Flyout>
+                        </Button>
                     </StackPanel>
                 </Grid>
             </Border>
@@ -1145,6 +1189,9 @@
                     <Style Selector="TreeViewItem">
                         <Setter Property="IsExpanded" Value="{Binding $self.((vm:FileStructVM)DataContext).IsExpanded, Mode=TwoWay}" />
                         <Setter Property="IsSelected" Value="{Binding $self.((vm:FileStructVM)DataContext).IsSelected, Mode=TwoWay}" />
+                    </Style>
+                    <Style Selector="TreeViewItem:empty /template/ ToggleButton#PART_ExpandCollapseChevron">
+                        <Setter Property="IsVisible" Value="{Binding $self.((vm:FileStructVM)DataContext).IsDirectory}" />
                     </Style>
                 </TreeView.Styles>
 
