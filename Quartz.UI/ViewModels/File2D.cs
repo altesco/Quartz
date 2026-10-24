@@ -22,7 +22,18 @@ public abstract partial class File2D : EditorVM
             return;
         }
 
-        Canvas = new CanvasVM(owner: this);
+        LoadDocumentIfEmpty();
+
+        Canvas = new CanvasVM(owner: this)
+        {
+            Panel = Panel
+        };
+
+        if (this is LayerVM layerVM && layerVM.CachedPrimitives == null)
+        {
+            layerVM.TriggerProcess();
+        }
+
         Panel?.Tabs.Add(Canvas);
         if (Panel != null)
         {

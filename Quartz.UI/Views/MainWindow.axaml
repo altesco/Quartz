@@ -858,12 +858,45 @@
 
         <DataTemplate DataType="vm:CanvasVM">
             <Grid Background="{DynamicResource CanvasBackgroundColor}">
+
+                <Grid.Resources>
+                    <ResourceDictionary>
+                        <ResourceDictionary.MergedDictionaries>
+                            <ResourceInclude Source="avares://Quartz.UI/Views/Themes/Catppuccin.axaml" />
+                        </ResourceDictionary.MergedDictionaries>
+                    </ResourceDictionary>
+                </Grid.Resources>
+
+                <Grid.Styles>
+                    <shadui:ShadTheme/>
+
+                    <Style Selector="Button.Icon">
+                        <Setter Property="BorderThickness" Value="1" />
+                        <Setter Property="Background" Value="{DynamicResource WindowBackgroundColor}" />
+                        <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}" />
+                    </Style>
+                </Grid.Styles>
+
                 <controls:CircuitBoardCanvas
+                    x:Name="BoardCanvas"
                     Background="{DynamicResource CanvasBackgroundColor}"
                     DrawingData="{Binding RenderData}"
+                    Unit="{Binding Unit}"
                     Zoom="{Binding Zoom, Mode=TwoWay}"
                     OffsetX="{Binding OffsetX, Mode=TwoWay}"
-                    OffsetY="{Binding OffsetY, Mode=TwoWay}" />
+                    OffsetY="{Binding OffsetY, Mode=TwoWay}"
+                    IsOriginOffScreen="{Binding IsOriginOffScreen, Mode=TwoWay}" />
+
+                <Button x:Name="ToCenterButton"
+                        Classes="Icon"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Top"
+                        Margin="8,32,8,8"
+                        Content="{LucideIconContent Crosshair, Size=18}"
+                        Command="{Binding CenterOriginCommand}"
+                        IsVisible="{Binding IsOriginOffScreen}"
+                        ToolTip.Tip="Вернуться в центр"
+                        ToolTip.Placement="BottomEdgeAlignedLeft" />
             </Grid>
         </DataTemplate>
     </Window.DataTemplates>

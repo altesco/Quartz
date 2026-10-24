@@ -21,6 +21,7 @@ public class LayerVM : File2D
 
     public override Extension Extension => Extension.Layy;
     public LayerModel? LayerModel { get; set; }
+    public IReadOnlyList<DrawingPrimitive>? CachedPrimitives { get; private set; }
 
     protected override async Task ProcessDocument(string text)
     {
@@ -53,16 +54,18 @@ public class LayerVM : File2D
             return;
 
         LayerModel = layerResult.Model;
+        var layerPrimitives = layerResult.Primitives;
+        var overlayPrimitives = boardOverlayPrimitives;
+
+        CachedPrimitives = layerPrimitives
+            .Concat(overlayPrimitives)
+            .ToList();
 
         if (Canvas != null)
         {
-            var layerPrimitives = layerResult.Primitives;
-            var overlayPrimitives = boardOverlayPrimitives;
-
+            Canvas.Unit = LayerModel.Unit;
             // Теперь холст обновится только если слой успешно распарсился
-            Canvas.RenderData = layerPrimitives
-                .Concat(overlayPrimitives)
-                .ToList();
+            Canvas.RenderData = CachedPrimitives;
         }
     }
 
@@ -79,7 +82,12 @@ public class LayerVM : File2D
             return;
 
         LayerModel = result.Model;
+        CachedPrimitives = result.Primitives;
 
-        Canvas?.RenderData = result.Primitives;
+        if (Canvas != null)
+        {
+            Canvas.Unit = LayerModel.Unit;
+            Canvas.RenderData = CachedPrimitives;
+        }
     }
 }

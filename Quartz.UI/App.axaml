@@ -837,6 +837,7 @@
 
         <Style Selector="Button">
             <Setter Property="FontWeight" Value="Normal" />
+            <Setter Property="Foreground" Value="{DynamicResource ForegroundColor}" />
         </Style>
 
         <Style Selector="Button.Ghost">
