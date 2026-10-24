@@ -248,14 +248,6 @@ public abstract partial class FileVM : FileStructVM
     public virtual void RemoveTab()
     {
         if (Panel is null) return;
-
-        Panel.Tabs.Remove(this);
-        if (Panel.Tabs.Count == 0)
-            MainVM.RemoveEmptyPanel(Panel);
-        else if (Panel.SelectedTab == this)
-            Panel.SelectedTab = Panel.Tabs.Last();
-
-        Panel = null;
-        IsPinned = false;
+        Panel.CloseTab(this);
     }
 }

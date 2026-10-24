@@ -62,6 +62,39 @@ public partial class MainWindow : Window
         SidebarTreeView.AddHandler(PointerReleasedEvent, OnSidebarTreeViewPointerReleased, RoutingStrategies.Tunnel);
         SidebarTreeView.AddHandler(DoubleTappedEvent, OnSidebarTreeViewDoubleTapped, RoutingStrategies.Bubble, handledEventsToo: true);
         SidebarTreeView.AddHandler(KeyDownEvent, OnSidebarTreeViewKeyDown, RoutingStrategies.Bubble);
+
+        AddHandler(PointerPressedEvent, OnWindowPointerPressed, RoutingStrategies.Tunnel, handledEventsToo: true);
+        AddHandler(PointerReleasedEvent, OnWindowPointerReleased, RoutingStrategies.Tunnel, handledEventsToo: true);
+    }
+
+    private void OnWindowPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        var props = e.GetCurrentPoint(this).Properties;
+        if (props.PointerUpdateKind == PointerUpdateKind.XButton1Pressed || (props.IsXButton1Pressed && props.PointerUpdateKind == PointerUpdateKind.Other))
+        {
+            if (DataContext is MainVM mainVm && mainVm.CanNavigateBack)
+            {
+                mainVm.NavigateBack();
+            }
+            e.Handled = true;
+        }
+        else if (props.PointerUpdateKind == PointerUpdateKind.XButton2Pressed || (props.IsXButton2Pressed && props.PointerUpdateKind == PointerUpdateKind.Other))
+        {
+            if (DataContext is MainVM mainVm && mainVm.CanNavigateForward)
+            {
+                mainVm.NavigateForward();
+            }
+            e.Handled = true;
+        }
+    }
+
+    private void OnWindowPointerReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        var props = e.GetCurrentPoint(this).Properties;
+        if (props.PointerUpdateKind is PointerUpdateKind.XButton1Released or PointerUpdateKind.XButton2Released)
+        {
+            e.Handled = true;
+        }
     }
 
     private void OnSidebarTreeViewPointerPressed(object? sender, PointerPressedEventArgs e)

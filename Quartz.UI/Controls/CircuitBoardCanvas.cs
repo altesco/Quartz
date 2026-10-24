@@ -391,7 +391,7 @@ public class CircuitBoardCanvas : Control, IDisposable, Avalonia.Rendering.ICust
             textPaint.Color = GetColor("CanvasTextColor", "ForegroundColor", SKColors.White, targetTheme);
 
         _rulerBgColor = GetColor("BackgroundColor", "TitleBarBackgroundColor", new SKColor(30, 30, 46), targetTheme);
-        _rulerBorderColor = GetColor("BorderColor", "BorderColor60", new SKColor(88, 91, 112), targetTheme);
+        _rulerBorderColor = GetColor("BorderColor60", "BorderColor", new SKColor(88, 91, 112, 153), targetTheme);
         _rulerTickColor = GetColor("BorderColor", "MutedColor", new SKColor(127, 132, 156), targetTheme);
         _rulerTextColor = GetColor("ForegroundLeadColor", "ForegroundColor", new SKColor(186, 194, 222), targetTheme);
         _rulerUnitTextColor = GetColor("ForegroundColor", "CanvasTextColor", new SKColor(205, 214, 244), targetTheme);

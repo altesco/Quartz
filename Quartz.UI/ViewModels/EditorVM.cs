@@ -1,8 +1,11 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Threading.Tasks;
 using System.Timers;
+using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using AvaloniaEdit.Document;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -243,5 +246,89 @@ public abstract partial class EditorVM : FileVM
         {
             System.Diagnostics.Debug.WriteLine($"Failed to save {FilePath}: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Сохраняет содержимое редактора в новый файл, выбранный пользователем.
+    /// </summary>
+    [RelayCommand]
+    public async Task SaveAsAsync()
+    {
+        if (Document == null)
+            return;
+
+        if (Avalonia.Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime desktop ||
+            desktop.MainWindow?.StorageProvider is not { } storageProvider)
+        {
+            return;
+        }
+
+        var currentDir = !string.IsNullOrEmpty(FilePath) ? Path.GetDirectoryName(FilePath) : MainVM?.ProjectRootDir;
+        var defaultName = !string.IsNullOrEmpty(FilePath) ? Path.GetFileName(FilePath) : "untitled.txt";
+
+        IStorageFolder? suggestedFolder = null;
+        if (!string.IsNullOrEmpty(currentDir) && Directory.Exists(currentDir))
+        {
+            suggestedFolder = await storageProvider.TryGetFolderFromPathAsync(currentDir);
+        }
+
+        var ext = Path.GetExtension(defaultName).TrimStart('.');
+        var fileTypes = new List<FilePickerFileType>();
+        if (!string.IsNullOrEmpty(ext))
+        {
+            fileTypes.Add(new FilePickerFileType($"{ext.ToUpperInvariant()} File (*.{ext})")
+            {
+                Patterns = new[] { $"*.{ext}" }
+            });
+        }
+        fileTypes.Add(FilePickerFileTypes.All);
+
+        var file = await storageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "Сохранить как",
+            SuggestedFileName = defaultName,
+            SuggestedStartLocation = suggestedFolder,
+            FileTypeChoices = fileTypes
+        });
+
+        if (file == null)
+            return;
+
+        var localPath = file.TryGetLocalPath();
+        if (string.IsNullOrEmpty(localPath))
+            return;
+
+        try
+        {
+            await File.WriteAllTextAsync(localPath, Document.Text);
+            FilePath = localPath;
+            Document.UndoStack.MarkAsOriginalFile();
+            IsModified = false;
+            UpdateBreadcrumbs();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Failed to save as {localPath}: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Сохраняет все измененные вкладки.
+    /// </summary>
+    [RelayCommand]
+    public void SaveAll()
+    {
+        MainVM?.SaveAllFiles();
+    }
+
+    public IRelayCommand NavigateBackCommand => MainVM.NavigateBackCommand;
+    public IRelayCommand NavigateForwardCommand => MainVM.NavigateForwardCommand;
+    public bool CanNavigateBack => MainVM.CanNavigateBack;
+    public bool CanNavigateForward => MainVM.CanNavigateForward;
+
+    public void NotifyNavigationStateChanged()
+    {
+        OnPropertyChanged(nameof(CanNavigateBack));
+        OnPropertyChanged(nameof(CanNavigateForward));
     }
 }

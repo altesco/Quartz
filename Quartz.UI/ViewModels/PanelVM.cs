@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using Avalonia;
@@ -23,13 +24,30 @@ public partial class PanelVM : LayoutRootVM
     [ObservableProperty] private double _panelHeight;
 
     private readonly MainVM _mainVM;
+    private readonly List<FileVM> _mruTabs = new();
 
-    public PanelVM(MainVM mainVM) => _mainVM = mainVM;
+    public PanelVM(MainVM mainVM)
+    {
+        _mainVM = mainVM;
+        Tabs.CollectionChanged += (s, e) =>
+        {
+            if (e.OldItems != null)
+            {
+                foreach (FileVM item in e.OldItems.OfType<FileVM>())
+                {
+                    _mruTabs.Remove(item);
+                }
+            }
+        };
+    }
 
     partial void OnSelectedTabChanged(FileVM? oldValue, FileVM? newValue)
     {
         if (newValue != null)
         {
+            _mruTabs.Remove(newValue);
+            _mruTabs.Add(newValue);
+
             if (newValue is EditorVM editor)
             {
                 editor.LoadDocumentIfEmpty();
@@ -39,6 +57,50 @@ public partial class PanelVM : LayoutRootVM
             _mainVM.ActiveFile = newValue;
             _mainVM.ActiveEditor = newValue as EditorVM;
         }
+    }
+
+    public void CloseTab(FileVM tab)
+    {
+        if (!Tabs.Contains(tab)) return;
+
+        _mruTabs.Remove(tab);
+
+        if (SelectedTab == tab)
+        {
+            FileVM? nextTab = null;
+            for (int i = _mruTabs.Count - 1; i >= 0; i--)
+            {
+                if (Tabs.Contains(_mruTabs[i]) && _mruTabs[i] != tab)
+                {
+                    nextTab = _mruTabs[i];
+                    break;
+                }
+            }
+
+            if (nextTab == null)
+            {
+                int index = Tabs.IndexOf(tab);
+                if (index > 0)
+                    nextTab = Tabs[index - 1];
+                else if (Tabs.Count > 1)
+                    nextTab = Tabs.FirstOrDefault(t => t != tab);
+            }
+
+            if (nextTab != null)
+            {
+                SelectedTab = nextTab;
+            }
+        }
+
+        Tabs.Remove(tab);
+
+        if (Tabs.Count == 0)
+        {
+            _mainVM.RemoveEmptyPanel(this);
+        }
+
+        tab.Panel = null;
+        tab.IsPinned = false;
     }
 
     [RelayCommand]

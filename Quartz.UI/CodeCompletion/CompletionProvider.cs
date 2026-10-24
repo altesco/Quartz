@@ -748,7 +748,8 @@ namespace Quartz.UI.CodeCompletion
             var list = new List<QuartzCompletionData>();
             foreach (var name in Enum.GetNames(enumType))
             {
-                list.Add(new QuartzCompletionData(name, LucideIconKind.Tag, enumType.Name, name));
+                var text = enumType == typeof(LengthUnit) ? name.ToLowerInvariant() : name;
+                list.Add(new QuartzCompletionData(text, LucideIconKind.Tag, enumType.Name, text));
             }
 
             EnumCache[enumType] = list;

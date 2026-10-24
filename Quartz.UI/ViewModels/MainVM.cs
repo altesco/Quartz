@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -19,6 +20,20 @@ using Quartz.UI.Enums;
 using Quartz.UI.Services;
 
 namespace Quartz.UI.ViewModels;
+
+public class NavigationPoint
+{
+    public FileVM File { get; }
+    public int Line { get; set; }
+    public int Column { get; set; }
+
+    public NavigationPoint(FileVM file, int line, int column)
+    {
+        File = file;
+        Line = line;
+        Column = column;
+    }
+}
 
 public partial class MainVM : ObservableObject
 {
@@ -34,6 +49,17 @@ public partial class MainVM : ObservableObject
 
     [ObservableProperty] private PanelVM? _activePanel;
     [ObservableProperty] private FileVM? _activeFile;
+
+    private readonly List<NavigationPoint> _navigationHistory = new();
+    private int _currentHistoryIndex = -1;
+    private bool _isNavigatingHistory;
+    private readonly DispatcherTimer _navDebounceTimer;
+
+    [ObservableProperty]
+    private bool _canNavigateBack;
+
+    [ObservableProperty]
+    private bool _canNavigateForward;
 
     public bool IsReadyToDrag { get; set; }
     public double DragStartX { get; set; }
@@ -132,6 +158,12 @@ public partial class MainVM : ObservableObject
     {
         _boardProcessingCoordinator = boardProcessingCoordinator;
         _folderDialogService = folderDialogService;
+
+        _navDebounceTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(500)
+        };
+        _navDebounceTimer.Tick += OnNavDebounceTimerTick;
 
         ProjectErrors.CollectionChanged += OnProjectErrorsCollectionChanged;
 
@@ -399,11 +431,17 @@ public partial class MainVM : ObservableObject
             IsBottomPanelMaximized = false;
         }
 
+        if (ActiveFile != null && ActiveEditor != null)
+        {
+            RecordNavigationPoint(ActiveFile, ActiveEditor.CaretLine, ActiveEditor.CaretColumn);
+        }
+
         OpenFileTab(file);
 
         if (file is EditorVM editor)
         {
             editor.RequestNavigateTo(error.Line, error.Column);
+            RecordNavigationPoint(file, (int)error.Line, (int)error.Column);
         }
     }
 
@@ -556,6 +594,11 @@ public partial class MainVM : ObservableObject
         {
             newValue.PropertyChanged += OnActiveEditorPropertyChanged;
             IndentationSize = newValue.IndentationSize;
+
+            if (!_isNavigatingHistory)
+            {
+                RecordNavigationPoint(newValue, newValue.CaretLine, newValue.CaretColumn);
+            }
         }
 
         OnPropertyChanged(nameof(CurrentCaretPositionText));
@@ -567,6 +610,10 @@ public partial class MainVM : ObservableObject
         if (e.PropertyName is nameof(EditorVM.CaretLine) or nameof(EditorVM.CaretColumn))
         {
             OnPropertyChanged(nameof(CurrentCaretPositionText));
+            if (!_isNavigatingHistory && ActiveEditor != null && ActiveFile != null)
+            {
+                OnCaretMoved(ActiveFile, ActiveEditor.CaretLine, ActiveEditor.CaretColumn);
+            }
         }
         else if (e.PropertyName == nameof(EditorVM.IndentationSize))
         {
@@ -809,6 +856,203 @@ public partial class MainVM : ObservableObject
     }
 
     [RelayCommand]
+    private async Task SaveAsCurrentFileAsync()
+    {
+        if (ActivePanel?.SelectedTab is EditorVM editor)
+        {
+            await editor.SaveAsAsync();
+        }
+    }
+
+    [RelayCommand]
+    public void SaveAllFiles()
+    {
+        if (RootNode == null) return;
+        var allPanels = new List<PanelVM>();
+        CollectPanels(RootNode, allPanels);
+        foreach (var panel in allPanels)
+        {
+            foreach (var tab in panel.Tabs)
+            {
+                if (tab is EditorVM editor && editor.IsModified)
+                {
+                    editor.Save();
+                }
+            }
+        }
+    }
+
+    private void CollectPanels(LayoutRootVM node, List<PanelVM> result)
+    {
+        if (node is PanelVM panel)
+        {
+            result.Add(panel);
+        }
+        else if (node is SplitContainerVM container)
+        {
+            foreach (var child in container.Children)
+            {
+                CollectPanels(child, result);
+            }
+        }
+    }
+
+    private void OnNavDebounceTimerTick(object? sender, EventArgs e)
+    {
+        _navDebounceTimer.Stop();
+        if (_isNavigatingHistory || ActiveEditor == null || ActiveFile == null) return;
+
+        int line = ActiveEditor.CaretLine;
+        int col = ActiveEditor.CaretColumn;
+
+        if (_currentHistoryIndex >= 0 && _currentHistoryIndex < _navigationHistory.Count)
+        {
+            var cur = _navigationHistory[_currentHistoryIndex];
+            if (cur.File == ActiveFile && Math.Abs(cur.Line - line) < 4)
+            {
+                cur.Line = line;
+                cur.Column = col;
+                return;
+            }
+        }
+
+        RecordNavigationPoint(ActiveFile, line, col);
+    }
+
+    private void OnCaretMoved(FileVM file, int line, int column)
+    {
+        if (_isNavigatingHistory) return;
+
+        if (_navigationHistory.Count == 0 || _currentHistoryIndex < 0)
+        {
+            RecordNavigationPoint(file, line, column);
+            return;
+        }
+
+        var current = _navigationHistory[_currentHistoryIndex];
+        if (current.File != file)
+        {
+            _navDebounceTimer.Stop();
+            RecordNavigationPoint(file, line, column);
+            return;
+        }
+
+        if (Math.Abs(current.Line - line) >= 5)
+        {
+            _navDebounceTimer.Stop();
+            RecordNavigationPoint(file, line, column);
+        }
+        else
+        {
+            current.Line = line;
+            current.Column = column;
+            _navDebounceTimer.Stop();
+            _navDebounceTimer.Start();
+        }
+    }
+
+    public void RecordNavigationPoint(FileVM file, int line, int column)
+    {
+        if (_isNavigatingHistory || file == null) return;
+
+        if (_currentHistoryIndex >= 0 && _currentHistoryIndex < _navigationHistory.Count)
+        {
+            var cur = _navigationHistory[_currentHistoryIndex];
+            if (cur.File == file && cur.Line == line && cur.Column == column)
+                return;
+
+            if (cur.File == file && Math.Abs(cur.Line - line) <= 2)
+            {
+                cur.Line = line;
+                cur.Column = column;
+                return;
+            }
+        }
+
+        if (_currentHistoryIndex >= 0 && _currentHistoryIndex < _navigationHistory.Count - 1)
+        {
+            _navigationHistory.RemoveRange(_currentHistoryIndex + 1, _navigationHistory.Count - (_currentHistoryIndex + 1));
+        }
+
+        if (_navigationHistory.Count >= 100)
+        {
+            _navigationHistory.RemoveAt(0);
+            _currentHistoryIndex--;
+        }
+
+        _navigationHistory.Add(new NavigationPoint(file, line, column));
+        _currentHistoryIndex = _navigationHistory.Count - 1;
+        UpdateCanNavigate();
+    }
+
+    private void UpdateCanNavigate()
+    {
+        CanNavigateBack = _currentHistoryIndex > 0;
+        CanNavigateForward = _currentHistoryIndex >= 0 && _currentHistoryIndex < _navigationHistory.Count - 1;
+        ActiveEditor?.NotifyNavigationStateChanged();
+    }
+
+    [RelayCommand]
+    public void NavigateBack()
+    {
+        if (!CanNavigateBack || _currentHistoryIndex <= 0) return;
+
+        if (ActiveFile != null && ActiveEditor != null && _currentHistoryIndex < _navigationHistory.Count)
+        {
+            var cur = _navigationHistory[_currentHistoryIndex];
+            if (cur.File != ActiveFile || Math.Abs(cur.Line - ActiveEditor.CaretLine) >= 4)
+            {
+                _navDebounceTimer.Stop();
+                RecordNavigationPoint(ActiveFile, ActiveEditor.CaretLine, ActiveEditor.CaretColumn);
+            }
+            else
+            {
+                cur.Line = ActiveEditor.CaretLine;
+                cur.Column = ActiveEditor.CaretColumn;
+            }
+        }
+
+        if (_currentHistoryIndex <= 0) return;
+
+        _currentHistoryIndex--;
+        var target = _navigationHistory[_currentHistoryIndex];
+        ExecuteNavigation(target);
+        UpdateCanNavigate();
+    }
+
+    [RelayCommand]
+    public void NavigateForward()
+    {
+        if (!CanNavigateForward || _currentHistoryIndex >= _navigationHistory.Count - 1) return;
+
+        _currentHistoryIndex++;
+        var target = _navigationHistory[_currentHistoryIndex];
+        ExecuteNavigation(target);
+        UpdateCanNavigate();
+    }
+
+    private void ExecuteNavigation(NavigationPoint target)
+    {
+        _isNavigatingHistory = true;
+        _navDebounceTimer.Stop();
+        try
+        {
+            OpenFileTab(target.File);
+            if (target.File is EditorVM editor)
+            {
+                editor.RequestNavigateTo(target.Line, target.Column);
+            }
+        }
+        finally
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                _isNavigatingHistory = false;
+            }, DispatcherPriority.Background);
+        }
+    }
+
+    [RelayCommand]
     private void CloseActiveTab()
     {
         if (ActivePanel?.SelectedTab is { } tab)
@@ -861,6 +1105,10 @@ public partial class MainVM : ObservableObject
         ActivePanel = null;
         ActiveEditor = null;
         ActiveFile = null;
+
+        _navigationHistory.Clear();
+        _currentHistoryIndex = -1;
+        UpdateCanNavigate();
 
         // 2. Загружаем файловую структуру выбранной директории
         _projectRootDir = directoryPath;
