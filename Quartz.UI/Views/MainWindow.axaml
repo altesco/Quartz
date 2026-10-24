@@ -935,7 +935,17 @@
         </DataTemplate>
     </Window.DataTemplates>
 
-    <Grid x:Name="MainGrid" ColumnDefinitions="Auto,240,*" RowDefinitions="Auto,*,220">
+    <Grid x:Name="MainGrid">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="240" MinWidth="185" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="220" MinHeight="75" />
+        </Grid.RowDefinitions>
         
         <Border
             x:Name="TitleBar"
