@@ -229,7 +229,7 @@
 
                             <!-- Выбранный элемент (:selected) -->
                             <Style Selector="^:selected">
-                                <Setter Property="Background" Value="{DynamicResource TabItemSelectedColor}" />
+                                <Setter Property="Background" Value="{DynamicResource TabItemHoverColor}" />
                                 <Setter Property="Foreground" Value="{DynamicResource PrimaryColor}" />
                                 <Setter Property="ZIndex" Value="100" />
                             </Style>
@@ -514,26 +514,12 @@
                                 </Interaction.Behaviors>
                                 <ContentControl Content="{Binding}" />
 
-                                <Border
-                                    Width="80"
-                                    HorizontalAlignment="Right"
-                                    Background="{DynamicResource PrimaryColor}"
-                                    IsVisible="{Binding $parent[TabControl].((vm:PanelVM)DataContext).NewNodeSide, Converter={x:Static ObjectConverters.Equal}, ConverterParameter={x:Static enums:Side.Right}}" />
-                                <Border
-                                    Width="80"
-                                    HorizontalAlignment="Left"
-                                    Background="{DynamicResource PrimaryColor}"
-                                    IsVisible="{Binding $parent[TabControl].((vm:PanelVM)DataContext).NewNodeSide, Converter={x:Static ObjectConverters.Equal}, ConverterParameter={x:Static enums:Side.Left}}" />
-                                <Border
-                                    Height="80"
-                                    VerticalAlignment="Top"
-                                    Background="{DynamicResource PrimaryColor}"
-                                    IsVisible="{Binding $parent[TabControl].((vm:PanelVM)DataContext).NewNodeSide, Converter={x:Static ObjectConverters.Equal}, ConverterParameter={x:Static enums:Side.Top}}" />
-                                <Border
-                                    Height="80"
-                                    VerticalAlignment="Bottom"
-                                    Background="{DynamicResource PrimaryColor}"
-                                    IsVisible="{Binding $parent[TabControl].((vm:PanelVM)DataContext).NewNodeSide, Converter={x:Static ObjectConverters.Equal}, ConverterParameter={x:Static enums:Side.Bottom}}" />
+                                <controls:SplitIndicator
+                                    Margin="10"
+                                    Side="{Binding $parent[TabControl].((vm:PanelVM)DataContext).NewNodeSide}"
+                                    Background="{DynamicResource PrimaryColor50}"
+                                    CornerRadius="{DynamicResource SmCornerRadius}"
+                                    IsHitTestVisible="False" />
                             </Grid>
                         </DataTemplate>
                     </TabControl.ContentTemplate>

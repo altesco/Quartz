@@ -1,6 +1,8 @@
 using System;
 using System.Linq;
 using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using AvaloniaEdit;
 using AvaloniaEdit.CodeCompletion;
@@ -15,6 +17,7 @@ namespace Quartz.UI.CodeCompletion
     public class QuartzCompletionWindow : CompletionWindow
     {
         private bool _isAdjusting;
+        private IDisposable? _itemCountSubscription;
 
         public Avalonia.Media.FontFamily? FontFamily
         {
@@ -27,6 +30,9 @@ namespace Quartz.UI.CodeCompletion
                 }
             }
         }
+
+        public bool IsEmpty => (CompletionList.ListBox != null && CompletionList.ListBox.ItemCount == 0)
+                            || (CompletionList.ListBox == null && CompletionList.CompletionData.Count == 0);
 
         public QuartzCompletionWindow(TextArea textArea) : base(textArea)
         {
@@ -44,11 +50,28 @@ namespace Quartz.UI.CodeCompletion
 
             Opened += OnWindowOpened;
             textArea.TextInput += OnTextAreaTextInput;
+            CompletionList.TemplateApplied += OnCompletionListTemplateApplied;
+        }
+
+        private void OnCompletionListTemplateApplied(object? sender, TemplateAppliedEventArgs e)
+        {
+            _itemCountSubscription?.Dispose();
+            if (CompletionList.ListBox != null)
+            {
+                _itemCountSubscription = CompletionList.ListBox
+                    .GetPropertyChangedObservable(ItemsControl.ItemCountProperty)
+                    .Subscribe(_ => UpdateEmptyState());
+            }
+            UpdateEmptyState();
         }
 
         private void OnWindowOpened(object? sender, EventArgs e)
         {
-            SelectFirstItem();
+            UpdateEmptyState();
+            if (!IsEmpty)
+            {
+                SelectFirstItem();
+            }
         }
 
         private void OnTextAreaTextInput(object? sender, TextInputEventArgs e)
@@ -57,11 +80,8 @@ namespace Quartz.UI.CodeCompletion
             {
                 if (IsOpen)
                 {
-                    if (CompletionList.CurrentList.Count == 0)
-                    {
-                        Close();
-                    }
-                    else if (CompletionList.SelectedItem == null)
+                    UpdateEmptyState();
+                    if (!IsEmpty && CompletionList.SelectedItem == null)
                     {
                         SelectFirstItem();
                     }
@@ -69,9 +89,16 @@ namespace Quartz.UI.CodeCompletion
             }, Avalonia.Threading.DispatcherPriority.Input);
         }
 
+        public void UpdateEmptyState()
+        {
+            CompletionList.Classes.Set("empty", IsEmpty);
+        }
+
         public void SelectFirstItem()
         {
-            var first = CompletionList.CurrentList.FirstOrDefault()
+            if (IsEmpty) return;
+
+            var first = CompletionList.CurrentList?.FirstOrDefault()
                      ?? CompletionList.CompletionData.FirstOrDefault();
             if (first != null)
             {
@@ -87,16 +114,30 @@ namespace Quartz.UI.CodeCompletion
         {
             Opened -= OnWindowOpened;
             TextArea.TextInput -= OnTextAreaTextInput;
+            CompletionList.TemplateApplied -= OnCompletionListTemplateApplied;
+            _itemCountSubscription?.Dispose();
+            _itemCountSubscription = null;
             base.DetachEvents();
         }
 
         protected override void OnKeyDown(KeyEventArgs e)
         {
-            base.OnKeyDown(e);
-            if (CompletionList.CurrentList.Count == 0)
+            if (IsEmpty)
             {
-                Close();
+                if (e.Key is Key.Enter or Key.Return or Key.Tab or Key.Escape)
+                {
+                    Close();
+                    if (e.Key is Key.Enter or Key.Return or Key.Tab)
+                    {
+                        return;
+                    }
+                    e.Handled = true;
+                    return;
+                }
             }
+
+            base.OnKeyDown(e);
+            UpdateEmptyState();
         }
 
         protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -903,8 +904,13 @@ namespace Quartz.UI.Behaviors
 
             _triggerOnNewLine = false;
 
-            var completions = CompletionProvider.GetCompletions(AssociatedObject, currentWord, caretOffset);
-            if (completions == null || completions.Count == 0) return;
+            var completions = CompletionProvider.GetCompletions(AssociatedObject, currentWord, caretOffset)
+                              ?? new List<QuartzCompletionData>();
+
+            if (completions.Count == 0 && !forced && _completionWindow == null)
+            {
+                return;
+            }
 
             _completionWindow?.Close();
 

@@ -64,9 +64,9 @@
             <Color x:Key="WindowButtonHoverColor">#313244</Color>
             <Color x:Key="SidebarBackgroundColor">#181825</Color>
             <Color x:Key="SwitchBackgroundColor">#585b70</Color>
-            <Color x:Key="TabItemSelectedColor">#1e1e2e</Color>
-            <Color x:Key="TabItemsBackgroundColor">#181825</Color>
-            <Color x:Key="TabItemHoverColor">#262637</Color>
+            <Color x:Key="TabItemSelectedColor">#2a2b3d</Color>
+            <Color x:Key="TabItemsBackgroundColor">#1e1e2e</Color>
+            <Color x:Key="TabItemHoverColor">#2a2b3d</Color>
 
             <!-- Цвета расширений файлов (File Icons) -->
             <Color x:Key="IconPcbyColor">#89b4fa</Color> <!-- Синий -->
@@ -151,9 +151,9 @@
             <Color x:Key="WindowButtonHoverColor">#ccd0da</Color>
             <Color x:Key="SidebarBackgroundColor">#e6e9ef</Color>
             <Color x:Key="SwitchBackgroundColor">#acb0be</Color>
-            <Color x:Key="TabItemSelectedColor">#eff1f5</Color>
+            <Color x:Key="TabItemSelectedColor">#f2f4f8</Color>
             <Color x:Key="TabItemsBackgroundColor">#e6e9ef</Color>
-            <Color x:Key="TabItemHoverColor">#e2e5ec</Color>
+            <Color x:Key="TabItemHoverColor">#f2f4f8</Color>
 
             <!-- Цвета расширений файлов (File Icons) -->
             <Color x:Key="IconPcbyColor">#1e66f5</Color> <!-- Насыщенный синий -->

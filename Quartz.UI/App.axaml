@@ -539,41 +539,64 @@
                                 </Style>
                             </Border.Styles>
 
-                            <cc:CompletionListBox Name="PART_ListBox"
-                                                  Margin="{TemplateBinding Padding}"
-                                                  FontFamily="{TemplateBinding FontFamily}"
-                                                  MaxHeight="260"
-                                                  MinWidth="190">
-                                <cc:CompletionListBox.ItemTemplate>
-                                    <DataTemplate DataType="comp:QuartzCompletionData">
-                                        <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
-                                            <LucideIcon Kind="{Binding IconKind}"
-                                                        Size="14"
-                                                        StrokeWidth="1.75"
-                                                        Foreground="{DynamicResource ForegroundLeadColor}"
-                                                        VerticalAlignment="Center"
-                                                        Margin="2,0,8,0" />
-                                            <TextBlock Grid.Column="1"
-                                                       Text="{Binding Text}"
-                                                       FontFamily="{Binding $parent[cc:CompletionList].FontFamily}"
-                                                       FontSize="13"
-                                                       FontWeight="Medium"
-                                                       Foreground="{DynamicResource ForegroundColor}"
-                                                       VerticalAlignment="Center" />
-                                            <TextBlock Grid.Column="2"
-                                                       Text="{Binding Detail}"
-                                                       FontFamily="{Binding $parent[cc:CompletionList].FontFamily}"
-                                                       FontSize="11"
-                                                       Foreground="{DynamicResource MutedColor}"
-                                                       VerticalAlignment="Center"
-                                                       Margin="16,0,4,0" />
-                                        </Grid>
-                                    </DataTemplate>
-                                </cc:CompletionListBox.ItemTemplate>
-                            </cc:CompletionListBox>
+                            <Panel>
+                                <cc:CompletionListBox Name="PART_ListBox"
+                                                      Margin="{TemplateBinding Padding}"
+                                                      FontFamily="{TemplateBinding FontFamily}"
+                                                      MaxHeight="260"
+                                                      MinWidth="190">
+                                    <cc:CompletionListBox.ItemTemplate>
+                                        <DataTemplate DataType="comp:QuartzCompletionData">
+                                            <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
+                                                <LucideIcon Kind="{Binding IconKind}"
+                                                            Size="14"
+                                                            StrokeWidth="1.75"
+                                                            Foreground="{DynamicResource ForegroundLeadColor}"
+                                                            VerticalAlignment="Center"
+                                                            Margin="2,0,8,0" />
+                                                <TextBlock Grid.Column="1"
+                                                           Text="{Binding Text}"
+                                                           FontFamily="{Binding $parent[cc:CompletionList].FontFamily}"
+                                                           FontSize="13"
+                                                           FontWeight="Medium"
+                                                           Foreground="{DynamicResource ForegroundColor}"
+                                                           VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="2"
+                                                           Text="{Binding Detail}"
+                                                           FontFamily="{Binding $parent[cc:CompletionList].FontFamily}"
+                                                           FontSize="11"
+                                                           Foreground="{DynamicResource MutedColor}"
+                                                           VerticalAlignment="Center"
+                                                           Margin="16,0,4,0" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </cc:CompletionListBox.ItemTemplate>
+                                </cc:CompletionListBox>
+
+                                <TextBlock Name="PART_EmptyText"
+                                           Text="Предложения отсутствуют"
+                                           FontSize="13"
+                                           Margin="8,4,8,4"
+                                           Foreground="{DynamicResource MutedColor}"
+                                           FontFamily="{x:Static FontFamily.Default}"
+                                           VerticalAlignment="Center"
+                                           HorizontalAlignment="Left" />
+                            </Panel>
                         </Border>
                     </ControlTemplate>
                 </Setter>
+
+                <Style Selector="^ /template/ TextBlock#PART_EmptyText">
+                    <Setter Property="IsVisible" Value="False" />
+                </Style>
+
+                <Style Selector="^.empty /template/ cc|CompletionListBox#PART_ListBox">
+                    <Setter Property="IsVisible" Value="False" />
+                </Style>
+
+                <Style Selector="^.empty /template/ TextBlock#PART_EmptyText">
+                    <Setter Property="IsVisible" Value="True" />
+                </Style>
             </ControlTheme>
 
             <ResourceDictionary.MergedDictionaries>

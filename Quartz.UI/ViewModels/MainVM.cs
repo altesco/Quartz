@@ -652,31 +652,37 @@ public partial class MainVM : ObservableObject
     /// <summary>
     /// Публичный метод для запуска сброса подсветок со всей разметки
     /// </summary>
-    public void ResetAllPanelSides()
+    public void ResetAllPanelSides(PanelVM? exceptPanel = null, FileVM? exceptTab = null)
     {
         if (RootNode != null)
-            ResetSidesRecursive(RootNode);
+            ResetSidesRecursive(RootNode, exceptPanel, exceptTab);
     }
 
     /// <summary>
     /// Рекурсивный обход дерева панелей для обнуления NewNodeSide
     /// </summary>
-    private void ResetSidesRecursive(LayoutRootVM node)
+    private void ResetSidesRecursive(LayoutRootVM node, PanelVM? exceptPanel = null, FileVM? exceptTab = null)
     {
         if (node is PanelVM panel)
         {
-            panel.NewNodeSide = Side.None;
+            if (panel != exceptPanel && panel.NewNodeSide != Side.None)
+            {
+                panel.NewNodeSide = Side.None;
+            }
             // Очищаем синие полосочки у ВСЕХ вкладок этой панели
             foreach (var tab in panel.Tabs)
             {
-                tab.InsertSide = Side.None;
+                if (tab != exceptTab && tab.InsertSide != Side.None)
+                {
+                    tab.InsertSide = Side.None;
+                }
             }
         }
         else if (node is SplitContainerVM container)
         {
             foreach (var child in container.Children)
             {
-                ResetSidesRecursive(child);
+                ResetSidesRecursive(child, exceptPanel, exceptTab);
             }
         }
     }

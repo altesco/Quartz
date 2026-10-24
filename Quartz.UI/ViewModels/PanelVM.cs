@@ -142,10 +142,11 @@ public partial class PanelVM : LayoutRootVM
 
         var hitVisual = topLevel.InputHitTest(currentPos) as Visual;
 
-        // Сбрасываем старые подсветки перед расчетом новых
-        _mainVM.ResetAllPanelSides();
-
-        if (hitVisual == null) return;
+        if (hitVisual == null)
+        {
+            _mainVM.ResetAllPanelSides();
+            return;
+        }
 
         // ВАРИАНТ А: Мы ведем мышь над какой-то конкретной вкладкой
         var hitTabItem = hitVisual as TabItem ?? hitVisual.FindAncestorOfType<TabItem>();
@@ -154,7 +155,12 @@ public partial class PanelVM : LayoutRootVM
             var positionInTab = e.GetPosition(hitTabItem);
             double w = hitTabItem.Bounds.Width;
 
-            targetTab.InsertSide = positionInTab.X < (w / 2) ? Side.Left : Side.Right;
+            var desiredTabSide = positionInTab.X < (w / 2) ? Side.Left : Side.Right;
+            _mainVM.ResetAllPanelSides(exceptTab: targetTab);
+            if (targetTab.InsertSide != desiredTabSide)
+            {
+                targetTab.InsertSide = desiredTabSide;
+            }
             return;
         }
 
@@ -185,7 +191,11 @@ public partial class PanelVM : LayoutRootVM
                 var lastTab = targetPanel.Tabs.LastOrDefault();
                 if (lastTab != null)
                 {
-                    lastTab.InsertSide = Side.Right;
+                    _mainVM.ResetAllPanelSides(exceptTab: lastTab);
+                    if (lastTab.InsertSide != Side.Right)
+                    {
+                        lastTab.InsertSide = Side.Right;
+                    }
                     return; // Выходим, чтобы не сработали сплиты ниже!
                 }
             }
@@ -195,15 +205,29 @@ public partial class PanelVM : LayoutRootVM
             double w = hitTabControl.Bounds.Width;
             double h = hitTabControl.Bounds.Height;
 
-            if (w < 50 || h < 50) return;
+            if (w < 50 || h < 50)
+            {
+                _mainVM.ResetAllPanelSides();
+                return;
+            }
 
             // Зажигаем превью сплита у ЦЕЛЕВОЙ панели
-            if (positionInPanel.X < w / 3) targetPanel.NewNodeSide = Side.Left;
-            else if (positionInPanel.X > w * 2 / 3) targetPanel.NewNodeSide = Side.Right;
-            else if (positionInPanel.Y < h / 3) targetPanel.NewNodeSide = Side.Top;
-            else if (positionInPanel.Y > h * 2 / 3) targetPanel.NewNodeSide = Side.Bottom;
-            else targetPanel.NewNodeSide = Side.None;
+            Side desiredSide = Side.Center;
+            if (positionInPanel.X < w / 3) desiredSide = Side.Left;
+            else if (positionInPanel.X > w * 2 / 3) desiredSide = Side.Right;
+            else if (positionInPanel.Y < h / 3) desiredSide = Side.Top;
+            else if (positionInPanel.Y > h * 2 / 3) desiredSide = Side.Bottom;
+
+            _mainVM.ResetAllPanelSides(exceptPanel: targetPanel);
+
+            if (targetPanel.NewNodeSide != desiredSide)
+            {
+                targetPanel.NewNodeSide = desiredSide;
+            }
+            return;
         }
+
+        _mainVM.ResetAllPanelSides();
     }
 
     [RelayCommand]
@@ -304,9 +328,9 @@ public partial class PanelVM : LayoutRootVM
             if (droppedInHeader)
             {
                 // Если дропнули в шапку — это железно добавление в конец, никаких сплитов!
-                side = Side.None;
+                side = Side.Center;
             }
-            else if (source == targetPanel && side == Side.None)
+            else if (source == targetPanel && (side == Side.None || side == Side.Center))
             {
                 // А вот если это дроп в ЦЕНТР (тело) своей же панели — вот тогда ничего не делаем
                 _mainVM.ResetDragStatus();
@@ -316,7 +340,7 @@ public partial class PanelVM : LayoutRootVM
             // Удаляем из старого места и пушим в конец
             source.Tabs.Remove(tab);
 
-            if (side == Side.None)
+            if (side == Side.None || side == Side.Center)
             {
                 targetPanel.Tabs.Add(tab); // ObservableCollection сама кинет её в самый конец индекса
                 targetPanel.SelectedTab = tab;
@@ -347,5 +371,11 @@ public partial class PanelVM : LayoutRootVM
     protected void SelectPanel() => _mainVM.ActivePanel = this;
 
     [RelayCommand]
-    private void ResetSide() => NewNodeSide = Side.None;
+    private void ResetSide()
+    {
+        if (NewNodeSide != Side.None)
+        {
+            NewNodeSide = Side.None;
+        }
+    }
 }
