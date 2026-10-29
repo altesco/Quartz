@@ -95,6 +95,7 @@
                             <Setter Property="ClipToBounds" Value="False" />
                             <Setter Property="ZIndex" Value="1" />
                             <Setter Property="Cursor" Value="Hand" />
+                            <Setter Property="tools:FileElementHelper.TrackFileStatus" Value="True" />
                             <Setter Property="Template">
                                 <ControlTemplate>
                                     <Border
@@ -241,6 +242,41 @@
                                 <Setter Property="ZIndex" Value="100" />
                             </Style>
 
+                            <!-- Состояние ошибки TabItem -->
+                            <Style Selector="^.has-error">
+                                <Setter Property="Foreground" Value="{DynamicResource ErrorColor}" />
+                            </Style>
+                            <Style Selector="^.has-error:pointerover">
+                                <Setter Property="Foreground" Value="{DynamicResource ErrorColor}" />
+                            </Style>
+                            <Style Selector="^.has-error:selected">
+                                <Setter Property="Foreground" Value="{DynamicResource ErrorColor}" />
+                            </Style>
+                            <Style Selector="^.has-error:selected:pointerover">
+                                <Setter Property="Foreground" Value="{DynamicResource ErrorColor}" />
+                            </Style>
+
+                            <!-- Состояние предупреждения TabItem (если нет ошибки) -->
+                            <Style Selector="^.has-warning:not(.has-error)">
+                                <Setter Property="Foreground" Value="{DynamicResource WarningColor}" />
+                            </Style>
+                            <Style Selector="^.has-warning:not(.has-error):pointerover">
+                                <Setter Property="Foreground" Value="{DynamicResource WarningColor}" />
+                            </Style>
+                            <Style Selector="^.has-warning:not(.has-error):selected">
+                                <Setter Property="Foreground" Value="{DynamicResource WarningColor}" />
+                            </Style>
+                            <Style Selector="^.has-warning:not(.has-error):selected:pointerover">
+                                <Setter Property="Foreground" Value="{DynamicResource WarningColor}" />
+                            </Style>
+
+                        </Style>
+
+                        <Style Selector="TabItem.has-error TextBlock">
+                            <Setter Property="Foreground" Value="{DynamicResource ErrorColor}" />
+                        </Style>
+                        <Style Selector="TabItem.has-warning:not(.has-error) TextBlock">
+                            <Setter Property="Foreground" Value="{DynamicResource WarningColor}" />
                         </Style>
 
                         <!-- Базовое состояние кнопки закрытия вкладки: скрыта, крестик всегда PrimaryColor -->
@@ -554,7 +590,7 @@
                 <ae:TextEditor
                     x:Name="Editor"
                     Grid.Row="1"
-                    tools:Marker.Errors="{Binding Errors}"
+                    tools:Marker.Problems="{Binding Problems}"
                     tools:ScrollProps.HorizontalOffset="{Binding ScrollX}"
                     tools:ScrollProps.VerticalOffset="{Binding ScrollY}"
                     Document="{Binding Document, Mode=TwoWay}"
@@ -1199,9 +1235,42 @@
                     <Style Selector="TreeViewItem">
                         <Setter Property="IsExpanded" Value="{Binding $self.((vm:FileStructVM)DataContext).IsExpanded, Mode=TwoWay}" />
                         <Setter Property="IsSelected" Value="{Binding $self.((vm:FileStructVM)DataContext).IsSelected, Mode=TwoWay}" />
+                        <Setter Property="tools:FileElementHelper.TrackFileStatus" Value="True" />
                     </Style>
                     <Style Selector="TreeViewItem:empty /template/ ToggleButton#PART_ExpandCollapseChevron">
                         <Setter Property="IsVisible" Value="{Binding $self.((vm:FileStructVM)DataContext).IsDirectory}" />
+                    </Style>
+
+                    <Style Selector="TreeViewItem.has-error">
+                        <Setter Property="Foreground" Value="{DynamicResource ErrorColor}" />
+                    </Style>
+                    <Style Selector="TreeViewItem.has-error:pointerover">
+                        <Setter Property="Foreground" Value="{DynamicResource ErrorColor}" />
+                    </Style>
+                    <Style Selector="TreeViewItem.has-error:selected">
+                        <Setter Property="Foreground" Value="{DynamicResource ErrorColor}" />
+                    </Style>
+                    <Style Selector="TreeViewItem.has-error:selected:pointerover">
+                        <Setter Property="Foreground" Value="{DynamicResource ErrorColor}" />
+                    </Style>
+                    <Style Selector="TreeViewItem.has-error TextBlock">
+                        <Setter Property="Foreground" Value="{DynamicResource ErrorColor}" />
+                    </Style>
+
+                    <Style Selector="TreeViewItem.has-warning:not(.has-error)">
+                        <Setter Property="Foreground" Value="{DynamicResource WarningColor}" />
+                    </Style>
+                    <Style Selector="TreeViewItem.has-warning:not(.has-error):pointerover">
+                        <Setter Property="Foreground" Value="{DynamicResource WarningColor}" />
+                    </Style>
+                    <Style Selector="TreeViewItem.has-warning:not(.has-error):selected">
+                        <Setter Property="Foreground" Value="{DynamicResource WarningColor}" />
+                    </Style>
+                    <Style Selector="TreeViewItem.has-warning:not(.has-error):selected:pointerover">
+                        <Setter Property="Foreground" Value="{DynamicResource WarningColor}" />
+                    </Style>
+                    <Style Selector="TreeViewItem.has-warning:not(.has-error) TextBlock">
+                        <Setter Property="Foreground" Value="{DynamicResource WarningColor}" />
                     </Style>
                 </TreeView.Styles>
 
@@ -1465,7 +1534,7 @@
                     <TreeView.DataTemplates>
 
                         <!-- Шаблон 1: Корневой узел (ФАЙЛ) -->
-                        <TreeDataTemplate DataType="vm:FileVM" ItemsSource="{Binding Errors}">
+                        <TreeDataTemplate DataType="vm:FileVM" ItemsSource="{Binding Problems}">
                             <StackPanel Orientation="Horizontal" Spacing="6" Background="Transparent" VerticalAlignment="Center">
                                 <ContentControl
                                     Content="{Binding}"
@@ -1507,7 +1576,7 @@
                                 </ContentControl>
                                 <TextBlock Text="{Binding Header}" VerticalAlignment="Center" />
                                 <TextBlock
-                                    Text="{Binding Errors.Count, StringFormat='({0})'}"
+                                    Text="{Binding TotalIssueCount, StringFormat='({0})'}"
                                     Foreground="{DynamicResource MutedColor}"
                                     VerticalAlignment="Center" />
                             </StackPanel>
@@ -1517,6 +1586,31 @@
                         <DataTemplate DataType="models:EditorError">
                             <Grid ColumnDefinitions="Auto,*,Auto" HorizontalAlignment="Stretch" VerticalAlignment="Center" Background="Transparent">
                                 <LucideIcon Kind="CircleX" Size="16" VerticalAlignment="Center" Foreground="{DynamicResource ErrorColor}" />
+                                <TextBlock
+                                    Grid.Column="1"
+                                    Text="{Binding Message}"
+                                    Margin="6,0"
+                                    VerticalAlignment="Center"
+                                    TextTrimming="CharacterEllipsis" />
+                                <TextBlock
+                                    Grid.Column="2"
+                                    Margin="6,0"
+                                    VerticalAlignment="Center"
+                                    Foreground="{DynamicResource MutedColor}">
+                                    <TextBlock.Text>
+                                        <MultiBinding StringFormat="[Строка {0}, столбец {1}]">
+                                            <Binding Path="Line" />
+                                            <Binding Path="Column" />
+                                        </MultiBinding>
+                                    </TextBlock.Text>
+                                </TextBlock>
+                            </Grid>
+                        </DataTemplate>
+
+                        <!-- Шаблон 3: Дочерний узел (ПРЕДУПРЕЖДЕНИЕ) -->
+                        <DataTemplate DataType="models:EditorWarning">
+                            <Grid ColumnDefinitions="Auto,*,Auto" HorizontalAlignment="Stretch" VerticalAlignment="Center" Background="Transparent">
+                                <LucideIcon Kind="TriangleAlert" Size="16" VerticalAlignment="Center" Foreground="{DynamicResource WarningColor}" />
                                 <TextBlock
                                     Grid.Column="1"
                                     Text="{Binding Message}"

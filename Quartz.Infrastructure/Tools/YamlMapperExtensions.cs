@@ -24,6 +24,18 @@ public static class YamlMapperExtensions
         });
     }
 
+    public static void AddWarning(this List<EditorWarning> warnings, string message, long line = 0, long column = 0,
+        long length = 0)
+    {
+        warnings.Add(new EditorWarning
+        {
+            Message = message,
+            Line = line,
+            Column = column,
+            Length = length
+        });
+    }
+
     public static FrozenDictionary<string, TDomain> MapToDictionary<TDto, TDomain>(
         this IList<TDto?>? dtos,
         string collectionName,

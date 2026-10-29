@@ -90,7 +90,8 @@ public class BoardProcessingCoordinator : IBoardProcessingCoordinator
 
             var layerText = match.Value;
 
-            var layerSyntaxErrors = _syntaxParser.ValidateSyntax(layerText);
+            var layerSyntaxProblems = _syntaxParser.ValidateSyntax(layerText);
+            var layerSyntaxErrors = layerSyntaxProblems.OfType<EditorError>().ToList();
             if (layerSyntaxErrors.Count > 0)
             {
                 GetOrCreateExtraErrors(path).AddRange(layerSyntaxErrors);
@@ -143,9 +144,12 @@ public class BoardProcessingCoordinator : IBoardProcessingCoordinator
         // =========================================================================
         // 3. ЭТАП 3: Валидация и парсинг файла платы (.pcby)
         // =========================================================================
-        var syntaxErrors = _syntaxParser.ValidateSyntax(boardText);
+        var syntaxProblems = _syntaxParser.ValidateSyntax(boardText);
+        var syntaxErrors = syntaxProblems.OfType<EditorError>().ToList();
+        var syntaxWarnings = syntaxProblems.OfType<EditorWarning>().ToList();
         boardErrors.AddRange(syntaxErrors);
         boardErrors.AddRange(_schemaValidator.ValidateSchemaAndTags(boardText, typeof(BoardModel)));
+        var boardWarnings = new List<EditorWarning>(syntaxWarnings);
 
         BoardModel? boardModel = null;
         if (syntaxErrors.Count == 0)
@@ -203,7 +207,7 @@ public class BoardProcessingCoordinator : IBoardProcessingCoordinator
             if (extraLayerErrors.TryGetValue(path, out var extraErrs) && extraErrs.Count > 0)
             {
                 var combinedErrors = layerResult.Errors.Concat(extraErrs).ToList();
-                layerResult = new ProcessResult<LayerModel>(combinedErrors, layerResult.Primitives, layerResult.Model);
+                layerResult = new ProcessResult<LayerModel>(combinedErrors, layerResult.Warnings, layerResult.Primitives, layerResult.Model);
             }
 
             if (layerResult.Model?.Name != null && indicesByLayerName.TryGetValue(layerResult.Model.Name, out var idx))
@@ -237,7 +241,7 @@ public class BoardProcessingCoordinator : IBoardProcessingCoordinator
                 {
                     var updatedPrimitives = _drawingGenerator.GenerateLayerPrimitives(layerResult.Model, boardModel);
                     layerResults[path] =
-                        new ProcessResult<LayerModel>(layerResult.Errors, updatedPrimitives, layerResult.Model);
+                        new ProcessResult<LayerModel>(layerResult.Errors, layerResult.Warnings, updatedPrimitives, layerResult.Model);
                 }
             }
         }
@@ -250,7 +254,7 @@ public class BoardProcessingCoordinator : IBoardProcessingCoordinator
             : [];
 
         return new ProjectResult(
-            new ProcessResult<BoardModel>(boardErrors, boardPrimitives, boardModel),
+            new ProcessResult<BoardModel>(boardErrors, boardWarnings, boardPrimitives, boardModel),
             layerResults,
             stylesResults);
     }
@@ -399,9 +403,11 @@ public class BoardProcessingCoordinator : IBoardProcessingCoordinator
     {
         var allErrors = new List<EditorError>();
 
-        var syntaxErrors = _syntaxParser.ValidateSyntax(text);
+        var syntaxProblems = _syntaxParser.ValidateSyntax(text);
+        var syntaxErrors = syntaxProblems.OfType<EditorError>().ToList();
+        var syntaxWarnings = syntaxProblems.OfType<EditorWarning>().ToList();
         if (syntaxErrors.Count > 0)
-            return new ProcessResult<LayerModel>(syntaxErrors.ToList(), [], null);
+            return new ProcessResult<LayerModel>(syntaxErrors, syntaxWarnings, [], null);
 
         var schemaErrors = _schemaValidator.ValidateSchemaAndTags(text, typeof(LayerModel));
         allErrors.AddRange(schemaErrors);
@@ -442,7 +448,7 @@ public class BoardProcessingCoordinator : IBoardProcessingCoordinator
             ? _drawingGenerator.GenerateLayerPrimitives(layerModel)
             : [];
 
-        return new ProcessResult<LayerModel>(allErrors, primitives, layerModel);
+        return new ProcessResult<LayerModel>(allErrors, syntaxWarnings, primitives, layerModel);
     }
 
     // ТЕПЕРЬ ТУТ МОЖНО ПЕРЕДАТЬ РЕЗУЛЬТАТЫ ПАРСИНГА СТИЛЕЙ!
@@ -470,9 +476,11 @@ public class BoardProcessingCoordinator : IBoardProcessingCoordinator
     {
         var allErrors = new List<EditorError>();
 
-        var syntaxErrors = _syntaxParser.ValidateSyntax(text);
+        var syntaxProblems = _syntaxParser.ValidateSyntax(text);
+        var syntaxErrors = syntaxProblems.OfType<EditorError>().ToList();
+        var syntaxWarnings = syntaxProblems.OfType<EditorWarning>().ToList();
         if (syntaxErrors.Count > 0)
-            return new ProcessResult<List<Style>>(syntaxErrors.ToList(), [], []);
+            return new ProcessResult<List<Style>>(syntaxErrors, syntaxWarnings, [], []);
 
         var schemaErrors = _schemaValidator.ValidateSchemaAndTags(text, typeof(List<Style>));
         allErrors.AddRange(schemaErrors);
@@ -480,6 +488,6 @@ public class BoardProcessingCoordinator : IBoardProcessingCoordinator
         var styles = _stylesDomainParser.ParseStyles(text, out var parseErrors);
         allErrors.AddRange(parseErrors);
 
-        return new ProcessResult<List<Style>>(allErrors, [], styles);
+        return new ProcessResult<List<Style>>(allErrors, syntaxWarnings, [], styles);
     }
 }

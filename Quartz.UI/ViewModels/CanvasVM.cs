@@ -17,6 +17,10 @@ public partial class CanvasVM : FileVM
         {
             if (e.PropertyName == nameof(IsModified))
                 IsModified = owner.IsModified;
+            if (e.PropertyName == nameof(HasErrors))
+                OnPropertyChanged(nameof(HasErrors));
+            if (e.PropertyName == nameof(HasWarnings))
+                OnPropertyChanged(nameof(HasWarnings));
         };
         if (owner is LayerVM layerVM)
         {
@@ -34,6 +38,8 @@ public partial class CanvasVM : FileVM
     public File2D Owner { get; set; }
 
     public override Extension Extension => Owner.Extension;
+    public override bool HasErrors => Owner?.HasErrors ?? false;
+    public override bool HasWarnings => Owner?.HasWarnings ?? false;
 
     [ObservableProperty] private IReadOnlyList<DrawingPrimitive>? _renderData;
     [ObservableProperty] private LengthUnit _unit = LengthUnit.Mm;

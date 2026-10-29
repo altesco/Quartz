@@ -8,6 +8,7 @@
              xmlns:cc="using:AvaloniaEdit.CodeCompletion"
              xmlns:comp="using:Quartz.UI.CodeCompletion"
              xmlns:system="clr-namespace:System;assembly=netstandard"
+             xmlns:tools="using:Quartz.UI.Tools"
              RequestedThemeVariant="Default">
 
     <Application.Resources>
@@ -29,6 +30,7 @@
                 <Setter Property="FontSize" Value="14" />
                 <Setter Property="CornerRadius" Value="{DynamicResource SmCornerRadius}" />
                 <Setter Property="VerticalAlignment" Value="Center" />
+                <Setter Property="tools:FileElementHelper.TrackFileStatus" Value="True" />
                 <Setter Property="Template">
                     <ControlTemplate>
                         <StackPanel>
@@ -133,6 +135,33 @@
                 </Style>
                 <Style Selector="^:empty /template/ Panel#PART_ExpandCollapseChevronContainer">
                     <Setter Property="Width" Value="18" />
+                </Style>
+
+                <!-- Ошибки и предупреждения -->
+                <Style Selector="^.has-error">
+                    <Setter Property="Foreground" Value="{DynamicResource ErrorColor}" />
+                </Style>
+                <Style Selector="^.has-error:pointerover">
+                    <Setter Property="Foreground" Value="{DynamicResource ErrorColor}" />
+                </Style>
+                <Style Selector="^.has-error:selected">
+                    <Setter Property="Foreground" Value="{DynamicResource ErrorColor}" />
+                </Style>
+                <Style Selector="^.has-error:selected:pointerover">
+                    <Setter Property="Foreground" Value="{DynamicResource ErrorColor}" />
+                </Style>
+
+                <Style Selector="^.has-warning:not(.has-error)">
+                    <Setter Property="Foreground" Value="{DynamicResource WarningColor}" />
+                </Style>
+                <Style Selector="^.has-warning:not(.has-error):pointerover">
+                    <Setter Property="Foreground" Value="{DynamicResource WarningColor}" />
+                </Style>
+                <Style Selector="^.has-warning:not(.has-error):selected">
+                    <Setter Property="Foreground" Value="{DynamicResource WarningColor}" />
+                </Style>
+                <Style Selector="^.has-warning:not(.has-error):selected:pointerover">
+                    <Setter Property="Foreground" Value="{DynamicResource WarningColor}" />
                 </Style>
             </ControlTheme>
 

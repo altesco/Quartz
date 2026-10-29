@@ -55,16 +55,18 @@ namespace Quartz.UI.CodeCompletion
         public void Complete(TextArea textArea, ISegment completionSegment, EventArgs insertionRequestEventArgs)
         {
             var textToInsert = InsertText ?? Text;
-            if (completionSegment.Offset > 0 && textArea.Document.GetCharAt(completionSegment.Offset - 1) == '-')
+            var doc = textArea.Document;
+
+            if (!textToInsert.StartsWith(' ') && completionSegment.Offset > 0 && completionSegment.Offset <= doc.TextLength && doc.GetCharAt(completionSegment.Offset - 1) == '-')
             {
                 textToInsert = " " + textToInsert;
             }
 
-            var doc = textArea.Document;
-            var line = doc.GetLineByOffset(completionSegment.Offset);
+            int safeOffset = Math.Clamp(completionSegment.Offset, 0, doc.TextLength);
+            var line = doc.GetLineByOffset(safeOffset);
             var lineText = doc.GetText(line.Offset, line.Length);
-            int wordOffsetInLine = Math.Max(0, completionSegment.Offset - line.Offset);
-            string textBeforeWord = wordOffsetInLine > 0 ? lineText[..wordOffsetInLine] : string.Empty;
+            int wordOffsetInLine = Math.Clamp(safeOffset - line.Offset, 0, line.Length);
+            string textBeforeWord = lineText[..wordOffsetInLine];
 
             if (TargetIndent.HasValue && string.IsNullOrWhiteSpace(textBeforeWord))
             {
@@ -83,9 +85,12 @@ namespace Quartz.UI.CodeCompletion
 
                 int replaceStart = line.Offset;
                 int replaceLength = Math.Max(0, (completionSegment.Offset + completionSegment.Length) - line.Offset);
+                replaceStart = Math.Clamp(replaceStart, 0, doc.TextLength);
+                replaceLength = Math.Clamp(replaceLength, 0, doc.TextLength - replaceStart);
 
                 doc.Replace(replaceStart, replaceLength, pad + textToInsert);
-                textArea.Caret.Offset = replaceStart + pad.Length + textToInsert.Length;
+                int targetOffset = Math.Clamp(replaceStart + pad.Length + textToInsert.Length, 0, doc.TextLength);
+                textArea.Caret.Offset = targetOffset;
                 return;
             }
 
@@ -106,8 +111,18 @@ namespace Quartz.UI.CodeCompletion
                 textToInsert = string.Join('\n', lines);
             }
 
-            doc.Replace(completionSegment, textToInsert);
-            textArea.Caret.Offset = completionSegment.Offset + textToInsert.Length;
+            int currentCaret = textArea.Caret.Offset;
+            int segOffset = Math.Clamp(completionSegment.Offset, 0, doc.TextLength);
+            int segLength = Math.Max(0, completionSegment.Length);
+            if (currentCaret >= segOffset)
+            {
+                segLength = Math.Max(segLength, currentCaret - segOffset);
+            }
+            segLength = Math.Clamp(segLength, 0, doc.TextLength - segOffset);
+
+            doc.Replace(segOffset, segLength, textToInsert);
+            int finalCaret = Math.Clamp(segOffset + textToInsert.Length, 0, doc.TextLength);
+            textArea.Caret.Offset = finalCaret;
         }
     }
 }

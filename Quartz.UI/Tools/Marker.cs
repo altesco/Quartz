@@ -12,6 +12,9 @@ namespace Quartz.UI.Tools;
 
 public static class Marker
 {
+    public static readonly AttachedProperty<IEnumerable<Problem>?> ProblemsProperty =
+        AvaloniaProperty.RegisterAttached<object, TextEditor, IEnumerable<Problem>?>("Problems");
+
     public static readonly AttachedProperty<IEnumerable<EditorError>?> ErrorsProperty =
         AvaloniaProperty.RegisterAttached<object, TextEditor, IEnumerable<EditorError>?>("Errors");
 
@@ -19,7 +22,12 @@ public static class Marker
 
     static Marker()
     {
-        // Используем встроенный метод GetNewValue<T>() для правильного извлечения коллекции
+        ProblemsProperty.Changed.AddClassHandler<TextEditor>((editor, e) =>
+        {
+            var watcher = Watchers.GetValue(editor, ed => new CollectionWatcher(ed));
+            watcher.UpdateCollection(e.GetNewValue<IEnumerable<Problem>?>());
+        });
+
         ErrorsProperty.Changed.AddClassHandler<TextEditor>((editor, e) =>
         {
             var watcher = Watchers.GetValue(editor, ed => new CollectionWatcher(ed));
@@ -27,29 +35,27 @@ public static class Marker
         });
     }
 
+    public static IEnumerable<Problem>? GetProblems(TextEditor element) => element.GetValue(ProblemsProperty);
+    public static void SetProblems(TextEditor element, IEnumerable<Problem>? value) =>
+        element.SetValue(ProblemsProperty, value);
 
     public static IEnumerable<EditorError>? GetErrors(TextEditor element) => element.GetValue(ErrorsProperty);
-
     public static void SetErrors(TextEditor element, IEnumerable<EditorError>? value) =>
         element.SetValue(ErrorsProperty, value);
-
-    // Метод OnErrorsChanged можно полностью удалить, так как его логика теперь выше
 
     private class CollectionWatcher
     {
         private readonly TextEditor _editor;
-        private IEnumerable<EditorError>? _rawCollection;
+        private IEnumerable<Problem>? _rawCollection;
         private INotifyCollectionChanged? _observedCollection;
 
         public CollectionWatcher(TextEditor editor)
         {
             _editor = editor;
-            // Если редактор создается внутри TabControl, его TextArea изначально null.
-            // Ждем, когда он прикрепится к окну и применит шаблоны.
             _editor.AttachedToVisualTree += (s, e) => TryAttachRendererAndSync();
         }
 
-        public void UpdateCollection(IEnumerable<EditorError>? newCollection)
+        public void UpdateCollection(IEnumerable<Problem>? newCollection)
         {
             if (_observedCollection != null)
                 _observedCollection.CollectionChanged -= OnCollectionChanged;
@@ -65,7 +71,7 @@ public static class Marker
 
         private void OnCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
         {
-            SyncErrorsToRenderer();
+            TryAttachRendererAndSync();
         }
 
         private void TryAttachRendererAndSync()
@@ -82,27 +88,12 @@ public static class Marker
                 _editor.TextArea.TextView.BackgroundRenderers.Add(renderer);
             }
 
-            SyncErrorsToRenderer();
-        }
-
-        private void SyncErrorsToRenderer()
-        {
-            if (_editor.TextArea?.TextView == null) return;
-
-            var renderer = _editor.TextArea.TextView.BackgroundRenderers
-                .OfType<ErrorMarkerRenderer>()
-                .FirstOrDefault();
-
-            if (renderer == null) return;
-
-            // Просто перекидываем элементы во внутренний список рендерера
-            renderer.Errors.Clear();
+            renderer.Problems.Clear();
             if (_rawCollection != null)
             {
-                renderer.Errors.AddRange(_rawCollection);
+                renderer.Problems.AddRange(_rawCollection);
             }
 
-            // Пингуем слой отрисовки. Когда текст догрузится, Draw выполнится сам
             _editor.TextArea.TextView.InvalidateLayer(KnownLayer.Selection);
         }
     }

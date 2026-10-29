@@ -1,9 +1,14 @@
 namespace Quartz.Core.Models;
 
-public class EditorError
+public class EditorError : Problem
 {
-    public string Message { get; set; } = string.Empty;
-    public long Line { get; set; }
-    public long Column { get; set; }
-    public long Length { get; set; }
+    public EditorError() { }
+
+    public EditorError(string message, long line = 0, long column = 0, long length = 0)
+    {
+        Message = message;
+        Line = line;
+        Column = column;
+        Length = length;
+    }
 }

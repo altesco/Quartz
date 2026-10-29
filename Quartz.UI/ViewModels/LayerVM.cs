@@ -47,6 +47,11 @@ public class LayerVM : File2D
         {
             Errors.Add(err);
         }
+        Warnings.Clear();
+        foreach (var warn in layerResult.Warnings)
+        {
+            Warnings.Add(warn);
+        }
 
         // Если парсинг свалился с критической ошибкой и модели нет, 
         // мы обновляем только ошибки, а холст НЕ трогаем!
@@ -75,6 +80,11 @@ public class LayerVM : File2D
         foreach (var err in result.Errors)
         {
             Errors.Add(err);
+        }
+        Warnings.Clear();
+        foreach (var warn in result.Warnings)
+        {
+            Warnings.Add(warn);
         }
 
         // Аналогичная защита для одиночного режима

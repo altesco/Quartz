@@ -67,6 +67,7 @@ namespace Quartz.UI.CodeCompletion
 
         private void OnWindowOpened(object? sender, EventArgs e)
         {
+            EndOffset = TextArea.Caret.Offset;
             UpdateEmptyState();
             if (!IsEmpty)
             {
@@ -80,6 +81,7 @@ namespace Quartz.UI.CodeCompletion
             {
                 if (IsOpen)
                 {
+                    EndOffset = TextArea.Caret.Offset;
                     UpdateEmptyState();
                     if (!IsEmpty && CompletionList.SelectedItem == null)
                     {

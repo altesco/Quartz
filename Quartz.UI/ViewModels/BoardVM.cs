@@ -37,6 +37,12 @@ public class BoardVM : EditorVM
         );
 
         // 3. Обновляем ошибки и модель самой платы
+        Warnings.Clear();
+        foreach (var warn in boardResult.Warnings)
+        {
+            Warnings.Add(warn);
+        }
+
         foreach (var err in boardResult.Errors)
         {
             Errors.Add(err);

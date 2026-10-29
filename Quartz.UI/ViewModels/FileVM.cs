@@ -32,11 +32,35 @@ public abstract partial class FileVM : FileStructVM
 
     protected FileVM(MainVM mainVM, string filePath, DirectoryVM? parent) : base(mainVM, filePath, parent)
     {
+        Errors.CollectionChanged += (s, e) => SyncProblems();
+        Warnings.CollectionChanged += (s, e) => SyncProblems();
     }
 
     public abstract Extension Extension { get; }
 
     public ObservableCollection<EditorError> Errors { get; } = [];
+    public ObservableCollection<EditorWarning> Warnings { get; } = [];
+    public ObservableCollection<Problem> Problems { get; } = [];
+
+    public override bool HasErrors => Errors.Count > 0;
+    public override bool HasWarnings => !HasErrors && Warnings.Count > 0;
+    public int TotalIssueCount => Errors.Count + Warnings.Count;
+
+    private void SyncProblems()
+    {
+        Problems.Clear();
+        foreach (var err in Errors) Problems.Add(err);
+        foreach (var warn in Warnings) Problems.Add(warn);
+
+        OnPropertyChanged(nameof(HasErrors));
+        OnPropertyChanged(nameof(HasWarnings));
+        OnPropertyChanged(nameof(TotalIssueCount));
+    }
+
+    public void NotifyErrorStatusChanged()
+    {
+        SyncProblems();
+    }
 
     public Side InsertSide
     {

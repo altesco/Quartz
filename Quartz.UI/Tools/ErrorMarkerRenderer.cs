@@ -1,9 +1,11 @@
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Media;
 using AvaloniaEdit.Document;
 using AvaloniaEdit.Rendering;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Quartz.Core.Models;
 
 namespace Quartz.UI.Tools;
@@ -12,23 +14,28 @@ public class ErrorMarkerRenderer : IBackgroundRenderer
 {
     public KnownLayer Layer => KnownLayer.Selection;
 
-    // Храним сырые ошибки из ViewModel, а не сегменты
-    public List<EditorError> Errors { get; } = new();
+    // Храним сырые проблемы из ViewModel, а не сегменты
+    public List<Problem> Problems { get; } = new();
+    public List<EditorError> Errors => Problems.OfType<EditorError>().ToList();
 
     public void Draw(TextView textView, DrawingContext drawingContext)
     {
-        // Если ошибок нет или документ еще не загрузился — рисовать нечего
-        if (Errors.Count == 0 || textView.Document == null || textView.Document.TextLength == 0) return;
+        // Если проблем нет или документ еще не загрузился — рисовать нечего
+        if (Problems.Count == 0 || textView.Document == null || textView.Document.TextLength == 0) return;
 
-        var pen = new Pen(Brushes.Red, 1.0);
+        var errorBrush = GetBrush("ErrorColor", Brushes.Red);
+        var warningBrush = GetBrush("WarningColor", Brushes.Orange);
+        var errorPen = new Pen(errorBrush, 1.0);
+        var warningPen = new Pen(warningBrush, 1.0);
 
-        foreach (var error in Errors)
+        foreach (var problem in Problems)
         {
+            var pen = problem is EditorWarning ? warningPen : errorPen;
             try
             {
                 // Считаем смещение прямо в момент отрисовки — тут документ уже точно готов!
-                var startOffset = textView.Document.GetOffset(new TextLocation((int)error.Line, (int)error.Column));
-                var length = Math.Min(error.Length, textView.Document.TextLength - startOffset);
+                var startOffset = textView.Document.GetOffset(new TextLocation((int)problem.Line, (int)problem.Column));
+                var length = Math.Min(problem.Length, textView.Document.TextLength - startOffset);
 
                 if (startOffset < 0 || length <= 0) continue;
 
@@ -68,5 +75,16 @@ public class ErrorMarkerRenderer : IBackgroundRenderer
                 // Защита от несовпадения индексов при быстром вводе текста
             }
         }
+    }
+
+    private static IBrush GetBrush(string resourceKey, IBrush fallback)
+    {
+        if (Avalonia.Application.Current != null &&
+            Avalonia.Application.Current.TryFindResource(resourceKey, out var res) &&
+            res is Color col)
+        {
+            return new SolidColorBrush(col);
+        }
+        return fallback;
     }
 }

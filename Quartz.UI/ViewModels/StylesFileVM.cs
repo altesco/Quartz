@@ -46,6 +46,11 @@ public class StylesFileVM : EditorVM
         {
             Errors.Add(err);
         }
+        Warnings.Clear();
+        foreach (var warn in stylesResult.Warnings)
+        {
+            Warnings.Add(warn);
+        }
 
         if (stylesResult.Model != null)
         {
@@ -59,6 +64,11 @@ public class StylesFileVM : EditorVM
         foreach (var err in result.Errors)
         {
             Errors.Add(err);
+        }
+        Warnings.Clear();
+        foreach (var warn in result.Warnings)
+        {
+            Warnings.Add(warn);
         }
 
         if (result.Model != null)

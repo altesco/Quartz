@@ -29,6 +29,8 @@ public abstract partial class FileStructVM : ObservableObject
 
     public string Header => Path.GetFileName(FilePath);
     public virtual bool IsDirectory => false;
+    public virtual bool HasErrors => false;
+    public virtual bool HasWarnings => false;
     public DirectoryVM? Parent { get; set; }
 
     [ObservableProperty]

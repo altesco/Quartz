@@ -142,7 +142,7 @@ public partial class MainVM : ObservableObject
 
     public string IndentationText => $"Пробелов: {IndentationSize}";
 
-    public int TotalErrorCount => ProjectErrors.Sum(f => f.Errors.Count);
+    public int TotalErrorCount => ProjectErrors.Sum(f => f.TotalIssueCount);
 
     private readonly IBoardProcessingCoordinator _boardProcessingCoordinator;
     private readonly IFolderDialogService _folderDialogService;
@@ -466,12 +466,12 @@ public partial class MainVM : ObservableObject
     [RelayCommand]
     public void NavigateToError(object? parameter)
     {
-        if (parameter is EditorError error)
+        if (parameter is Problem problem)
         {
-            var file = ProjectErrors.FirstOrDefault(f => f.Errors.Contains(error));
+            var file = ProjectErrors.FirstOrDefault(f => f.Problems.Contains(problem));
             if (file != null)
             {
-                NavigateToError(file, error);
+                NavigateToProblem(file, problem);
             }
         }
         else if (parameter is FileVM file)
@@ -480,7 +480,7 @@ public partial class MainVM : ObservableObject
         }
     }
 
-    public void NavigateToError(FileVM file, EditorError error)
+    public void NavigateToProblem(FileVM file, Problem problem)
     {
         if (IsBottomPanelMaximized)
         {
@@ -496,10 +496,12 @@ public partial class MainVM : ObservableObject
 
         if (file is EditorVM editor)
         {
-            editor.RequestNavigateTo(error.Line, error.Column);
-            RecordNavigationPoint(file, (int)error.Line, (int)error.Column);
+            editor.RequestNavigateTo(problem.Line, problem.Column);
+            RecordNavigationPoint(file, (int)problem.Line, (int)problem.Column);
         }
     }
+
+    public void NavigateToError(FileVM file, EditorError error) => NavigateToProblem(file, error);
 
     [RelayCommand]
     public void CloseBottomPanel()
@@ -688,6 +690,7 @@ public partial class MainVM : ObservableObject
             foreach (FileVM file in e.NewItems.OfType<FileVM>())
             {
                 file.Errors.CollectionChanged += OnFileErrorsCollectionChanged;
+                file.Warnings.CollectionChanged += OnFileErrorsCollectionChanged;
             }
         }
         if (e.OldItems != null)
@@ -695,6 +698,7 @@ public partial class MainVM : ObservableObject
             foreach (FileVM file in e.OldItems.OfType<FileVM>())
             {
                 file.Errors.CollectionChanged -= OnFileErrorsCollectionChanged;
+                file.Warnings.CollectionChanged -= OnFileErrorsCollectionChanged;
             }
         }
         OnPropertyChanged(nameof(TotalErrorCount));
@@ -1327,7 +1331,7 @@ public partial class MainVM : ObservableObject
     /// </summary>
     public void UpdateFileErrors(FileVM fileVM)//string relativeOrFullPath, IEnumerable<EditorError> errors)
     {
-        if (fileVM.Errors.Count == 0)
+        if (fileVM.Problems.Count == 0)
         {
             // Если ошибок нет — удаляем файл из списка TreeView
             ProjectErrors.Remove(fileVM);

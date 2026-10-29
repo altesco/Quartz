@@ -917,6 +917,7 @@ namespace Quartz.UI.Behaviors
             _completionWindow = new QuartzCompletionWindow(textArea)
             {
                 StartOffset = startOffset,
+                EndOffset = caretOffset,
                 FontFamily = AssociatedObject.FontFamily
             };
 

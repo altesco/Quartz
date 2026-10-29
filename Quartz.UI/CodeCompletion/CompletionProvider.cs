@@ -774,7 +774,7 @@ namespace Quartz.UI.CodeCompletion
             int currentIndent = 2,
             bool isListItem = true)
         {
-            int childIndent = currentIndent + 2;
+            int childIndent = 2;
             string pad = new string(' ', childIndent);
             string prefix = isListItem ? "" : "- ";
             var tagMap = GetTagMapForRootType(rootType);

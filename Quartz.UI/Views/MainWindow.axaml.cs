@@ -317,12 +317,12 @@ public partial class MainWindow : Window
         if (DataContext is not MainVM mainVm || dataContext == null)
             return;
 
-        if (dataContext is EditorError error)
+        if (dataContext is Problem problem)
         {
-            var fileVm = mainVm.ProjectErrors.FirstOrDefault(f => f.Errors.Contains(error));
+            var fileVm = mainVm.ProjectErrors.FirstOrDefault(f => f.Problems.Contains(problem));
             if (fileVm != null)
             {
-                mainVm.NavigateToError(fileVm, error);
+                mainVm.NavigateToProblem(fileVm, problem);
             }
         }
         else if (dataContext is FileVM fileVm)

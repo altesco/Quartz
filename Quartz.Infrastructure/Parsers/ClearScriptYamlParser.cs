@@ -46,8 +46,7 @@ public class ClearScriptYamlParser : IYamlParser, IDisposable
                     const doc = yamlLib.parseDocument(text, { prettyErrors: true });
                     const syntaxErrors = doc.errors || [];
 
-                    for (let i = 0; i < syntaxErrors.length; i++) {
-                        const err = syntaxErrors[i];
+                    function processItem(err) {
                         let line = 1, column = 1, length = 1;
 
                         if (err.linePos && err.linePos.length > 0) {
@@ -74,6 +73,10 @@ public class ClearScriptYamlParser : IYamlParser, IDisposable
                             length: Math.max(1, length)
                         });
                     }
+
+                    for (let i = 0; i < syntaxErrors.length; i++) {
+                        processItem(syntaxErrors[i]);
+                    }
                 } catch (e) {
                     errors.push({
                         message: e.message || String(e),
@@ -86,9 +89,9 @@ public class ClearScriptYamlParser : IYamlParser, IDisposable
         ");
     }
 
-    public IReadOnlyList<EditorError> ValidateSyntax(string? yamlContent)
+    public IReadOnlyList<Problem> ValidateSyntax(string? yamlContent)
     {
-        var result = new List<EditorError>();
+        var result = new List<Problem>();
         dynamic jsErrors = _engine.Script.validateYaml(yamlContent ?? string.Empty);
         int length = jsErrors.length;
 
