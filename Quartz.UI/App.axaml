@@ -175,6 +175,7 @@
                 <Setter Property="Padding" Value="12,8" />
                 <Setter Property="Foreground" Value="{DynamicResource ForegroundColor}" />
                 <Setter Property="FontWeight" Value="Normal" />
+                <Setter Property="Cursor" Value="Arrow" />
                 <Setter Property="shadui:MenuItemAssist.Label" Value="{x:Null}" />
                 <Setter Property="Transitions">
                     <Setter.Value>
@@ -278,15 +279,18 @@
                                     Name="PART_Popup"
                                     Opacity="0"
                                     OverlayInputPassThroughElement="{Binding RelativeSource={RelativeSource AncestorType=Control}}"
-                                    Placement="RightEdgeAlignedTop">
+                                    Placement="RightEdgeAlignedTop"
+                                    HorizontalOffset="-12"
+                                    VerticalOffset="-12">
                                     <LayoutTransformControl Name="LayoutTransform" RenderTransformOrigin="0%, 0%">
                                         <Border
                                             Background="{DynamicResource CardBackgroundColor}"
-                                            BorderBrush="{DynamicResource BorderColor}"
+                                            BorderBrush="{DynamicResource BorderColor60}"
                                             BorderThickness="1"
-                                            BoxShadow="{DynamicResource Shadow}"
-                                            CornerRadius="{DynamicResource LgCornerRadius}"
-                                            Margin="0,0,2,4">
+                                            BoxShadow="0 6 12 0 #40000000"
+                                            CornerRadius="{DynamicResource SmCornerRadius}"
+                                            Cursor="Arrow"
+                                            Margin="12">
                                             <StackPanel Margin="0,2">
                                                 <Border IsVisible="{TemplateBinding shadui:MenuItemAssist.Label, Converter={x:Static ObjectConverters.IsNotNull}}" Padding="16,8">
                                                     <ContentPresenter Content="{TemplateBinding shadui:MenuItemAssist.Label}" />
@@ -362,16 +366,86 @@
             <ControlTheme x:Key="{x:Type MenuItem}" TargetType="MenuItem" BasedOn="{StaticResource ShadMenuItemTheme}" />
             <ControlTheme x:Key="ShadFlyoutPresenterTheme" TargetType="MenuFlyoutPresenter" BasedOn="{StaticResource {x:Type MenuFlyoutPresenter}}" />
 
-            <!-- ДАЕМ УНИКАЛЬНЫЙ КЛЮЧ: QuartzFlyoutTheme -->
-            <ControlTheme x:Key="QuartzFlyoutTheme" TargetType="MenuFlyoutPresenter">
+            <!-- ДАЕМ УНИКАЛЬНЫЙ КЛЮЧ: QuartzContextMenuTheme -->
+            <ControlTheme x:Key="QuartzContextMenuTheme" TargetType="ContextMenu">
                 <Setter Property="Background" Value="Transparent" />
                 <Setter Property="Padding" Value="0,2" />
                 <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="Cursor" Value="Arrow" />
+                <Setter Property="HorizontalOffset" Value="-12" />
+                <Setter Property="VerticalOffset" Value="-12" />
                 <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Auto" />
                 <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto" />
 
                 <Setter Property="TextBlock.FontSize" Value="14" />
                 <Setter Property="TextBlock.FontWeight" Value="Normal" />
+                <Setter Property="TextBlock.Foreground" Value="{DynamicResource ForegroundColor}" />
+
+                <Setter Property="Template">
+                    <ControlTemplate>
+                        <!-- Отступ 12 во все стороны для красивой тени -->
+                        <Border Name="LayoutRoot"
+                                Background="{DynamicResource CardBackgroundColor}"
+                                BorderBrush="{DynamicResource BorderColor60}"
+                                BorderThickness="1"
+                                CornerRadius="{DynamicResource SmCornerRadius}"
+                                Margin="12"
+                                BoxShadow="0 6 12 0 #40000000">
+
+                            <Border.Transitions>
+                                <Transitions>
+                                    <DoubleTransition Property="Opacity" Duration="0:0:0.18" Easing="CubicEaseIn" />
+                                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.18" Easing="CubicEaseIn" />
+                                </Transitions>
+                            </Border.Transitions>
+
+                            <Border.Styles>
+                                <Style Selector="Border#LayoutRoot">
+                                    <Setter Property="RenderTransformOrigin" Value="50%, 0%" />
+                                    <Style.Animations>
+                                        <Animation Duration="0:0:0.18" Easing="CubicEaseOut" FillMode="Forward">
+                                            <KeyFrame Cue="0%">
+                                                <Setter Property="Opacity" Value="0" />
+                                                <Setter Property="ScaleTransform.ScaleY" Value="0.97" />
+                                                <Setter Property="ScaleTransform.ScaleX" Value="0.97" />
+                                            </KeyFrame>
+                                            <KeyFrame Cue="100%">
+                                                <Setter Property="Opacity" Value="1" />
+                                                <Setter Property="ScaleTransform.ScaleY" Value="1.0" />
+                                                <Setter Property="ScaleTransform.ScaleX" Value="1.0" />
+                                            </KeyFrame>
+                                        </Animation>
+                                    </Style.Animations>
+                                </Style>
+                            </Border.Styles>
+
+                            <ScrollViewer HorizontalScrollBarVisibility="{TemplateBinding ScrollViewer.HorizontalScrollBarVisibility}"
+                                          VerticalScrollBarVisibility="{TemplateBinding ScrollViewer.VerticalScrollBarVisibility}">
+                                <ItemsPresenter Name="PART_ItemsPresenter"
+                                                ItemsPanel="{TemplateBinding ItemsPanel}"
+                                                KeyboardNavigation.TabNavigation="Continue"
+                                                Grid.IsSharedSizeScope="True"
+                                                Margin="{TemplateBinding Padding}" />
+                            </ScrollViewer>
+                        </Border>
+                    </ControlTemplate>
+                </Setter>
+            </ControlTheme>
+
+            <ControlTheme x:Key="{x:Type ContextMenu}" TargetType="ContextMenu" BasedOn="{StaticResource QuartzContextMenuTheme}" />
+
+            <!-- ДАЕМ УНИКАЛЬНЫЙ КЛЮЧ: QuartzFlyoutTheme -->
+            <ControlTheme x:Key="QuartzFlyoutTheme" TargetType="MenuFlyoutPresenter">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="Padding" Value="0,2" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="Cursor" Value="Arrow" />
+                <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Auto" />
+                <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto" />
+
+                <Setter Property="TextBlock.FontSize" Value="14" />
+                <Setter Property="TextBlock.FontWeight" Value="Normal" />
+                <Setter Property="TextBlock.Foreground" Value="{DynamicResource ForegroundColor}" />
 
                 <!-- компенсация теней настраивается через FlyoutAssist с учетом Placement -->
                 <Setter Property="local:FlyoutAssist.VerticalOffset" Value="-12" />
@@ -642,12 +716,50 @@
         <!-- 1. ПРИБИВАЕМ ТЕМУ ГВОЗДЯМИ ДЛЯ ВСЕХ МЕНЮ, ЧТОБЫ SHADUI НЕ СМЕЛ ЕЕ СБИВАТЬ -->
         <Style Selector="MenuFlyoutPresenter">
             <Setter Property="Theme" Value="{DynamicResource QuartzFlyoutTheme}" />
+            <Setter Property="Cursor" Value="Arrow" />
         </Style>
 
         <!-- 2. Это тоже оставляем, чтобы внутренние пункты использовали стили ShadUI -->
         <Style Selector="MenuFlyoutPresenter MenuItem">
             <Setter Property="Theme" Value="{DynamicResource ShadMenuItemTheme}" />
             <Setter Property="FontWeight" Value="Normal" />
+            <Setter Property="Cursor" Value="Arrow" />
+        </Style>
+
+        <Style Selector="MenuFlyoutPresenter TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource ForegroundColor}" />
+        </Style>
+
+        <Style Selector="MenuFlyoutPresenter MenuItem:not(.Destructive) TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource ForegroundColor}" />
+        </Style>
+
+        <Style Selector="MenuFlyoutPresenter MenuItem.Destructive TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource DestructiveColor}" />
+        </Style>
+
+        <!-- 3. Стилизация ContextMenu точно так же как MenuFlyoutPresenter -->
+        <Style Selector="ContextMenu">
+            <Setter Property="Theme" Value="{DynamicResource QuartzContextMenuTheme}" />
+            <Setter Property="Cursor" Value="Arrow" />
+        </Style>
+
+        <Style Selector="ContextMenu MenuItem">
+            <Setter Property="Theme" Value="{DynamicResource ShadMenuItemTheme}" />
+            <Setter Property="FontWeight" Value="Normal" />
+            <Setter Property="Cursor" Value="Arrow" />
+        </Style>
+
+        <Style Selector="ContextMenu TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource ForegroundColor}" />
+        </Style>
+
+        <Style Selector="ContextMenu MenuItem:not(.Destructive) TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource ForegroundColor}" />
+        </Style>
+
+        <Style Selector="ContextMenu MenuItem.Destructive TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource DestructiveColor}" />
         </Style>
 
         <!-- Стилизация окна автодополнения кода AvaloniaEdit -->

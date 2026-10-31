@@ -4,12 +4,15 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Input.Platform;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using Avalonia.Controls.ApplicationLifetimes;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Quartz.Application.Interfaces;
@@ -18,8 +21,33 @@ using Quartz.Core.Models.BoardEntities;
 using Quartz.Core.Models.BoardEntities.Styles;
 using Quartz.UI.Enums;
 using Quartz.UI.Services;
+using Quartz.UI.Views.Dialogs;
+using ShadUI;
 
 namespace Quartz.UI.ViewModels;
+
+public record ClipboardEntry(string Path, bool IsDirectory);
+
+public class ClipboardItem
+{
+    public List<ClipboardEntry> Entries { get; }
+    public bool IsCut { get; }
+
+    public ClipboardItem(IEnumerable<ClipboardEntry> entries, bool isCut)
+    {
+        Entries = entries.ToList();
+        IsCut = isCut;
+    }
+
+    public ClipboardItem(string sourcePath, bool isCut, bool isDirectory)
+    {
+        Entries = new List<ClipboardEntry> { new(sourcePath, isDirectory) };
+        IsCut = isCut;
+    }
+
+    public string SourcePath => Entries.FirstOrDefault()?.Path ?? string.Empty;
+    public bool IsDirectory => Entries.FirstOrDefault()?.IsDirectory ?? false;
+}
 
 public class NavigationPoint
 {
@@ -46,6 +74,16 @@ public partial class MainVM : ObservableObject
     [ObservableProperty] private FileVM? _draggedTab;
     public FileStructVM? TappedFile { get; set; }
     [ObservableProperty] private FileStructVM? _draggedFile;
+    [ObservableProperty] private FileStructVM? _selectedFileStruct;
+
+    public DialogManager DialogManager { get; } = new();
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanPaste))]
+    private ClipboardItem? _clipboardItem;
+
+    public bool CanPaste => ClipboardItem != null && ClipboardItem.Entries.Count > 0 &&
+        ClipboardItem.Entries.Any(e => e.IsDirectory ? Directory.Exists(e.Path) : File.Exists(e.Path));
 
     [ObservableProperty] private PanelVM? _activePanel;
     [ObservableProperty] private FileVM? _activeFile;
@@ -208,6 +246,8 @@ public partial class MainVM : ObservableObject
     {
         _boardProcessingCoordinator = boardProcessingCoordinator;
         _folderDialogService = folderDialogService;
+
+        DialogManager.Register<InputDialogView, InputDialogVM>();
 
         _navDebounceTimer = new DispatcherTimer
         {
@@ -886,6 +926,17 @@ public partial class MainVM : ObservableObject
         if (treeViewItem?.DataContext is not FileStructVM dc)
             return;
 
+        var point = e.GetCurrentPoint(visualSource);
+        if (point.Properties.IsRightButtonPressed)
+        {
+            if (!dc.IsSelected)
+            {
+                DeselectAllNodes();
+                dc.IsSelected = true;
+            }
+            return;
+        }
+
         dc.TapStartCommand.Execute(e);
     }
 
@@ -962,6 +1013,1052 @@ public partial class MainVM : ObservableObject
         OnPropertyChanged(nameof(FileTree));
         OnPropertyChanged(nameof(TotalErrorCount));
         NotifyFolderExpandedChanged();
+    }
+
+    public string GetTargetDirectoryForCreation()
+    {
+        if (SelectedFileStruct is DirectoryVM dir)
+            return dir.FilePath;
+
+        if (SelectedFileStruct is FileVM file)
+        {
+            var parentDir = Path.GetDirectoryName(file.FilePath);
+            if (!string.IsNullOrEmpty(parentDir) && Directory.Exists(parentDir))
+                return parentDir;
+            if (file.Parent != null)
+                return file.Parent.FilePath;
+        }
+
+        return _projectRootDir ?? string.Empty;
+    }
+
+    public void PromptCreateFolder()
+    {
+        var targetDir = GetTargetDirectoryForCreation();
+        if (string.IsNullOrWhiteSpace(targetDir) || !Directory.Exists(targetDir))
+            return;
+
+        var vm = new InputDialogVM(
+            DialogManager,
+            title: "Новая папка",
+            description: $"Создать новую папку в «{Path.GetFileName(targetDir)}»:",
+            initialValue: string.Empty,
+            placeholder: "Имя папки",
+            primaryButtonText: "Создать",
+            validator: name =>
+            {
+                if (string.IsNullOrWhiteSpace(name))
+                    return (false, "Имя папки не может быть пустым.");
+                if (name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+                    return (false, "Имя папки содержит недопустимые символы.");
+                var path = Path.Combine(targetDir, name.Trim());
+                if (Directory.Exists(path) || File.Exists(path))
+                    return (false, "Папка или файл с таким именем уже существует.");
+                return (true, null);
+            },
+            onConfirmed: name =>
+            {
+                try
+                {
+                    var newPath = Path.Combine(targetDir, name.Trim());
+                    Directory.CreateDirectory(newPath);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Ошибка создания папки: {ex.Message}");
+                }
+            });
+
+        DialogManager.CreateDialog(vm)
+            .Dismissible()
+            .Show();
+    }
+
+    public void PromptCreateFileInDirectory(string targetDir, string? defaultExtension = null, string? suggestedTitle = null, string? defaultContent = null)
+    {
+        if (string.IsNullOrWhiteSpace(targetDir) || !Directory.Exists(targetDir))
+            return;
+
+        string title = suggestedTitle ?? "Новый файл";
+        string placeholder = !string.IsNullOrEmpty(defaultExtension) ? $"имя{defaultExtension}" : "имя_файла.ext";
+
+        var vm = new InputDialogVM(
+            DialogManager,
+            title: title,
+            description: $"Создать файл в «{Path.GetFileName(targetDir)}»:",
+            initialValue: string.Empty,
+            placeholder: placeholder,
+            primaryButtonText: "Создать",
+            validator: name =>
+            {
+                if (string.IsNullOrWhiteSpace(name))
+                    return (false, "Имя файла не может быть пустым.");
+
+                var fileName = name.Trim();
+                if (!string.IsNullOrEmpty(defaultExtension) && !fileName.EndsWith(defaultExtension, StringComparison.OrdinalIgnoreCase))
+                {
+                    fileName += defaultExtension;
+                }
+
+                if (fileName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+                    return (false, "Имя файла содержит недопустимые символы.");
+
+                var fullPath = Path.Combine(targetDir, fileName);
+                if (File.Exists(fullPath) || Directory.Exists(fullPath))
+                    return (false, "Файл с таким именем уже существует.");
+
+                return (true, null);
+            },
+            onConfirmed: name =>
+            {
+                try
+                {
+                    var fileName = name.Trim();
+                    if (!string.IsNullOrEmpty(defaultExtension) && !fileName.EndsWith(defaultExtension, StringComparison.OrdinalIgnoreCase))
+                    {
+                        fileName += defaultExtension;
+                    }
+
+                    var fullPath = Path.Combine(targetDir, fileName);
+                    File.WriteAllText(fullPath, defaultContent ?? string.Empty);
+
+                    Dispatcher.UIThread.Post(() =>
+                    {
+                        var fileVM = _projectRootDirectory != null
+                            ? FindNodeByPath(_projectRootDirectory, fullPath) as FileVM
+                            : null;
+                        if (fileVM != null)
+                        {
+                            OpenFileTab(fileVM);
+                        }
+                        else if (_projectRootDirectory != null)
+                        {
+                            var parentVM = FindDirectoryByPath(_projectRootDirectory, targetDir);
+                            var loaded = LoadFile(fullPath, parentVM);
+                            if (loaded != null)
+                            {
+                                if (parentVM != null && !parentVM.Children.Any(c => string.Equals(c.FilePath, fullPath, PathComparison)))
+                                {
+                                    InsertChildSorted(parentVM.Children, loaded);
+                                }
+                                OpenFileTab(loaded);
+                            }
+                        }
+                    }, DispatcherPriority.Background);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Ошибка создания файла: {ex.Message}");
+                }
+            });
+
+        DialogManager.CreateDialog(vm)
+            .Dismissible()
+            .Show();
+    }
+
+    public void PromptCreateFile(string? defaultExtension = null, string? suggestedTitle = null, string? defaultContent = null)
+    {
+        var targetDir = GetTargetDirectoryForCreation();
+        PromptCreateFileInDirectory(targetDir, defaultExtension, suggestedTitle, defaultContent);
+    }
+
+    [RelayCommand]
+    public void CreateFolder() => PromptCreateFolder();
+
+    [RelayCommand]
+    public void CreateLayer() => PromptCreateFile(".layy", "Создать слой", "name: layer\nunit: mm\nshape: !rect\n  width: 100\n  height: 100\n\ncomponents: []\n");
+
+    [RelayCommand]
+    public void CreateBoard() => PromptCreateFile(".pcby", "Создать плату", "layers: []\nimports: []\nnets: []\nstyles: []\n");
+
+    [RelayCommand]
+    public void CreateStyles() => PromptCreateFile(".stly", "Создать файл стилей", "styles: []\n");
+
+    [RelayCommand]
+    public void CreateGeneralFile() => PromptCreateFile(null, "Создать файл");
+
+    public void PromptRename(FileStructVM item)
+    {
+        var currentPath = item.FilePath;
+        var currentName = item.Header;
+        var isDir = item.IsDirectory;
+        var parentDir = Path.GetDirectoryName(currentPath) ?? string.Empty;
+
+        var extension = !isDir ? Path.GetExtension(currentPath) : string.Empty;
+        var nameWithoutExt = !isDir ? Path.GetFileNameWithoutExtension(currentPath) : currentName;
+
+        var vm = new InputDialogVM(
+            DialogManager,
+            title: isDir ? "Переименовать папку" : "Переименовать файл",
+            description: $"Введите новое имя для «{currentName}»:",
+            initialValue: isDir ? currentName : nameWithoutExt,
+            placeholder: isDir ? "Новое имя" : (!string.IsNullOrEmpty(extension) ? extension : "Новое имя"),
+            primaryButtonText: "Переименовать",
+            validator: input =>
+            {
+                if (string.IsNullOrWhiteSpace(input))
+                    return (false, isDir ? "Имя папки не может быть пустым." : "Имя файла не может быть пустым.");
+
+                var trimmed = input.Trim();
+
+                if (isDir)
+                {
+                    if (string.Equals(trimmed, currentName, StringComparison.Ordinal))
+                        return (true, null);
+                    if (trimmed.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+                        return (false, "Имя папки содержит недопустимые символы.");
+                    var newFullPath = Path.Combine(parentDir, trimmed);
+                    if (File.Exists(newFullPath) || Directory.Exists(newFullPath))
+                        return (false, "Элемент с таким именем уже существует.");
+                    return (true, null);
+                }
+                else
+                {
+                    string baseName = trimmed;
+                    if (!string.IsNullOrEmpty(extension))
+                    {
+                        if (baseName.EndsWith(extension, StringComparison.OrdinalIgnoreCase))
+                        {
+                            baseName = baseName[..^extension.Length];
+                        }
+                        else if (Path.HasExtension(baseName))
+                        {
+                            return (false, $"Нельзя изменить расширение файла (оно должно оставаться {extension}).");
+                        }
+                    }
+
+                    if (string.IsNullOrWhiteSpace(baseName))
+                        return (false, "Имя файла не может быть пустым.");
+
+                    if (baseName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+                        return (false, "Имя содержит недопустимые символы.");
+
+                    var finalFileName = baseName + extension;
+                    if (string.Equals(finalFileName, currentName, StringComparison.Ordinal))
+                        return (true, null);
+
+                    var newFullPath = Path.Combine(parentDir, finalFileName);
+                    if (File.Exists(newFullPath) || Directory.Exists(newFullPath))
+                        return (false, "Элемент с таким именем уже существует.");
+
+                    return (true, null);
+                }
+            },
+            onConfirmed: input =>
+            {
+                var trimmed = input.Trim();
+                string finalName;
+                if (isDir)
+                {
+                    finalName = trimmed;
+                }
+                else
+                {
+                    string baseName = trimmed;
+                    if (!string.IsNullOrEmpty(extension) && baseName.EndsWith(extension, StringComparison.OrdinalIgnoreCase))
+                    {
+                        baseName = baseName[..^extension.Length];
+                    }
+                    finalName = baseName + extension;
+                }
+
+                if (string.Equals(finalName, currentName, StringComparison.Ordinal))
+                    return;
+
+                try
+                {
+                    var newFullPath = Path.Combine(parentDir, finalName);
+                    if (isDir)
+                    {
+                        Directory.Move(currentPath, newFullPath);
+                        if (item is DirectoryVM dirVM)
+                        {
+                            dirVM.UpdatePathRecursive(currentPath, newFullPath);
+                        }
+                        UpdateRegisteredPathsAfterDirRename(currentPath, newFullPath);
+                        RenameReferencesInProject(currentPath, newFullPath, isDir: true);
+                    }
+                    else
+                    {
+                        File.Move(currentPath, newFullPath);
+                        item.FilePath = newFullPath;
+                        var openTab = FindOpenEditor(currentPath);
+                        if (openTab != null && openTab != item)
+                        {
+                            openTab.FilePath = newFullPath;
+                        }
+                        if (item is FileVM fileVM)
+                        {
+                            fileVM.UpdateBreadcrumbs();
+                        }
+                        openTab?.UpdateBreadcrumbs();
+
+                        string oldRel = GetRelativePath(currentPath);
+                        string newRel = GetRelativePath(newFullPath);
+
+                        if (item is LayerVM layer)
+                        {
+                            _projectLayers.Remove(oldRel);
+                            _projectLayers[newRel] = layer;
+                        }
+                        else if (item is StylesFileVM styles)
+                        {
+                            _projectStyles.Remove(oldRel);
+                            _projectStyles[newRel] = styles;
+                        }
+
+                        RenameReferencesInProject(currentPath, newFullPath, isDir: false);
+                    }
+                    UpdateBreadcrumbs();
+
+                    if (CurrentBoard != null)
+                    {
+                        ReloadCurrentProject();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Ошибка переименования: {ex.Message}");
+                }
+            });
+
+        DialogManager.CreateDialog(vm)
+            .Dismissible()
+            .Show();
+    }
+
+    public List<FileStructVM> GetSelectedFileStructs()
+    {
+        var selected = new List<FileStructVM>();
+        if (_projectRootDirectory != null)
+        {
+            CollectSelected(_projectRootDirectory, selected);
+        }
+        else
+        {
+            foreach (var item in FileTree)
+            {
+                CollectSelected(item, selected);
+            }
+        }
+
+        var result = new List<FileStructVM>();
+        foreach (var item in selected)
+        {
+            bool hasSelectedAncestor = false;
+            var parent = item.Parent;
+            while (parent != null)
+            {
+                if (selected.Contains(parent))
+                {
+                    hasSelectedAncestor = true;
+                    break;
+                }
+                parent = parent.Parent;
+            }
+            if (!hasSelectedAncestor)
+            {
+                result.Add(item);
+            }
+        }
+        return result;
+    }
+
+    private void CollectSelected(FileStructVM node, List<FileStructVM> list)
+    {
+        if (node.IsSelected)
+        {
+            list.Add(node);
+        }
+        if (node is DirectoryVM dir)
+        {
+            foreach (var child in dir.Children)
+            {
+                CollectSelected(child, list);
+            }
+        }
+    }
+
+    public void DeselectAllNodes()
+    {
+        if (_projectRootDirectory != null)
+        {
+            DeselectRecursive(_projectRootDirectory);
+        }
+        foreach (var item in FileTree)
+        {
+            DeselectRecursive(item);
+        }
+        SelectedFileStruct = null;
+    }
+
+    private void DeselectRecursive(FileStructVM node)
+    {
+        node.IsSelected = false;
+        if (node is DirectoryVM dir)
+        {
+            foreach (var child in dir.Children)
+            {
+                DeselectRecursive(child);
+            }
+        }
+    }
+
+    public void PromptDeleteSelected()
+    {
+        var selected = GetSelectedFileStructs();
+        if (selected.Count > 0)
+        {
+            PromptDelete(selected[0]);
+        }
+        else if (SelectedFileStruct != null)
+        {
+            PromptDelete(SelectedFileStruct);
+        }
+    }
+
+    public void PromptDelete(FileStructVM item)
+    {
+        var selectedItems = GetSelectedFileStructs();
+        bool isMultiDelete = item.IsSelected && selectedItems.Count > 1 && selectedItems.Contains(item);
+
+        if (isMultiDelete)
+        {
+            int count = selectedItems.Count;
+            string title = "Удалить выбранные элементы";
+            string message = $"Вы уверены, что хотите удалить выбранные элементы ({count})?\nЭто действие нельзя отменить.";
+
+            DialogManager.CreateDialog(title, message)
+                .WithPrimaryButton("Удалить", () =>
+                {
+                    try
+                    {
+                        foreach (var target in selectedItems)
+                        {
+                            if (target.IsDirectory)
+                            {
+                                CloseTabsUnderDirectory(target.FilePath);
+                                if (Directory.Exists(target.FilePath))
+                                {
+                                    Directory.Delete(target.FilePath, recursive: true);
+                                }
+                            }
+                            else
+                            {
+                                if (target is FileVM fileVM && fileVM.Panel != null)
+                                {
+                                    fileVM.RemoveTab();
+                                }
+                                if (File.Exists(target.FilePath))
+                                {
+                                    File.Delete(target.FilePath);
+                                }
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"Ошибка при множественном удалении: {ex.Message}");
+                    }
+                }, DialogButtonStyle.Destructive)
+                .WithCancelButton("Отмена")
+                .Dismissible()
+                .Show();
+        }
+        else
+        {
+            string title = item.IsDirectory ? "Удалить папку" : "Удалить файл";
+            string message = item.IsDirectory
+                ? $"Вы уверены, что хотите удалить папку «{item.Header}» и всё её содержимое?\nЭто действие нельзя отменить."
+                : $"Вы уверены, что хотите удалить «{item.Header}»?\nЭто действие нельзя отменить.";
+
+            DialogManager.CreateDialog(title, message)
+                .WithPrimaryButton("Удалить", () =>
+                {
+                    try
+                    {
+                        if (item.IsDirectory)
+                        {
+                            CloseTabsUnderDirectory(item.FilePath);
+                            if (Directory.Exists(item.FilePath))
+                            {
+                                Directory.Delete(item.FilePath, recursive: true);
+                            }
+                        }
+                        else
+                        {
+                            if (item is FileVM fileVM && fileVM.Panel != null)
+                            {
+                                fileVM.RemoveTab();
+                            }
+                            if (File.Exists(item.FilePath))
+                            {
+                                File.Delete(item.FilePath);
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"Ошибка при удалении: {ex.Message}");
+                    }
+                }, DialogButtonStyle.Destructive)
+                .WithCancelButton("Отмена")
+                .Dismissible()
+                .Show();
+        }
+    }
+
+    public void CloseTabsUnderDirectory(string directoryPath)
+    {
+        if (RootNode == null) return;
+        var normalizedDir = NormalizePath(directoryPath) + Path.DirectorySeparatorChar;
+        var allPanels = new List<PanelVM>();
+        CollectPanels(RootNode, allPanels);
+        foreach (var panel in allPanels)
+        {
+            var toClose = panel.Tabs
+                .Where(t => NormalizePath(t.FilePath).StartsWith(normalizedDir, PathComparison) ||
+                            string.Equals(NormalizePath(t.FilePath), NormalizePath(directoryPath), PathComparison))
+                .ToList();
+
+            foreach (var tab in toClose)
+            {
+                tab.RemoveTab();
+            }
+        }
+    }
+
+    public void OpenFileToSide(FileVM file)
+    {
+        if (file is EditorVM editor)
+        {
+            editor.LoadDocumentIfEmpty();
+        }
+        file.UpdateBreadcrumbs();
+
+        var targetPanel = ActivePanel ?? (RootNode != null ? FindFirstPanel(RootNode) : null);
+
+        if (RootNode == null || targetPanel == null)
+        {
+            OpenFileTab(file);
+            return;
+        }
+
+        // Если файл уже открыт в другой панели, просто переключаемся на нее
+        if (file.Panel != null && file.Panel != targetPanel)
+        {
+            ActivePanel = file.Panel;
+            file.Panel.SelectedTab = file;
+            ActiveFile = file;
+            ActiveEditor = file as EditorVM;
+            return;
+        }
+
+        // Если файл уже открыт в targetPanel, и в ней есть другие вкладки — переносим его в новую правую панель
+        if (file.Panel == targetPanel)
+        {
+            if (targetPanel.Tabs.Count > 1)
+            {
+                targetPanel.Tabs.Remove(file);
+                file.Panel = null;
+            }
+            else
+            {
+                return;
+            }
+        }
+
+        var newPanel = new PanelVM(this);
+        file.Panel = newPanel;
+        newPanel.Tabs.Add(file);
+        newPanel.SelectedTab = file;
+
+        SplitPanel(targetPanel, newPanel, Side.Right);
+
+        ActivePanel = newPanel;
+        ActiveFile = file;
+        ActiveEditor = file as EditorVM;
+    }
+
+    public void RevealInFileManager(string path)
+    {
+        try
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = "explorer.exe",
+                    Arguments = $"/select,\"{path}\"",
+                    UseShellExecute = true
+                });
+            }
+            else if (OperatingSystem.IsMacOS())
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = "open",
+                    Arguments = $"-R \"{path}\"",
+                    UseShellExecute = true
+                });
+            }
+            else if (OperatingSystem.IsLinux())
+            {
+                var dir = Directory.Exists(path) ? path : (Path.GetDirectoryName(path) ?? path);
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = "xdg-open",
+                    Arguments = $"\"{dir}\"",
+                    UseShellExecute = true
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Failed to reveal in file manager: {ex.Message}");
+        }
+    }
+
+    private readonly List<FileStructVM> _cutNodes = new();
+
+    public void ClearCutStatus()
+    {
+        foreach (var node in _cutNodes)
+        {
+            node.IsCut = false;
+        }
+        _cutNodes.Clear();
+    }
+
+    public void Cut(FileStructVM item)
+    {
+        ClearCutStatus();
+        var selected = GetSelectedFileStructs();
+        var targets = (item.IsSelected && selected.Count > 1 && selected.Contains(item))
+            ? selected
+            : new List<FileStructVM> { item };
+
+        foreach (var target in targets)
+        {
+            target.IsCut = true;
+            _cutNodes.Add(target);
+        }
+
+        ClipboardItem = new ClipboardItem(targets.Select(t => new ClipboardEntry(t.FilePath, t.IsDirectory)), isCut: true);
+    }
+
+    public void Copy(FileStructVM item)
+    {
+        ClearCutStatus();
+        var selected = GetSelectedFileStructs();
+        var targets = (item.IsSelected && selected.Count > 1 && selected.Contains(item))
+            ? selected
+            : new List<FileStructVM> { item };
+
+        ClipboardItem = new ClipboardItem(targets.Select(t => new ClipboardEntry(t.FilePath, t.IsDirectory)), isCut: false);
+    }
+
+    public void CutSelected()
+    {
+        var selected = GetSelectedFileStructs();
+        if (selected.Count > 0)
+        {
+            Cut(selected[0]);
+        }
+        else if (SelectedFileStruct != null)
+        {
+            Cut(SelectedFileStruct);
+        }
+    }
+
+    public void CopySelected()
+    {
+        var selected = GetSelectedFileStructs();
+        if (selected.Count > 0)
+        {
+            Copy(selected[0]);
+        }
+        else if (SelectedFileStruct != null)
+        {
+            Copy(SelectedFileStruct);
+        }
+    }
+
+    [RelayCommand]
+    public void PasteSelected()
+    {
+        var targetDir = GetTargetDirectoryForCreation();
+        if (!string.IsNullOrEmpty(targetDir) && _projectRootDirectory != null)
+        {
+            var dirVM = FindDirectoryByPath(_projectRootDirectory, targetDir);
+            if (dirVM != null)
+            {
+                Paste(dirVM);
+            }
+        }
+    }
+
+    [RelayCommand]
+    public async Task CopyProjectRootPath()
+    {
+        if (!string.IsNullOrEmpty(ProjectRootDir))
+        {
+            await SetClipboardTextAsync(ProjectRootDir);
+        }
+    }
+
+    [RelayCommand]
+    public void RevealProjectRootInFileManager()
+    {
+        if (!string.IsNullOrEmpty(ProjectRootDir))
+        {
+            RevealInFileManager(ProjectRootDir);
+        }
+    }
+
+    public void PromptRenameSelected()
+    {
+        if (SelectedFileStruct != null)
+        {
+            PromptRename(SelectedFileStruct);
+        }
+    }
+
+    public void Paste(DirectoryVM targetDir)
+    {
+        if (ClipboardItem == null || ClipboardItem.Entries.Count == 0)
+            return;
+
+        var targetDirPath = targetDir.FilePath;
+        if (!Directory.Exists(targetDirPath))
+            return;
+
+        var isCut = ClipboardItem.IsCut;
+        bool anyChanged = false;
+
+        try
+        {
+            foreach (var entry in ClipboardItem.Entries.ToList())
+            {
+                var source = entry.Path;
+                var isDir = entry.IsDirectory;
+
+                if (isDir ? !Directory.Exists(source) : !File.Exists(source))
+                    continue;
+
+                var name = Path.GetFileName(source);
+
+                if (isDir)
+                {
+                    var normalizedSource = NormalizePath(source).TrimEnd('/', '\\') + Path.DirectorySeparatorChar;
+                    var normalizedTarget = NormalizePath(targetDirPath).TrimEnd('/', '\\') + Path.DirectorySeparatorChar;
+                    if (normalizedTarget.StartsWith(normalizedSource, PathComparison) ||
+                        string.Equals(NormalizePath(source), NormalizePath(targetDirPath), PathComparison))
+                    {
+                        continue;
+                    }
+
+                    var destPath = Path.Combine(targetDirPath, name);
+                    if (isCut)
+                    {
+                        if (string.Equals(NormalizePath(source), NormalizePath(destPath), PathComparison))
+                        {
+                            continue;
+                        }
+
+                        if (Directory.Exists(destPath))
+                        {
+                            destPath = GetUniquePath(targetDirPath, name, isDir: true);
+                        }
+
+                        Directory.Move(source, destPath);
+
+                        if (_projectRootDirectory != null)
+                        {
+                            var dirNode = FindNodeByPath(_projectRootDirectory, source) as DirectoryVM;
+                            if (dirNode != null)
+                            {
+                                dirNode.Parent?.Children.Remove(dirNode);
+                                dirNode.Parent = targetDir;
+                                dirNode.UpdatePathRecursive(source, destPath);
+                                dirNode.FilePath = destPath;
+                                InsertChildSorted(targetDir.Children, dirNode);
+                                UpdateRegisteredPathsAfterDirRename(source, destPath);
+                                UpdateBreadcrumbsRecursive(dirNode);
+                            }
+                        }
+
+                        anyChanged = true;
+                    }
+                    else
+                    {
+                        if (Directory.Exists(destPath))
+                        {
+                            destPath = GetUniquePath(targetDirPath, name, isDir: true);
+                        }
+
+                        CopyDirectoryRecursively(source, destPath);
+
+                        var newDir = LoadDirectories(destPath, targetDir);
+                        InsertChildSorted(targetDir.Children, newDir);
+
+                        anyChanged = true;
+                    }
+                }
+                else
+                {
+                    var destPath = Path.Combine(targetDirPath, name);
+                    if (isCut)
+                    {
+                        if (string.Equals(NormalizePath(source), NormalizePath(destPath), PathComparison))
+                        {
+                            continue;
+                        }
+
+                        if (File.Exists(destPath))
+                        {
+                            destPath = GetUniquePath(targetDirPath, name, isDir: false);
+                        }
+
+                        File.Move(source, destPath);
+
+                        if (_projectRootDirectory != null)
+                        {
+                            var fileNode = FindNodeByPath(_projectRootDirectory, source) as FileVM;
+                            if (fileNode != null)
+                            {
+                                fileNode.Parent?.Children.Remove(fileNode);
+                                fileNode.Parent = targetDir;
+                                fileNode.FilePath = destPath;
+                                fileNode.UpdateBreadcrumbs();
+                                InsertChildSorted(targetDir.Children, fileNode);
+                            }
+                        }
+
+                        anyChanged = true;
+                    }
+                    else
+                    {
+                        if (File.Exists(destPath))
+                        {
+                            destPath = GetUniquePath(targetDirPath, name, isDir: false);
+                        }
+
+                        File.Copy(source, destPath);
+
+                        var newFile = LoadFile(destPath, targetDir);
+                        if (newFile != null)
+                        {
+                            InsertChildSorted(targetDir.Children, newFile);
+                        }
+
+                        anyChanged = true;
+                    }
+                }
+            }
+
+            if (isCut)
+            {
+                ClipboardItem = null;
+                ClearCutStatus();
+            }
+
+            if (anyChanged)
+            {
+                UpdateBreadcrumbs();
+                NotifyFolderExpandedChanged();
+
+                if (CurrentBoard != null)
+                {
+                    ReloadCurrentProject();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Ошибка вставки: {ex.Message}");
+        }
+    }
+
+    private static string GetUniquePath(string targetDirPath, string baseName, bool isDir)
+    {
+        if (isDir)
+        {
+            var newPath = Path.Combine(targetDirPath, $"{baseName}_copy");
+            int index = 2;
+            while (Directory.Exists(newPath))
+            {
+                newPath = Path.Combine(targetDirPath, $"{baseName}_copy{index}");
+                index++;
+            }
+            return newPath;
+        }
+        else
+        {
+            var nameWithoutExt = Path.GetFileNameWithoutExtension(baseName);
+            var ext = Path.GetExtension(baseName);
+            var newPath = Path.Combine(targetDirPath, $"{nameWithoutExt}_copy{ext}");
+            int index = 2;
+            while (File.Exists(newPath))
+            {
+                newPath = Path.Combine(targetDirPath, $"{nameWithoutExt}_copy{index}{ext}");
+                index++;
+            }
+            return newPath;
+        }
+    }
+
+    private static void CopyDirectoryRecursively(string sourceDir, string destinationDir)
+    {
+        Directory.CreateDirectory(destinationDir);
+
+        foreach (var file in Directory.GetFiles(sourceDir))
+        {
+            var destFile = Path.Combine(destinationDir, Path.GetFileName(file));
+            File.Copy(file, destFile, overwrite: true);
+        }
+
+        foreach (var subDir in Directory.GetDirectories(sourceDir))
+        {
+            var destSubDir = Path.Combine(destinationDir, Path.GetFileName(subDir));
+            CopyDirectoryRecursively(subDir, destSubDir);
+        }
+    }
+
+    public EditorVM? FindOpenEditor(string filePath)
+    {
+        if (RootNode == null) return null;
+        var allPanels = new List<PanelVM>();
+        CollectPanels(RootNode, allPanels);
+        var norm = NormalizePath(filePath);
+        foreach (var panel in allPanels)
+        {
+            foreach (var tab in panel.Tabs.OfType<EditorVM>())
+            {
+                if (string.Equals(NormalizePath(tab.FilePath), norm, PathComparison))
+                    return tab;
+            }
+        }
+        return null;
+    }
+
+    private void RenameReferencesInProject(string oldPath, string newPath, bool isDir)
+    {
+        if (string.IsNullOrWhiteSpace(_projectRootDir) || !Directory.Exists(_projectRootDir))
+            return;
+
+        var validExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ".pcby", ".layy", ".stly", ".yaml", ".yml"
+        };
+
+        string oldRel = GetRelativePath(oldPath);
+        string newRel = GetRelativePath(newPath);
+
+        string oldName = Path.GetFileName(oldPath);
+        string newName = Path.GetFileName(newPath);
+
+        var replacements = new List<(string pattern, string replacement)>();
+
+        if (isDir)
+        {
+            var oldDirForward = oldRel.TrimEnd('/') + "/";
+            var newDirForward = newRel.TrimEnd('/') + "/";
+            replacements.Add((Regex.Escape(oldDirForward), newDirForward));
+
+            var oldDirBack = oldRel.TrimEnd('\\') + "\\";
+            var newDirBack = newRel.TrimEnd('\\') + "\\";
+            replacements.Add((Regex.Escape(oldDirBack), newDirBack));
+        }
+        else
+        {
+            var oldForward = oldRel.Replace('\\', '/');
+            var newForward = newRel.Replace('\\', '/');
+            replacements.Add((@"(?<=[\s'""/,\\:]|^)" + Regex.Escape(oldForward) + @"(?=[\s'""/,\\:]|$)", newForward));
+
+            var oldBack = oldRel.Replace('/', '\\');
+            if (!string.Equals(oldForward, oldBack, StringComparison.OrdinalIgnoreCase))
+            {
+                replacements.Add((@"(?<=[\s'""/,\\:]|^)" + Regex.Escape(oldBack) + @"(?=[\s'""/,\\:]|$)", newForward));
+            }
+
+            replacements.Add((@"(?<=[\s'""/,\\:]|^)" + Regex.Escape(oldName) + @"(?=[\s'""/,\\:]|$)", newName));
+        }
+
+        try
+        {
+            var allFiles = Directory.GetFiles(_projectRootDir, "*.*", SearchOption.AllDirectories)
+                .Where(f => validExtensions.Contains(Path.GetExtension(f)))
+                .ToList();
+
+            foreach (var filePath in allFiles)
+            {
+                if (!isDir && string.Equals(NormalizePath(filePath), NormalizePath(newPath), PathComparison))
+                    continue;
+
+                var openEditor = FindOpenEditor(filePath);
+                bool isOpen = openEditor?.Document != null;
+                bool wasModified = isOpen && openEditor!.IsModified;
+
+                // 1. Обновляем ссылки в файле на диске.
+                // Замена применяется к содержимому на диске, чтобы не перезаписать диск несохраненными правками пользователя.
+                string diskOriginalText = File.ReadAllText(filePath);
+                string diskUpdatedText = diskOriginalText;
+                foreach (var (pattern, replacement) in replacements)
+                {
+                    diskUpdatedText = Regex.Replace(diskUpdatedText, pattern, replacement);
+                }
+                if (!string.Equals(diskOriginalText, diskUpdatedText, StringComparison.Ordinal))
+                {
+                    File.WriteAllText(filePath, diskUpdatedText);
+                }
+
+                // 2. Обновляем ссылки в открытом редакторе
+                if (openEditor != null && openEditor.Document != null)
+                {
+                    var doc = openEditor.Document;
+                    string editorOriginalText = doc.Text;
+                    string editorUpdatedText = editorOriginalText;
+                    foreach (var (pattern, replacement) in replacements)
+                    {
+                        editorUpdatedText = Regex.Replace(editorUpdatedText, pattern, replacement);
+                    }
+
+                    if (!string.Equals(editorOriginalText, editorUpdatedText, StringComparison.Ordinal))
+                    {
+                        var caretLine = openEditor.CaretLine;
+                        var caretCol = openEditor.CaretColumn;
+                        doc.Text = editorUpdatedText;
+                        openEditor.RequestNavigateTo(caretLine, caretCol);
+                    }
+
+                    if (!wasModified)
+                    {
+                        // Файл был сохранен до переименования: обновление ссылок не делает его несохраненным
+                        doc.UndoStack.MarkAsOriginalFile();
+                        openEditor.IsModified = false;
+                    }
+                    else
+                    {
+                        // Файл уже содержал несохраненные изменения: оставляем его несохраненным
+                        openEditor.IsModified = true;
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Ошибка при обновлении ссылок в проекте: {ex.Message}");
+        }
+    }
+
+    public async Task SetClipboardTextAsync(string text)
+    {
+        if (Avalonia.Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop && desktop.MainWindow?.Clipboard != null)
+        {
+            await desktop.MainWindow.Clipboard.SetTextAsync(text);
+        }
     }
 
     [RelayCommand]
@@ -1627,7 +2724,18 @@ public partial class MainVM : ObservableObject
                 file.FilePath = newPath;
                 file.UpdateBreadcrumbs();
 
-                if (file.Parent != null)
+                var newParentDirPath = Path.GetDirectoryName(newPath);
+                var newParentDir = !string.IsNullOrEmpty(newParentDirPath)
+                    ? FindDirectoryByPath(_projectRootDirectory, newParentDirPath)
+                    : _projectRootDirectory;
+
+                if (newParentDir != null && newParentDir != file.Parent)
+                {
+                    file.Parent?.Children.Remove(file);
+                    file.Parent = newParentDir;
+                    InsertChildSorted(newParentDir.Children, file);
+                }
+                else if (file.Parent != null)
                 {
                     file.Parent.Children.Remove(file);
                     InsertChildSorted(file.Parent.Children, file);
@@ -1643,7 +2751,18 @@ public partial class MainVM : ObservableObject
                 UpdateRegisteredPathsAfterDirRename(oldPath, newPath);
                 UpdateBreadcrumbsRecursive(dir);
 
-                if (dir.Parent != null)
+                var newParentDirPath = Path.GetDirectoryName(newPath);
+                var newParentDir = !string.IsNullOrEmpty(newParentDirPath)
+                    ? FindDirectoryByPath(_projectRootDirectory, newParentDirPath)
+                    : _projectRootDirectory;
+
+                if (newParentDir != null && newParentDir != dir.Parent)
+                {
+                    dir.Parent?.Children.Remove(dir);
+                    dir.Parent = newParentDir;
+                    InsertChildSorted(newParentDir.Children, dir);
+                }
+                else if (dir.Parent != null)
                 {
                     dir.Parent.Children.Remove(dir);
                     InsertChildSorted(dir.Parent.Children, dir);
@@ -1685,6 +2804,26 @@ public partial class MainVM : ObservableObject
             string suffix = oldRel.Substring(oldRelDir.Length);
             string newRel = newRelDir + suffix;
             _projectStyles[newRel] = style;
+        }
+
+        if (RootNode != null)
+        {
+            var allPanels = new List<PanelVM>();
+            CollectPanels(RootNode, allPanels);
+            var oldPrefix = oldDirPath.TrimEnd('/', '\\') + Path.DirectorySeparatorChar;
+            var oldPrefixAlt = oldDirPath.TrimEnd('/', '\\') + (Path.DirectorySeparatorChar == '/' ? '\\' : '/');
+            foreach (var panel in allPanels)
+            {
+                foreach (var tab in panel.Tabs)
+                {
+                    if (tab.FilePath.StartsWith(oldPrefix, PathComparison) || tab.FilePath.StartsWith(oldPrefixAlt, PathComparison))
+                    {
+                        var rel = tab.FilePath.Length > oldPrefix.Length ? tab.FilePath.Substring(oldPrefix.Length) : string.Empty;
+                        tab.FilePath = Path.Combine(newDirPath, rel);
+                        tab.UpdateBreadcrumbs();
+                    }
+                }
+            }
         }
     }
 

@@ -191,6 +191,28 @@ public partial class MainWindow : Window
     private void OnSidebarTreeViewPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         var point = e.GetCurrentPoint(SidebarTreeView);
+        if (point.Properties.IsRightButtonPressed)
+        {
+            if (e.Source is Avalonia.Visual rightVisualSource)
+            {
+                var rightItem = rightVisualSource.FindAncestorOfType<TreeViewItem>(includeSelf: true);
+                if (rightItem?.DataContext is FileStructVM fileStruct && DataContext is MainVM mainVm)
+                {
+                    if (!fileStruct.IsSelected)
+                    {
+                        mainVm.DeselectAllNodes();
+                        fileStruct.IsSelected = true;
+                    }
+                }
+                else if (DataContext is MainVM vm)
+                {
+                    vm.DeselectAllNodes();
+                    vm.SelectedFileStruct = vm.ProjectRootDirectory;
+                }
+            }
+            return;
+        }
+
         if (!point.Properties.IsLeftButtonPressed)
             return;
 
@@ -201,20 +223,31 @@ public partial class MainWindow : Window
             return;
 
         var treeViewItem = visualSource.FindAncestorOfType<TreeViewItem>(includeSelf: true);
-        if (treeViewItem?.DataContext is FileStructVM fileStruct && DataContext is MainVM mainVm)
+        if (treeViewItem == null && DataContext is MainVM mainVmLeft)
         {
-            mainVm.TappedFile = fileStruct;
-            var pos = e.GetPosition(null);
-            mainVm.DragStartX = pos.X;
-            mainVm.DragStartY = pos.Y;
+            mainVmLeft.DeselectAllNodes();
+            mainVmLeft.SelectedFileStruct = mainVmLeft.ProjectRootDirectory;
+            return;
+        }
 
-            if (fileStruct is FileVM fileVm)
+        if (treeViewItem?.DataContext is FileStructVM targetStruct && DataContext is MainVM vm2)
+        {
+            vm2.TappedFile = targetStruct;
+            var pos = e.GetPosition(null);
+            vm2.DragStartX = pos.X;
+            vm2.DragStartY = pos.Y;
+
+            bool isMultiSelecting = e.KeyModifiers.HasFlag(KeyModifiers.Control) || e.KeyModifiers.HasFlag(KeyModifiers.Shift);
+            if (!isMultiSelecting)
             {
-                mainVm.OpenFileTab(fileVm);
-            }
-            else if (fileStruct is DirectoryVM dirVm)
-            {
-                dirVm.IsExpanded = !dirVm.IsExpanded;
+                if (targetStruct is FileVM fileVm)
+                {
+                    vm2.OpenFileTab(fileVm);
+                }
+                else if (targetStruct is DirectoryVM dirVm)
+                {
+                    dirVm.IsExpanded = !dirVm.IsExpanded;
+                }
             }
         }
     }
@@ -260,7 +293,53 @@ public partial class MainWindow : Window
 
     private void OnSidebarTreeViewKeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Enter && SidebarTreeView.SelectedItem is FileVM fileVm && DataContext is MainVM mainVm)
+        if (DataContext is not MainVM mainVm)
+            return;
+
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Control))
+        {
+            if (e.Key == Key.C)
+            {
+                mainVm.CopySelected();
+                e.Handled = true;
+                return;
+            }
+            if (e.Key == Key.X)
+            {
+                mainVm.CutSelected();
+                e.Handled = true;
+                return;
+            }
+            if (e.Key == Key.V)
+            {
+                mainVm.PasteSelected();
+                e.Handled = true;
+                return;
+            }
+        }
+
+        if (e.Key == Key.F2)
+        {
+            mainVm.PromptRenameSelected();
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.Escape)
+        {
+            mainVm.ClearCutStatus();
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.Delete)
+        {
+            mainVm.PromptDeleteSelected();
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.Enter && SidebarTreeView.SelectedItem is FileVM fileVm)
         {
             mainVm.OpenFileTab(fileVm);
             e.Handled = true;

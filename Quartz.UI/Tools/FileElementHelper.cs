@@ -107,7 +107,8 @@ public static class FileElementHelper
         private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
             if (e.PropertyName == nameof(FileStructVM.HasErrors) ||
-                e.PropertyName == nameof(FileStructVM.HasWarnings))
+                e.PropertyName == nameof(FileStructVM.HasWarnings) ||
+                e.PropertyName == nameof(FileStructVM.IsCut))
             {
                 UpdateClasses();
             }
@@ -117,9 +118,11 @@ public static class FileElementHelper
         {
             bool hasErrors = _currentVm?.HasErrors ?? false;
             bool hasWarnings = _currentVm?.HasWarnings ?? false;
+            bool isCut = _currentVm?.IsCut ?? false;
 
             _control.Classes.Set("has-error", hasErrors);
             _control.Classes.Set("has-warning", hasWarnings);
+            _control.Classes.Set("is-cut", isCut);
         }
     }
 }

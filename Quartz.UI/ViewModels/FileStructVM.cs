@@ -44,6 +44,21 @@ public abstract partial class FileStructVM : ObservableObject
     [ObservableProperty]
     private bool _isSelected;
 
+    [ObservableProperty]
+    private bool _isCut;
+
+    partial void OnIsSelectedChanged(bool value)
+    {
+        if (value)
+        {
+            MainVM.SelectedFileStruct = this;
+        }
+        else if (MainVM.SelectedFileStruct == this)
+        {
+            MainVM.SelectedFileStruct = null;
+        }
+    }
+
     [RelayCommand]
     public void OpenFile()
     {
@@ -51,6 +66,110 @@ public abstract partial class FileStructVM : ObservableObject
         {
             MainVM.OpenFileTab(file);
         }
+        else if (this is DirectoryVM)
+        {
+            IsExpanded = !IsExpanded;
+        }
+    }
+
+    [RelayCommand]
+    public void CreateStylesFile()
+    {
+        var dir = IsDirectory ? FilePath : (Parent?.FilePath ?? MainVM.ProjectRootDir ?? string.Empty);
+        MainVM.PromptCreateFileInDirectory(dir, ".stly", "Создать файл стилей", "styles: []\n");
+    }
+
+    [RelayCommand]
+    public void CreateBoardFile()
+    {
+        var dir = IsDirectory ? FilePath : (Parent?.FilePath ?? MainVM.ProjectRootDir ?? string.Empty);
+        MainVM.PromptCreateFileInDirectory(dir, ".pcby", "Создать плату", "layers: []\nimports: []\nnets: []\nstyles: []\n");
+    }
+
+    [RelayCommand]
+    public void CreateLayerFile()
+    {
+        var dir = IsDirectory ? FilePath : (Parent?.FilePath ?? MainVM.ProjectRootDir ?? string.Empty);
+        MainVM.PromptCreateFileInDirectory(dir, ".layy", "Создать слой", "name: layer\nunit: mm\nshape: !rect\n  width: 100\n  height: 100\n\ncomponents: []\n");
+    }
+
+    [RelayCommand]
+    public void CreateGeneralFile()
+    {
+        var dir = IsDirectory ? FilePath : (Parent?.FilePath ?? MainVM.ProjectRootDir ?? string.Empty);
+        MainVM.PromptCreateFileInDirectory(dir, null, "Создать файл", "");
+    }
+
+    [RelayCommand]
+    public void CreateTextFile() => CreateGeneralFile();
+
+    [RelayCommand]
+    public void OpenFileToSide()
+    {
+        if (this is FileVM file)
+        {
+            MainVM.OpenFileToSide(file);
+        }
+    }
+
+    [RelayCommand]
+    public void RevealInFileManager()
+    {
+        MainVM.RevealInFileManager(FilePath);
+    }
+
+    [RelayCommand]
+    public void Cut()
+    {
+        MainVM.Cut(this);
+    }
+
+    [RelayCommand]
+    public void Copy()
+    {
+        MainVM.Copy(this);
+    }
+
+    [RelayCommand]
+    public void Paste()
+    {
+        if (this is DirectoryVM dir)
+        {
+            MainVM.Paste(dir);
+        }
+        else if (Parent != null)
+        {
+            MainVM.Paste(Parent);
+        }
+        else if (MainVM.ProjectRootDirectory != null)
+        {
+            MainVM.Paste(MainVM.ProjectRootDirectory);
+        }
+    }
+
+    [RelayCommand]
+    public async System.Threading.Tasks.Task CopyPath()
+    {
+        await MainVM.SetClipboardTextAsync(FilePath);
+    }
+
+    [RelayCommand]
+    public async System.Threading.Tasks.Task CopyRelativePath()
+    {
+        string relPath = MainVM.GetRelativePath(FilePath);
+        await MainVM.SetClipboardTextAsync(relPath);
+    }
+
+    [RelayCommand]
+    public void Rename()
+    {
+        MainVM.PromptRename(this);
+    }
+
+    [RelayCommand]
+    public void Delete()
+    {
+        MainVM.PromptDelete(this);
     }
 
     [RelayCommand]

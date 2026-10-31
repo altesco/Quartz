@@ -31,6 +31,13 @@ public partial class PanelVM : LayoutRootVM
         _mainVM = mainVM;
         Tabs.CollectionChanged += (s, e) =>
         {
+            if (e.NewItems != null)
+            {
+                foreach (FileVM item in e.NewItems.OfType<FileVM>())
+                {
+                    item.Panel = this;
+                }
+            }
             if (e.OldItems != null)
             {
                 foreach (FileVM item in e.OldItems.OfType<FileVM>())

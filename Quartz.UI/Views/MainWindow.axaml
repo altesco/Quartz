@@ -218,6 +218,14 @@
                                             Header="Показать в файловом менеджере" 
                                             Icon="{LucideIconContent FolderTree, Size=18}"
                                             Command="{Binding ShowInFileManagerCommand}" />
+
+                                        <Separator />
+
+                                        <MenuItem 
+                                            Header="Удалить" 
+                                            Classes="Destructive"
+                                            Command="{Binding DeleteCommand}"
+                                            Icon="{LucideIconContent Trash, Size=18}" />
                                     </MenuFlyout>
                                 </Setter.Value>
                             </Setter>
@@ -272,11 +280,36 @@
 
                         </Style>
 
-                        <Style Selector="TabItem.has-error TextBlock">
+                        <Style Selector="TabItem.has-error TextBlock.TabHeader">
                             <Setter Property="Foreground" Value="{DynamicResource ErrorColor}" />
                         </Style>
-                        <Style Selector="TabItem.has-warning:not(.has-error) TextBlock">
+                        <Style Selector="TabItem.has-warning:not(.has-error) TextBlock.TabHeader">
                             <Setter Property="Foreground" Value="{DynamicResource WarningColor}" />
+                        </Style>
+
+                        <Style Selector="MenuFlyoutPresenter">
+                            <Setter Property="Cursor" Value="Arrow" />
+                        </Style>
+                        <Style Selector="MenuFlyoutPresenter MenuItem">
+                            <Setter Property="Cursor" Value="Arrow" />
+                        </Style>
+                        <Style Selector="ContextMenu">
+                            <Setter Property="Cursor" Value="Arrow" />
+                        </Style>
+                        <Style Selector="ContextMenu MenuItem">
+                            <Setter Property="Cursor" Value="Arrow" />
+                        </Style>
+                        <Style Selector="MenuFlyoutPresenter MenuItem:not(.Destructive) TextBlock">
+                            <Setter Property="Foreground" Value="{DynamicResource ForegroundColor}" />
+                        </Style>
+                        <Style Selector="MenuFlyoutPresenter MenuItem.Destructive TextBlock">
+                            <Setter Property="Foreground" Value="{DynamicResource DestructiveColor}" />
+                        </Style>
+                        <Style Selector="ContextMenu MenuItem:not(.Destructive) TextBlock">
+                            <Setter Property="Foreground" Value="{DynamicResource ForegroundColor}" />
+                        </Style>
+                        <Style Selector="ContextMenu MenuItem.Destructive TextBlock">
+                            <Setter Property="Foreground" Value="{DynamicResource DestructiveColor}" />
                         </Style>
 
                         <!-- Базовое состояние кнопки закрытия вкладки: скрыта, крестик всегда PrimaryColor -->
@@ -452,7 +485,7 @@
                                     <ContentControl.DataTemplates>
 
                                         <DataTemplate DataType="vm:CanvasVM">
-                                            <TextBlock TextTrimming="CharacterEllipsis">
+                                            <TextBlock Classes="TabHeader" TextTrimming="CharacterEllipsis">
                                                 <Run Text="{Binding Header}" />
                                                 <Run Text="(холст)" />
                                             </TextBlock>
@@ -460,7 +493,7 @@
 
                                         <!-- Дефолтная иконка на случай других файлов -->
                                         <DataTemplate DataType="vm:FileVM">
-                                            <TextBlock TextTrimming="CharacterEllipsis" Text="{Binding Header}" />
+                                            <TextBlock Classes="TabHeader" TextTrimming="CharacterEllipsis" Text="{Binding Header}" />
                                         </DataTemplate>
 
                                     </ContentControl.DataTemplates>
@@ -863,6 +896,8 @@
                         <Button
                             FontSize="13"
                             Classes="Ghost"
+                            Command="{Binding RenameCommand}"
+                            ToolTip.Tip="Переименовать"
                             VerticalAlignment="Center">
                             <TextBlock Text="{Binding Header}" />
                         </Button>
@@ -916,7 +951,8 @@
 
                                 <MenuItem 
                                     Header="Удалить" 
-                                    Foreground="{DynamicResource DestructiveColor}"
+                                    Classes="Destructive"
+                                    Command="{Binding DeleteCommand}"
                                     Icon="{LucideIconContent Trash, Size=18}"/>
 
                             </MenuFlyout>
@@ -1154,19 +1190,25 @@
                             IsVisible="{Binding HasOpenFolder}">
                             <Button.Flyout>
                                 <MenuFlyout Placement="Bottom">
-                                    <MenuItem Header="Добавить слой">
+                                    <MenuItem Header="Создать слой" Command="{Binding CreateLayerCommand}">
                                         <MenuItem.Icon>
                                             <LucideIcon Kind="CircuitBoard" Size="18" Foreground="{DynamicResource IconLayyColor}" />
                                         </MenuItem.Icon>
                                     </MenuItem>
-                                    <MenuItem Header="Добавить плату">
+                                    <MenuItem Header="Создать плату" Command="{Binding CreateBoardCommand}">
                                         <MenuItem.Icon>
                                             <LucideIcon Kind="Layers" Size="18" Foreground="{DynamicResource IconPcbyColor}" />
                                         </MenuItem.Icon>
                                     </MenuItem>
-                                    <MenuItem Header="Добавить файл стилей">
+                                    <MenuItem Header="Создать файл стилей" Command="{Binding CreateStylesCommand}">
                                         <MenuItem.Icon>
                                             <LucideIcon Kind="PencilSparkles" Size="18" Foreground="{DynamicResource IconStlyColor}" />
+                                        </MenuItem.Icon>
+                                    </MenuItem>
+                                    <MenuItem Header="Создать файл"
+                                              Command="{Binding CreateGeneralFileCommand}">
+                                        <MenuItem.Icon>
+                                            <LucideIcon Kind="File" Size="18" Foreground="{DynamicResource ForegroundColor}" />
                                         </MenuItem.Icon>
                                     </MenuItem>
                                 </MenuFlyout>
@@ -1174,6 +1216,7 @@
                         </Button>
                         <Button 
                             Classes="Icon" 
+                            Command="{Binding CreateFolderCommand}"
                             Content="{LucideIconContent FolderPlus, Size=18}"
                             ToolTip.Tip="Создать папку"
                             ToolTip.Placement="Bottom"
@@ -1219,11 +1262,58 @@
             <TreeView 
                 x:Name="SidebarTreeView"
                 Grid.Row="1"
+                SelectionMode="Multiple"
                 ItemContainerTheme="{StaticResource QuartzTreeViewItemTheme}"
                 ItemsSource="{Binding FileTree}" 
                 Background="{DynamicResource SidebarBackgroundColor}"
                 BorderThickness="0,0,1,0"
                 IsVisible="{Binding IsExplorerTabActive}">
+
+                <TreeView.ContextMenu>
+                    <ContextMenu Theme="{DynamicResource QuartzContextMenuTheme}">
+                        <MenuItem Header="Создать">
+                            <MenuItem.Icon>
+                                <LucideIcon Kind="FolderPlus" Size="18" />
+                            </MenuItem.Icon>
+                            <MenuItem Header="Файл стилей"
+                                      Command="{Binding CreateStylesCommand}">
+                                <MenuItem.Icon>
+                                    <LucideIcon Kind="PencilSparkles" Size="18" Foreground="{DynamicResource IconStlyColor}" />
+                                </MenuItem.Icon>
+                            </MenuItem>
+                            <MenuItem Header="Файл платы"
+                                      Command="{Binding CreateBoardCommand}">
+                                <MenuItem.Icon>
+                                    <LucideIcon Kind="Layers" Size="18" Foreground="{DynamicResource IconPcbyColor}" />
+                                </MenuItem.Icon>
+                            </MenuItem>
+                            <MenuItem Header="Файл слоя"
+                                      Command="{Binding CreateLayerCommand}">
+                                <MenuItem.Icon>
+                                    <LucideIcon Kind="CircuitBoard" Size="18" Foreground="{DynamicResource IconLayyColor}" />
+                                </MenuItem.Icon>
+                            </MenuItem>
+                            <MenuItem Header="Файл"
+                                      Command="{Binding CreateGeneralFileCommand}">
+                                <MenuItem.Icon>
+                                    <LucideIcon Kind="File" Size="18" Foreground="{DynamicResource ForegroundColor}" />
+                                </MenuItem.Icon>
+                            </MenuItem>
+                        </MenuItem>
+                        <MenuItem Header="Вставить"
+                                  Command="{Binding PasteSelectedCommand}"
+                                  IsEnabled="{Binding CanPaste}"
+                                  InputGesture="Ctrl+V"
+                                  Icon="{LucideIconContent ClipboardPaste, Size=18}" />
+                        <Separator />
+                        <MenuItem Header="Показать в файловом менеджере"
+                                  Command="{Binding RevealProjectRootInFileManagerCommand}"
+                                  Icon="{LucideIconContent FolderTree, Size=18}" />
+                        <MenuItem Header="Копировать путь"
+                                  Command="{Binding CopyProjectRootPathCommand}"
+                                  Icon="{LucideIconContent Copy, Size=18}" />
+                    </ContextMenu>
+                </TreeView.ContextMenu>
 
                 <TreeView.Resources>
                     <x:Double x:Key="TreeViewItemIndent">24</x:Double>
@@ -1236,6 +1326,83 @@
                         <Setter Property="IsExpanded" Value="{Binding $self.((vm:FileStructVM)DataContext).IsExpanded, Mode=TwoWay}" />
                         <Setter Property="IsSelected" Value="{Binding $self.((vm:FileStructVM)DataContext).IsSelected, Mode=TwoWay}" />
                         <Setter Property="tools:FileElementHelper.TrackFileStatus" Value="True" />
+                        <Setter Property="ContextMenu">
+                            <ContextMenu x:DataType="vm:FileStructVM" Theme="{DynamicResource QuartzContextMenuTheme}">
+                                <MenuItem Header="Открыть"
+                                          Command="{Binding OpenFileCommand}"
+                                          IsVisible="{Binding !IsDirectory}"
+                                          Icon="{LucideIconContent FileText, Size=18}" />
+                                <MenuItem Header="Создать"
+                                          IsVisible="{Binding IsDirectory}">
+                                    <MenuItem.Icon>
+                                        <LucideIcon Kind="FolderPlus" Size="18" />
+                                    </MenuItem.Icon>
+                                    <MenuItem Header="Файл стилей"
+                                              Command="{Binding CreateStylesFileCommand}">
+                                        <MenuItem.Icon>
+                                            <LucideIcon Kind="PencilSparkles" Size="18" Foreground="{DynamicResource IconStlyColor}" />
+                                        </MenuItem.Icon>
+                                    </MenuItem>
+                                    <MenuItem Header="Файл платы"
+                                              Command="{Binding CreateBoardFileCommand}">
+                                        <MenuItem.Icon>
+                                            <LucideIcon Kind="Layers" Size="18" Foreground="{DynamicResource IconPcbyColor}" />
+                                        </MenuItem.Icon>
+                                    </MenuItem>
+                                    <MenuItem Header="Файл слоя"
+                                              Command="{Binding CreateLayerFileCommand}">
+                                        <MenuItem.Icon>
+                                            <LucideIcon Kind="CircuitBoard" Size="18" Foreground="{DynamicResource IconLayyColor}" />
+                                        </MenuItem.Icon>
+                                    </MenuItem>
+                                    <MenuItem Header="Файл"
+                                              Command="{Binding CreateGeneralFileCommand}">
+                                        <MenuItem.Icon>
+                                            <LucideIcon Kind="File" Size="18" Foreground="{DynamicResource ForegroundColor}" />
+                                        </MenuItem.Icon>
+                                    </MenuItem>
+                                </MenuItem>
+                                <MenuItem Header="Открыть сбоку"
+                                          Command="{Binding OpenFileToSideCommand}"
+                                          IsVisible="{Binding !IsDirectory}"
+                                          Icon="{LucideIconContent Columns2, Size=18}" />
+                                <MenuItem Header="Показать в файловом менеджере"
+                                          Command="{Binding RevealInFileManagerCommand}"
+                                          Icon="{LucideIconContent FolderTree, Size=18}" />
+                                <Separator />
+                                <MenuItem Header="Вырезать"
+                                          Command="{Binding CutCommand}"
+                                          InputGesture="Ctrl+X"
+                                          Icon="{LucideIconContent SquareScissors, Size=18}" />
+                                <MenuItem Header="Копировать"
+                                          Command="{Binding CopyCommand}"
+                                          InputGesture="Ctrl+C"
+                                          Icon="{LucideIconContent Copy, Size=18}" />
+                                <MenuItem Header="Вставить"
+                                          Command="{Binding PasteCommand}"
+                                          IsVisible="{Binding IsDirectory}"
+                                          IsEnabled="{Binding MainVM.CanPaste}"
+                                          InputGesture="Ctrl+V"
+                                          Icon="{LucideIconContent ClipboardPaste, Size=18}" />
+                                <Separator />
+                                <MenuItem Header="Копировать путь"
+                                          Command="{Binding CopyPathCommand}"
+                                          Icon="{LucideIconContent Copy, Size=18}" />
+                                <MenuItem Header="Копировать относительный путь"
+                                          Command="{Binding CopyRelativePathCommand}"
+                                          Icon="{LucideIconContent CopySlash, Size=18}" />
+                                <Separator />
+                                <MenuItem Header="Переименовать"
+                                          Command="{Binding RenameCommand}"
+                                          InputGesture="F2"
+                                          Icon="{LucideIconContent Pencil, Size=18}" />
+                                <MenuItem Header="Удалить"
+                                          Classes="Destructive"
+                                          Command="{Binding DeleteCommand}"
+                                          InputGesture="Delete"
+                                          Icon="{LucideIconContent Trash, Size=18}" />
+                            </ContextMenu>
+                        </Setter>
                     </Style>
                     <Style Selector="TreeViewItem:empty /template/ ToggleButton#PART_ExpandCollapseChevron">
                         <Setter Property="IsVisible" Value="{Binding $self.((vm:FileStructVM)DataContext).IsDirectory}" />
@@ -1253,8 +1420,8 @@
                     <Style Selector="TreeViewItem.has-error:selected:pointerover">
                         <Setter Property="Foreground" Value="{DynamicResource ErrorColor}" />
                     </Style>
-                    <Style Selector="TreeViewItem.has-error TextBlock">
-                        <Setter Property="Foreground" Value="{DynamicResource ErrorColor}" />
+                    <Style Selector="TreeViewItem.has-error /template/ ContentPresenter#PART_HeaderPresenter">
+                        <Setter Property="TextBlock.Foreground" Value="{DynamicResource ErrorColor}" />
                     </Style>
 
                     <Style Selector="TreeViewItem.has-warning:not(.has-error)">
@@ -1269,8 +1436,23 @@
                     <Style Selector="TreeViewItem.has-warning:not(.has-error):selected:pointerover">
                         <Setter Property="Foreground" Value="{DynamicResource WarningColor}" />
                     </Style>
-                    <Style Selector="TreeViewItem.has-warning:not(.has-error) TextBlock">
-                        <Setter Property="Foreground" Value="{DynamicResource WarningColor}" />
+                    <Style Selector="TreeViewItem.has-warning:not(.has-error) /template/ ContentPresenter#PART_HeaderPresenter">
+                        <Setter Property="TextBlock.Foreground" Value="{DynamicResource WarningColor}" />
+                    </Style>
+
+                    <Style Selector="TreeViewItem.is-cut">
+                        <Setter Property="Foreground" Value="{DynamicResource MutedColor}" />
+                        <Setter Property="Opacity" Value="0.6" />
+                    </Style>
+                    <Style Selector="TreeViewItem.is-cut:pointerover">
+                        <Setter Property="Foreground" Value="{DynamicResource MutedColor}" />
+                        <Setter Property="Opacity" Value="0.75" />
+                    </Style>
+                    <Style Selector="TreeViewItem.is-cut /template/ ContentPresenter#PART_HeaderPresenter">
+                        <Setter Property="TextBlock.Foreground" Value="{DynamicResource MutedColor}" />
+                    </Style>
+                    <Style Selector="TreeViewItem.is-cut LucideIcon">
+                        <Setter Property="Foreground" Value="{DynamicResource MutedColor}" />
                     </Style>
                 </TreeView.Styles>
 
@@ -1740,5 +1922,13 @@
 
             </StackPanel>
         </Border>
+
+        <!-- ShadUI Modal Dialog Host -->
+        <shadui:DialogHost 
+            Grid.Row="0"
+            Grid.RowSpan="3"
+            Grid.Column="0"
+            Grid.ColumnSpan="3"
+            Manager="{Binding DialogManager}" />
     </Grid>
 </Window>
